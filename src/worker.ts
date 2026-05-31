@@ -51,7 +51,11 @@ export default {
     }
     if (url.pathname.startsWith("/designs/")) {
       const key = url.pathname.slice(1); // drop leading "/"
-      const obj = await env.DESIGNS.get(key);
+      // Pretty slug URLs (/designs/<slug>) map to <slug>.html objects; fall back
+      // when the verbatim key misses so manifest.json / index.html still hit directly.
+      const obj =
+        (await env.DESIGNS.get(key)) ??
+        (key.endsWith(".html") ? null : await env.DESIGNS.get(key + ".html"));
       if (obj) {
         const ct = obj.httpMetadata?.contentType ?? "text/html; charset=utf-8";
         return new Response(obj.body, { headers: { "content-type": ct } });
