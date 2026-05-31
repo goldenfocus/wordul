@@ -55,9 +55,11 @@
       "new_classes": ["Room"]
     },
     {
-      // User DO uses the same KV-style storage API as Room -> new_classes (NOT sqlite).
+      // Free plan requires NEW DO namespaces to be SQLite-backed. The User DO uses the
+      // KV-style ctx.storage.get/put API, which works on new_sqlite_classes. (Room is
+      // grandfathered on new_classes from before this restriction.)
       "tag": "v2",
-      "new_classes": ["User"]
+      "new_sqlite_classes": ["User"]
     }
   ],
 
