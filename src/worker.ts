@@ -1,44 +1,122 @@
 import { Room } from "./room.ts";
+import { User } from "./user.ts";
 import type { Env } from "./types.ts";
-export { Room };
+import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts";
+export { Room, User };
 
-// Accepts either word-pair codes (happy-otter) or legacy alphanumeric (5sy7uk).
-// Min 3 chars to discourage trivial codes; max enforced by normalize().
-const ROOM_CODE_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const ROOM_CODE_MIN = 3;
-
-function normalizeCode(input: string): string {
-  // Lowercase, drop everything that isn't alphanumeric or hyphen, collapse multiple hyphens,
-  // trim hyphens from the ends, clip length.
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-}
+const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
+const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
 
-    // WebSocket endpoint: /ws?code=ABC123
+    // Room WebSocket: /ws?room=<owner>/<slug>
     if (url.pathname === "/ws") {
-      const codeRaw = url.searchParams.get("code") ?? "";
-      const code = normalizeCode(codeRaw);
-      if (code.length < ROOM_CODE_MIN || !ROOM_CODE_RE.test(code)) {
-        return new Response("invalid room code", { status: 400 });
+      const raw = url.searchParams.get("room") ?? "";
+      const [ownerRaw, slugRaw] = raw.split("/");
+      const owner = normalizeUsername(ownerRaw ?? "");
+      const slug = normalizeSlug(slugRaw ?? "");
+      if (!isValidUsername(owner) || slug.length < 1) {
+        return new Response("invalid room", { status: 400 });
       }
-      const id = env.ROOM.idFromName(code);
-      const stub = env.ROOM.get(id);
-      // Pass the code along so the DO can stamp it into its snapshot.
+      const path = `${owner}/${slug}`;
+      const stub = env.ROOM.get(env.ROOM.idFromName(path));
       const upstream = new URL(req.url);
-      upstream.pathname = "/ws";
-      upstream.searchParams.set("code", code);
+      upstream.searchParams.set("room", path);
       return stub.fetch(new Request(upstream.toString(), req));
     }
 
-    // Everything else: static asset (SPA fallback handled by wrangler).
+    // Profile JSON API: /api/user/<name>
+    if (url.pathname.startsWith("/api/user/")) {
+      const name = normalizeUsername(decodeURIComponent(url.pathname.slice("/api/user/".length)));
+      if (!isValidUsername(name)) return new Response("bad username", { status: 400 });
+      const stub = env.USER.get(env.USER.idFromName(name));
+      return stub.fetch(new Request(`https://do/?username=${name}`, { method: "GET" }));
+    }
+
+    // Sitemap from the directory.
+    if (url.pathname === "/sitemap.xml") {
+      return sitemap(env, url.origin);
+    }
+
+    // Legacy redirect: /r/<code> -> home (rooms are owner-nested now).
+    if (url.pathname.startsWith("/r/")) {
+      return Response.redirect(url.origin + "/", 301);
+    }
+
+    // Profile + room pages: serve SPA shell with per-route meta injected.
+    const profileMatch = url.pathname.match(PROFILE_RE);
+    const roomMatch = url.pathname.match(ROOM_RE);
+    if (profileMatch || roomMatch) {
+      return injectMeta(req, env, url, profileMatch, roomMatch);
+    }
+
+    // Everything else: static asset.
     return env.ASSETS.fetch(req);
   },
 };
+
+async function sitemap(env: Env, origin: string): Promise<Response> {
+  const urls: string[] = [origin + "/"];
+  let cursor: string | undefined;
+  do {
+    const page = await env.DIRECTORY.list({ limit: 1000, cursor });
+    for (const k of page.keys) {
+      if (k.name.startsWith("user:")) urls.push(`${origin}/@${k.name.slice(5)}`);
+      else if (k.name.startsWith("room:")) urls.push(`${origin}/@${k.name.slice(5)}`);
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+
+  const body =
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+    urls.map((u) => `  <url><loc>${u}</loc></url>`).join("\n") +
+    `\n</urlset>\n`;
+  return new Response(body, { headers: { "content-type": "application/xml" } });
+}
+
+async function injectMeta(
+  req: Request,
+  env: Env,
+  url: URL,
+  profileMatch: RegExpMatchArray | null,
+  roomMatch: RegExpMatchArray | null,
+): Promise<Response> {
+  let title = "Wordle Race";
+  let description = "Race your friends on the same Wordle.";
+
+  if (roomMatch) {
+    const [, owner, slug] = roomMatch;
+    title = `${slug.replace(/-/g, " ")} — a Wordle Race room by ${owner}`;
+    description = `Join ${owner}'s Wordle Race room and race on the same word.`;
+  } else if (profileMatch) {
+    const [, name] = profileMatch;
+    const res = await env.USER.get(env.USER.idFromName(name)).fetch(`https://do/?username=${name}`);
+    const p = (await res.json()) as { stats?: { wins?: number; bestStreak?: number } };
+    const wins = p.stats?.wins ?? 0;
+    const streak = p.stats?.bestStreak ?? 0;
+    title = `${name} on Wordle Race — ${wins} wins, best streak ${streak}`;
+    description = `${name}'s Wordle Race profile: ${wins} wins, best streak ${streak}.`;
+  }
+
+  const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+  const canonical = url.origin + url.pathname;
+  return new HTMLRewriter()
+    .on('[data-meta="title"]', new TextSetter(title))
+    .on('[data-meta="og:title"]', new AttrSetter("content", title))
+    .on('[data-meta="description"]', new AttrSetter("content", description))
+    .on('[data-meta="og:description"]', new AttrSetter("content", description))
+    .on('[data-meta="canonical"]', new AttrSetter("href", canonical))
+    .transform(shell);
+}
+
+class TextSetter {
+  constructor(private content: string) {}
+  element(el: Element) { el.setInnerContent(this.content); }
+}
+
+class AttrSetter {
+  constructor(private attr: string, private value: string) {}
+  element(el: Element) { el.setAttribute(this.attr, this.value); }
+}
