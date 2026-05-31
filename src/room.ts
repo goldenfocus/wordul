@@ -157,6 +157,10 @@ export class Room extends DurableObject<Env> {
   }
 
   private async onHello(ws: WebSocket, usernameRaw: string, wordLength?: number): Promise<void> {
+    // Trust model is intentional: identity is passwordless by product decision (a casual
+    // word game — "kindness model", see spec 2026-05-31-username-identity). The client-
+    // supplied username is taken at face value; control is shared, owner is bookkeeping only.
+    // Hardening (signed sessions / email recovery) is a deliberate future layer.
     const username = (usernameRaw ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 20);
     if (username.length < 3) {
       this.send(ws, { type: "error", message: "bad username" });
@@ -175,7 +179,10 @@ export class Room extends DurableObject<Env> {
         return;
       }
       this.state.players.push({ username, connected: true, guesses: [], status: "playing" });
+      // The room's default word length follows its owner's preference, and only in a
+      // pristine lobby. Anyone can still change it mid-lobby via set_length (shared control).
       if (
+        username === this.state.owner &&
         wordLength != null &&
         isSupportedSize(wordLength) &&
         this.state.phase === "lobby" &&
@@ -316,6 +323,8 @@ export class Room extends DurableObject<Env> {
   /** On the finish transition: bump the room scoreboard, then report a personalized
    *  record to each player's User DO. Best-effort — never blocks the game finishing. */
   private async finishGame(): Promise<void> {
+    // participants = all players (incl. disconnected); a player who left mid-game still
+    // gets a "played" credit and a "lost" record (status "playing" -> "lost").
     this.state.scoreboard = bumpScoreboard(this.state.scoreboard, {
       winner: this.state.winner,
       participants: this.state.players.map((p) => p.username),
@@ -331,16 +340,15 @@ export class Room extends DurableObject<Env> {
         guesses: p.guesses.length,
       })),
     });
-    for (const [username, record] of Object.entries(records)) {
-      try {
-        await this.env.USER.get(this.env.USER.idFromName(username)).fetch("https://do/append", {
-          method: "POST",
-          body: JSON.stringify(record),
-        });
-      } catch (e) {
-        console.error("report failed", username, (e as Error).message); // best-effort; never block finish
-      }
-    }
+    // Report to every player's User DO in parallel — caps the wait at one round-trip
+    // instead of N. Best-effort: a failed/slow write can't block or break the finish.
+    await Promise.allSettled(
+      Object.entries(records).map(([username, record]) =>
+        this.env.USER.get(this.env.USER.idFromName(username))
+          .fetch("https://do/append", { method: "POST", body: JSON.stringify(record) })
+          .catch((e) => console.error("report failed", username, (e as Error).message)),
+      ),
+    );
   }
 
   private async onRematch(ws: WebSocket): Promise<void> {
