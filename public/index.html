@@ -3,17 +3,24 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title data-meta="title">Wordle Race — race your friends on the same Wordle</title>
-<meta name="description" data-meta="description" content="Race your friends on the same Wordle. Pick a username, get a profile, keep score across games." />
+<title data-meta="title">Wordul — race your friends on the same word</title>
+<meta name="description" data-meta="description" content="Wordul — race your friends on the same word. Pick a username, get a profile, keep score across games." />
 <link rel="canonical" data-meta="canonical" href="https://wordul.com/" />
-<meta property="og:title" data-meta="og:title" content="Wordle Race" />
-<meta property="og:description" data-meta="og:description" content="Race your friends on the same Wordle." />
+<meta property="og:title" data-meta="og:title" content="Wordul" />
+<meta property="og:description" data-meta="og:description" content="Race your friends on the same word." />
 <meta property="og:url" data-meta="og:url" content="https://wordul.com/" />
 <meta property="og:image" content="/og.png" />
 <meta property="og:type" content="website" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="theme-color" content="#121213" />
+<meta name="theme-color" content="#0e0e10" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23538d4e'/%3E%3Ctext x='50%25' y='52%25' text-anchor='middle' dominant-baseline='middle' fill='white' font-family='system-ui,sans-serif' font-weight='800' font-size='40'%3EW%3C/text%3E%3C/svg%3E" />
+<script>
+  // Set the edition before first paint to avoid a flash of the wrong theme.
+  try {
+    document.documentElement.dataset.edition =
+      localStorage.getItem("wordul.edition") || "default";
+  } catch (e) {}
+</script>
 <link rel="stylesheet" href="/style.css" />
 <script type="application/ld+json">
 {
@@ -21,9 +28,9 @@
   "@graph": [
     {
       "@type": "WebApplication",
-      "name": "Wordle Race",
+      "name": "Wordul",
       "url": "https://wordul.com",
-      "description": "Race your friends on the same Wordle. No password — pick a username, get a public profile, create a room, share the link, and keep score across games.",
+      "description": "Race your friends on the same word. No password — pick a username, get a public profile, create a room, share the link, and keep score across games.",
       "applicationCategory": "GameApplication",
       "operatingSystem": "Any (web browser)",
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
@@ -33,7 +40,7 @@
       "mainEntity": [
         {
           "@type": "Question",
-          "name": "Do I need an account to play Wordle Race?",
+          "name": "Do I need an account to play Wordul?",
           "acceptedAnswer": { "@type": "Answer", "text": "No. Pick a username and you're recognized anywhere just by typing it again — no password, no signup." }
         },
         {
@@ -54,7 +61,7 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">WORDLE <span class="brand-dot">●</span> RACE</div>
+  <div class="brand">Wordul<span class="brand-dot">.</span></div>
   <div class="topbar-actions">
     <button id="chatTopBtn" class="icon-btn topbar-chat-btn" title="Chat" aria-label="Chat" hidden>
       💬<span id="chatTopBadge" class="topbar-chat-badge" hidden>0</span>
@@ -79,7 +86,7 @@
 
     <!-- New user: tagline + username field. Collapsible via switch-user. -->
     <div id="homeIntro" class="home-intro">
-      <h1 class="tagline">Race your friends on the same Wordle.</h1>
+      <h1 class="tagline">Race your friends on the same word.</h1>
       <p class="sub">No password. Pick a username, share a link, keep score.</p>
       <label class="field">
         <span>Your username</span>

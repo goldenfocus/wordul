@@ -1,7 +1,11 @@
-// Wordle Race — client
+// Wordul — client
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
+import { applyEdition, getActiveEditionId, getGold, earnGold, companionReact } from "/edition.js";
+
+// Apply the active edition at module load (before motion consts read WordulMotion).
+applyEdition(getActiveEditionId());
 
 const LS = {
   username: "wr.username",
@@ -391,7 +395,7 @@ function showRoomEntry(owner, slug) {
   $("#homeGreeting").hidden = true;
   $("#homeRooms").hidden = true;
   $("#homeIntro").hidden = false;
-  $(".tagline").textContent = `Join @${owner}'s Wordle Race room.`;
+  $(".tagline").textContent = `Join @${owner}'s Wordul room.`;
   $(".sub").textContent = "Pick a username to join.";
   // Length is decided by the room, so the picker is irrelevant here.
   $("#homeLengthSelect").hidden = true;
@@ -442,8 +446,8 @@ const game = {
   autoStart: false,  // one-shot: "Start playing" auto-begins the solo game on first lobby snapshot
   shareImage: null,  // { file, url, text, canvas } — pre-rendered result card for sharing
 };
-const REVEAL_STAGGER_MS = 220;
-const REVEAL_FLIP_HALF_MS = 275; // matches the 0.55s tile-reveal keyframe halfway point
+const REVEAL_STAGGER_MS = window.WordulMotion?.revealStaggerMs ?? 220;
+const REVEAL_FLIP_HALF_MS = window.WordulMotion?.flipHalfMs ?? 275; // matches the tile-reveal keyframe halfway point
 
 function showRoom(owner, slug) {
   leaveRoom(); // tear down any prior room's socket so room->room nav can't leave a zombie WS
@@ -487,7 +491,7 @@ async function shareRoomInvite() {
   if (typeof navigator.share === "function") {
     try {
       await navigator.share({
-        title: `Wordle Race — ${game.name || game.slug}`,
+        title: `Wordul — ${game.name || game.slug}`,
         text: `Race me on Wordle in ${game.owner}'s room!`,
         url: inviteUrl,
       });
@@ -527,6 +531,36 @@ function renderRoomHeader() {
       if (!clean) return;
       send({ type: "rename", name: clean });
     };
+  }
+  renderGoldHud();
+}
+
+// --- Edition: gold HUD + companion personality ---
+
+function renderGoldHud() {
+  const host =
+    document.querySelector(".room-header") ||
+    $("#roomName")?.parentElement ||
+    null;
+  if (!host) return;
+  let hud = document.getElementById("goldHud");
+  if (!hud) {
+    hud = document.createElement("div");
+    hud.id = "goldHud";
+    hud.className = "gold-hud";
+    host.appendChild(hud);
+  }
+  hud.textContent = `◆ ${getGold()}`;
+}
+
+// Surface the active edition's companion line for an event, reusing the toast.
+function showCompanion(event, ctx) {
+  const { text, speak } = companionReact(event, ctx);
+  if (!text) return;
+  toast(text, { duration: 3200 });
+  if (speak && window.speechSynthesis) {
+    // VOICE: swap speechSynthesis for cloned-voice audio here later
+    try { window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch (e) {}
   }
 }
 
@@ -754,7 +788,7 @@ function render() {
     game.name = snap.name;
     const nameEl = $("#roomName");
     if (nameEl) nameEl.textContent = game.name;
-    document.title = `${game.name} — Wordle Race`;
+    document.title = `${game.name} — Wordul`;
   }
 
   // Lobby controls. Control is shared — anyone present can start/rename/rematch.
@@ -1260,6 +1294,9 @@ function handleGameOver(snap) {
   game.hasShownEndStats = true;
 
   if (won) {
+    earnGold(guessCount);
+    renderGoldHud();
+    showCompanion("win");
     // Same gentle pacing as before — wait for the final row's flip to finish.
     setTimeout(
       () => openStats({ snap, me, won, justFinished: true, lastGuessCount: guessCount }),
@@ -1485,8 +1522,8 @@ function prepareShareCard() {
     shortUrl: roomUrl.replace(/^https?:\/\//, ""),
   });
   const text = won
-    ? `Solved Wordle Race in ${score} — beat me?`
-    : `Wordle Race got me. Your turn?`;
+    ? `Solved Wordul in ${score} — beat me?`
+    : `Wordul got me. Your turn?`;
   // Sync essentials available immediately; the File arrives a tick later.
   game.shareImage = { file: null, url: roomUrl, text, canvas };
   canvas.toBlob((blob) => {
@@ -1529,7 +1566,7 @@ async function shareResult() {
   }
   // Last resort (no finished game): just share/copy a join link.
   const url = `${location.origin}/@${game.owner}/${game.slug}`;
-  if (navigator.share) navigator.share({ text: "Race me on Wordle Race!", url }).catch(() => fallbackCopy(url));
+  if (navigator.share) navigator.share({ text: "Race me on Wordul!", url }).catch(() => fallbackCopy(url));
   else fallbackCopy(url);
 }
 
@@ -1733,7 +1770,7 @@ function showProfile(username) {
   leaveRoom();
   const topBtn = $("#chatTopBtn");
   if (topBtn) topBtn.hidden = true;
-  document.title = `@${username} — Wordle Race`;
+  document.title = `@${username} — Wordul`;
   mount("tpl-profile");
   const backBtn = $("#profileBack");
   if (backBtn) backBtn.onclick = (e) => { e.preventDefault(); navigate("/"); };

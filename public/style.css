@@ -1,17 +1,21 @@
 :root {
-  --bg: #121213;
-  --fg: #ffffff;
-  --muted: #818384;
-  --border: #3a3a3c;
-  --tile-empty: #121213;
-  --tile-pending-border: #565758;
-  --key-bg: #818384;
-  --green: #538d4e;
-  --yellow: #b59f3b;
-  --gray: #565758; /* clearly distinct from --border so submitted "absent" tiles stand out */
-  --accent: #538d4e;
-  --bg-card: #1f1f21;
-  --error: #ff6b6b;
+  /* Baseline = the Default edition (public/editions/default.js) so there is no
+     flash before applyEdition() runs. Other editions override these at runtime. */
+  --bg: #0e0e10;
+  --fg: #f4f2ec;
+  --muted: #8a8a8f;
+  --border: #2a2a2e;
+  --tile-empty: #0e0e10;
+  --tile-pending-border: #46464c;
+  --key-bg: #2a2a2e;
+  --green: #5b8c6e;
+  --yellow: #c8a96a;
+  --gray: #3a3a3e; /* clearly distinct from --border so submitted "absent" tiles stand out */
+  --accent: #c8a96a;
+  --bg-card: #17171a;
+  --error: #e0796b;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Instrument Sans', -apple-system, system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -19,7 +23,7 @@ html, body {
   margin: 0; padding: 0;
   background: var(--bg);
   color: var(--fg);
-  font-family: -apple-system, system-ui, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-body, -apple-system, system-ui, "Helvetica Neue", Arial, sans-serif);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
   /* Disable iOS Safari's 300ms double-tap-zoom on the whole app. Pinch-zoom still works. */
@@ -50,11 +54,21 @@ body {
 }
 .topbar-actions { display: flex; gap: 4px; }
 .brand {
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  font-size: 17px;
+  font-family: var(--font-display, inherit);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-size: 19px;
 }
-.brand-dot { color: var(--green); margin: 0 4px; transition: color 0.2s; }
+.gold-hud {
+  font-weight: 600;
+  color: var(--accent);
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.brand-dot { color: var(--accent); margin: 0 1px; transition: color 0.2s; }
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
