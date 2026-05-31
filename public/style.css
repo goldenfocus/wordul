@@ -355,9 +355,10 @@ body {
   40%,60% { transform: translateX(8px); }
 }
 
-/* Spectator boards (others) — smaller tiles, no letters visible */
+/* Spectator boards (others) — no letters visible. Tile SIZE is inherited from the
+   board's --tile-size (set below / per breakpoint); don't set it on the tile here
+   or it shadows the responsive parent value. */
 .player-board.spectator .tile {
-  --tile-size: 28px;
   font-size: 0;
 }
 
@@ -390,7 +391,7 @@ body {
     order: 1;
     flex: 0 0 auto;
     gap: 4px;
-    --tile-size: 15px;
+    --tile-size: 20px;
   }
   .player-board.spectator .player-name { font-size: 11px; gap: 4px; }
   .player-board.spectator .grid { gap: 3px; }
