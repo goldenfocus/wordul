@@ -40,8 +40,8 @@ export default {
       return sitemap(env, url.origin);
     }
 
-    // Legacy redirect: /r/<code> -> home (rooms are owner-nested now).
-    if (url.pathname.startsWith("/r/")) {
+    // Legacy redirect: /r or /r/<code> -> home (rooms are owner-nested now).
+    if (url.pathname === "/r" || url.pathname.startsWith("/r/")) {
       return Response.redirect(url.origin + "/", 301);
     }
 
@@ -49,7 +49,7 @@ export default {
     const profileMatch = url.pathname.match(PROFILE_RE);
     const roomMatch = url.pathname.match(ROOM_RE);
     if (profileMatch || roomMatch) {
-      return injectMeta(req, env, url, profileMatch, roomMatch);
+      return injectMeta(env, url, profileMatch, roomMatch);
     }
 
     // Everything else: static asset.
@@ -77,7 +77,6 @@ async function sitemap(env: Env, origin: string): Promise<Response> {
 }
 
 async function injectMeta(
-  req: Request,
   env: Env,
   url: URL,
   profileMatch: RegExpMatchArray | null,
@@ -92,12 +91,23 @@ async function injectMeta(
     description = `Join ${owner}'s Wordle Race room and race on the same word.`;
   } else if (profileMatch) {
     const [, name] = profileMatch;
-    const res = await env.USER.get(env.USER.idFromName(name)).fetch(`https://do/?username=${name}`);
-    const p = (await res.json()) as { stats?: { wins?: number; bestStreak?: number } };
-    const wins = p.stats?.wins ?? 0;
-    const streak = p.stats?.bestStreak ?? 0;
-    title = `${name} on Wordle Race — ${wins} wins, best streak ${streak}`;
-    description = `${name}'s Wordle Race profile: ${wins} wins, best streak ${streak}.`;
+    // Best-effort: a DO hiccup or odd payload must degrade to default meta, not 500 the page.
+    try {
+      const res = await env.USER.get(env.USER.idFromName(name)).fetch(`https://do/?username=${name}`);
+      if (res.ok) {
+        const p = (await res.json()) as { stats?: { wins?: number; bestStreak?: number } };
+        const wins = p.stats?.wins ?? 0;
+        const streak = p.stats?.bestStreak ?? 0;
+        title = `${name} on Wordle Race — ${wins} wins, best streak ${streak}`;
+        description = `${name}'s Wordle Race profile: ${wins} wins, best streak ${streak}.`;
+      } else {
+        title = `${name} on Wordle Race`;
+        description = `${name}'s Wordle Race profile.`;
+      }
+    } catch {
+      title = `${name} on Wordle Race`;
+      description = `${name}'s Wordle Race profile.`;
+    }
   }
 
   const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
@@ -108,6 +118,7 @@ async function injectMeta(
     .on('[data-meta="description"]', new AttrSetter("content", description))
     .on('[data-meta="og:description"]', new AttrSetter("content", description))
     .on('[data-meta="canonical"]', new AttrSetter("href", canonical))
+    .on('[data-meta="og:url"]', new AttrSetter("content", canonical))
     .transform(shell);
 }
 
