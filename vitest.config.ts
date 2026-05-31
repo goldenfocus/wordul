@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  publicDir: false,
   test: {
     include: ["test/**/*.test.ts", "test/**/*.test.js"],
     environment: "node",
