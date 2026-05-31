@@ -707,6 +707,12 @@ function onServerMessage(msg) {
       game.autoStart = false;
       send({ type: "start" });
     }
+    // Synchronized start celebration: any transition INTO playing (fresh start or
+    // rematch) fires GO! + confetti. Driven by the shared snapshot, so it lands on
+    // every player's screen at once. Late joiners (prev === null) don't get it.
+    if (prev && prev.phase !== "playing" && msg.room.phase === "playing") {
+      triggerStartCelebration();
+    }
     const me = msg.room.players.find((p) => p.username === getUsername());
     const prevMe = prev?.players.find((p) => p.username === getUsername());
     // Server accepted our guess → clear pending letters.
@@ -1172,6 +1178,36 @@ function toast(text, opts = {}) {
     bubble.classList.add("fade");
     setTimeout(() => bubble.remove(), 280);
   }, stay);
+}
+
+// --- Start celebration ---
+
+// GO! pop + confetti rain. Fires on every client via the shared snapshot, so the
+// celebration is simultaneous on both sides. Visual only for now — the "golden
+// voice" wishing luck is parked for later.
+function triggerStartCelebration() {
+  if (getSettings().reducedMotion) return;
+
+  const burst = document.createElement("div");
+  burst.className = "go-burst";
+  burst.textContent = "GO!";
+  document.body.appendChild(burst);
+  setTimeout(() => burst.remove(), 1100);
+
+  const colors = ["#538d4e", "#c9b458", "#6aaa64", "#ffd166", "#9d4edd", "#4cc9f0", "#ef476f"];
+  const pieces = 40;
+  for (let i = 0; i < pieces; i++) {
+    const c = document.createElement("div");
+    c.className = "cheer-confetti";
+    c.style.background = colors[i % colors.length];
+    c.style.left = `${Math.random() * 100}vw`;
+    c.style.setProperty("--cf-x", `${(Math.random() - 0.5) * 140}px`);
+    c.style.setProperty("--cf-rot", `${(Math.random() - 0.5) * 900}deg`);
+    c.style.setProperty("--cf-delay", `${Math.random() * 250}ms`);
+    c.style.setProperty("--cf-dur", `${1200 + Math.random() * 900}ms`);
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 2400);
+  }
 }
 
 // --- End of game ---

@@ -371,10 +371,71 @@ body {
 
 /* Tighter clamp on small screens for very long words. */
 @media (max-width: 520px) {
-  .player-board {
-    --tile-size: clamp(20px, calc((100vw - 32px) / max(var(--cols, 5), 6)), 44px);
+  /* Multiplayer on mobile: opponents collapse into a compact horizontal strip at
+     the top; YOUR board is the full-width hero sitting right above the keyboard,
+     so two (or more) players fit on one screen without scrolling. */
+  .boards {
+    display: flex;
+    flex-flow: row wrap;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 8px 14px;
   }
-  .player-board.spectator { --tile-size: 18px; }
+  .player-board:not(.spectator) {
+    flex: 0 0 100%;
+    order: 2;
+    --tile-size: clamp(24px, calc((100vw - 32px) / max(var(--cols, 5), 6)), 46px);
+  }
+  .player-board.spectator {
+    order: 1;
+    flex: 0 0 auto;
+    gap: 4px;
+    --tile-size: 15px;
+  }
+  .player-board.spectator .player-name { font-size: 11px; gap: 4px; }
+  .player-board.spectator .grid { gap: 3px; }
+
+  /* Tighten the room shell so the hero board + keyboard share the screen. */
+  .screen.room { gap: 10px; padding: 10px 10px 6px; }
+}
+
+/* Game-start celebration — a big "GO!" pop + festive confetti rain. Fires on the
+   lobby→playing transition, which every client gets from the same snapshot, so it
+   lands simultaneously on all screens. */
+.go-burst {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(64px, 20vw, 180px);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: var(--green);
+  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.55);
+  animation: go-pop 1s cubic-bezier(.2, .8, .2, 1) forwards;
+}
+@keyframes go-pop {
+  0%   { transform: scale(0.2) rotate(-6deg); opacity: 0; }
+  30%  { transform: scale(1.15) rotate(0);    opacity: 1; }
+  60%  { transform: scale(1);                 opacity: 1; }
+  100% { transform: scale(1.5);               opacity: 0; }
+}
+.cheer-confetti {
+  position: fixed;
+  top: -18px;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  z-index: 9998;
+  pointer-events: none;
+  animation: cheer-fall var(--cf-dur, 1500ms) var(--cf-delay, 0ms) cubic-bezier(.4, .1, .7, 1) forwards;
+}
+@keyframes cheer-fall {
+  0%   { transform: translate(0, 0) rotate(0);                                opacity: 1; }
+  100% { transform: translate(var(--cf-x, 0), 110vh) rotate(var(--cf-rot, 360deg)); opacity: 0.95; }
 }
 
 /* Lose sequence — full-screen red shockwave + tile explosion + falling confetti debris. */
