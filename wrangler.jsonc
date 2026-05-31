@@ -23,9 +23,22 @@
         "class_name": "Room"
         // Live namespace_id on the deployed script: 4948d60bb9274d829a7ef1d49f3bf1c1
         // (managed by wrangler; do NOT hardcode it here).
+      },
+      {
+        "name": "USER",
+        "class_name": "User"
       }
     ]
   },
+
+  // Global registry of usernames + rooms (powers /sitemap.xml and future browse).
+  "kv_namespaces": [
+    {
+      "binding": "DIRECTORY",
+      "id": "a95114f2b2a149debdd9e87a8f2a3980",
+      "preview_id": "9856da97562443939a39a257719f5cfa"
+    }
+  ],
 
   // The live Room DO uses the KV-style storage API (ctx.storage.get("state") /
   // ctx.storage.put("state", ...) + getAlarm) and Hibernatable WebSockets
@@ -35,6 +48,11 @@
     {
       "tag": "v1",
       "new_classes": ["Room"]
+    },
+    {
+      // User DO uses the same KV-style storage API as Room -> new_classes (NOT sqlite).
+      "tag": "v2",
+      "new_classes": ["User"]
     }
   ],
 
