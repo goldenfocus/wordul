@@ -392,8 +392,8 @@ function wireChat() {
     });
   }
   if (backdrop) backdrop.addEventListener("click", closeChatSheet);
+  // Visibility is owned by render() (gated on player count); we just wire the tap.
   if (topBtn) {
-    topBtn.hidden = false;
     topBtn.onclick = openChatSheet;
   }
 }
@@ -575,6 +575,16 @@ function render() {
     endControls.hidden = false;
     rematchBtn.hidden = false;
   }
+
+  // Chat is social — keep it out of sight while you're playing solo, and only
+  // surface it (inline on desktop, 💬 button on mobile) once someone else is in
+  // the room. `me` is always in snap.players, so >= 2 means real company.
+  const hasCompany = snap.players.length >= 2;
+  const chatPanel = $("#chatPanel");
+  const chatTopBtn = $("#chatTopBtn");
+  if (chatPanel) chatPanel.hidden = !hasCompany;
+  if (chatTopBtn) chatTopBtn.hidden = !hasCompany;
+  if (!hasCompany) closeChatSheet();
 
   renderBoards(snap, me);
   renderKeyboard(me);
