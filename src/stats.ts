@@ -32,7 +32,7 @@ export function applyGame(stats: UserStats, outcome: { result: GameOutcome; gues
   return next;
 }
 
-/** Prepend `item`, keep at most `cap` (most-recent-first). */
+/** Prepend `item`, keep at most `cap` (most-recent-first). `cap` is expected to be >= 1. */
 export function appendCapped<T>(list: T[], item: T, cap: number): T[] {
   return [item, ...list].slice(0, cap);
 }

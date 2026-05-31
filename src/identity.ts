@@ -9,7 +9,8 @@ export function normalizeUsername(input: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, "")
     .replace(/^[-_]+|[-_]+$/g, "")
-    .slice(0, USERNAME_MAX);
+    .slice(0, USERNAME_MAX)
+    .replace(/^[-_]+|[-_]+$/g, ""); // re-trim: clipping at MAX can expose a trailing separator
 }
 
 export function isValidUsername(input: string): boolean {

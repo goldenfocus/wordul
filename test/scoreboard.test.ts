@@ -18,4 +18,8 @@ describe("bumpScoreboard", () => {
     const b = bumpScoreboard([], { winner: null, participants: ["yan"] });
     expect(b).toEqual([{ username: "yan", wins: 0, played: 1 }]);
   });
+  it("ignores a winner who is not a participant", () => {
+    const b = bumpScoreboard([], { winner: "ghost", participants: ["yan"] });
+    expect(b).toEqual([{ username: "yan", wins: 0, played: 1 }]);
+  });
 });

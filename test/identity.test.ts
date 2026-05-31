@@ -10,6 +10,9 @@ describe("normalizeUsername", () => {
     expect(normalizeUsername("--yan--")).toBe("yan");
     expect(normalizeUsername("a".repeat(40))).toBe("a".repeat(20));
   });
+  it("re-trims a separator exposed by clipping at the max length", () => {
+    expect(normalizeUsername("a".repeat(19) + "_z")).toBe("a".repeat(19));
+  });
 });
 
 describe("isValidUsername", () => {
@@ -25,6 +28,9 @@ describe("normalizeSlug", () => {
   it("allows a-z0-9- only, collapses and trims hyphens, clips to 40", () => {
     expect(normalizeSlug("Friday Night!!")).toBe("friday-night");
     expect(normalizeSlug("--happy--otter--")).toBe("happy-otter");
+  });
+  it("clips to 40 chars", () => {
+    expect(normalizeSlug("a".repeat(50))).toBe("a".repeat(40));
   });
 });
 
