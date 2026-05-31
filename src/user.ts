@@ -10,7 +10,15 @@ const ROOMS_CAP = 100;
 export class User extends DurableObject<Env> {
   private async load(username: string): Promise<UserProfile> {
     const saved = await this.ctx.storage.get<UserProfile>("profile");
-    if (saved) return saved;
+    if (saved) {
+      // Self-heal: a profile first created by a write that didn't carry the username
+      // (older bug / edge path) backfills it on the next call that does.
+      if (!saved.username && username) {
+        saved.username = username;
+        await this.ctx.storage.put("profile", saved);
+      }
+      return saved;
+    }
     // Anchor the profile on first contact (any access path) so createdAt and the
     // username are stable across reads — not regenerated on every cold GET.
     const fresh: UserProfile = { username, createdAt: Date.now(), stats: emptyStats(), games: [], ownedRooms: [] };

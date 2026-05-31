@@ -213,7 +213,7 @@ export class Room extends DurableObject<Env> {
     if (!owner || !slug) return;
     try {
       await this.env.DIRECTORY.put(`room:${this.state.path}`, JSON.stringify({ name: this.state.name }));
-      await this.env.USER.get(this.env.USER.idFromName(owner)).fetch("https://do/room", {
+      await this.env.USER.get(this.env.USER.idFromName(owner)).fetch(`https://do/room?username=${encodeURIComponent(owner)}`, {
         method: "POST",
         body: JSON.stringify({ slug, name: this.state.name, lastPlayedAt: Date.now() }),
       });
@@ -345,7 +345,7 @@ export class Room extends DurableObject<Env> {
     await Promise.allSettled(
       Object.entries(records).map(([username, record]) =>
         this.env.USER.get(this.env.USER.idFromName(username))
-          .fetch("https://do/append", { method: "POST", body: JSON.stringify(record) })
+          .fetch(`https://do/append?username=${encodeURIComponent(username)}`, { method: "POST", body: JSON.stringify(record) })
           .catch((e) => console.error("report failed", username, (e as Error).message)),
       ),
     );
