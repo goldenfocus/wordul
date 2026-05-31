@@ -398,6 +398,18 @@ body {
 
   /* Tighten the room shell so the hero board + keyboard share the screen. */
   .screen.room { gap: 10px; padding: 10px 10px 6px; }
+
+  /* Keep the keyboard stuck to the bottom of the frame: your board can be as tall
+     as it likes (or scroll), the keys are always right there under your thumbs.
+     Solid bg masks the board scrolling underneath; safe-area pad clears the home bar. */
+  .keyboard {
+    position: sticky;
+    bottom: 0;
+    z-index: 30;
+    background: var(--bg);
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0));
+    box-shadow: 0 -10px 18px -10px rgba(0, 0, 0, 0.7);
+  }
 }
 
 /* Game-start celebration — a big "GO!" pop + festive confetti rain. Fires on the
