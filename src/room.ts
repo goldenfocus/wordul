@@ -1,15 +1,16 @@
 import { DurableObject } from "cloudflare:workers";
 import { WORDS_BY_SIZE, isSupportedSize } from "./wordsbysize.ts";
 import { scoreGuess } from "./color.ts";
+import { bumpScoreboard } from "./scoreboard.ts";
+import { buildGameRecords } from "./records.ts";
 import type {
   ChatEntry,
   ClientMessage,
+  Env,
   PlayerState,
   RoomSnapshot,
   ServerMessage,
 } from "./types.ts";
-
-type Env = Record<string, unknown>;
 
 const DEFAULT_LENGTH = 5;
 const MIN_LENGTH = 4;
@@ -33,28 +34,28 @@ export class Room extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    // Hydrate from persisted state if present, else fresh.
-    const saved = ctx.storage.getAlarm; // probe — just for type
-    void saved;
     this.state = {
-      code: "",
+      path: "",
+      owner: "",
+      name: "",
       phase: "lobby",
-      hostId: "",
       players: [],
       word: null,
-      winnerId: null,
+      winner: null,
       startedAt: null,
       finishedAt: null,
       round: 0,
       chat: [],
       wordLength: DEFAULT_LENGTH,
       maxGuesses: guessesFor(DEFAULT_LENGTH),
+      scoreboard: [],
     };
     // Async restore — DO ctor can't await, so we kick it off and gate writes via blockConcurrencyWhile.
     ctx.blockConcurrencyWhile(async () => {
       const restored = await ctx.storage.get<RoomSnapshot>("state");
       if (restored) {
         if (!Array.isArray(restored.chat)) restored.chat = [];
+        if (!Array.isArray(restored.scoreboard)) restored.scoreboard = [];
         if (!restored.wordLength) restored.wordLength = DEFAULT_LENGTH;
         if (!restored.maxGuesses) restored.maxGuesses = guessesFor(restored.wordLength);
         this.state = restored;
@@ -65,8 +66,13 @@ export class Room extends DurableObject<Env> {
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname.endsWith("/ws")) {
-      const code = url.searchParams.get("code") ?? "";
-      if (this.state.code === "") this.state.code = code;
+      const path = url.searchParams.get("room") ?? "";
+      if (this.state.path === "") {
+        this.state.path = path;
+        const [owner, slug] = path.split("/");
+        this.state.owner = owner ?? "";
+        if (!this.state.name) this.state.name = (slug ?? "").replace(/-/g, " ");
+      }
       return this.handleUpgrade(req);
     }
     return new Response("not found", { status: 404 });
@@ -99,22 +105,22 @@ export class Room extends DurableObject<Env> {
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
-    const pid = this.pidFor(ws);
-    if (pid) {
-      const p = this.state.players.find((p) => p.id === pid);
+    const username = this.userFor(ws);
+    if (username) {
+      const p = this.state.players.find((p) => p.username === username);
       if (p && p.connected) {
         p.connected = false;
-        this.pushSystem(`${p.nickname} left`);
+        this.pushSystem(`${p.username} left`);
       }
       await this.persistAndBroadcast();
     }
   }
 
-  /** Read playerId from this WS's serialized attachment (survives hibernation). */
-  private pidFor(ws: WebSocket): string | null {
+  /** Read username from this WS's serialized attachment (survives hibernation). */
+  private userFor(ws: WebSocket): string | null {
     try {
-      const a = ws.deserializeAttachment() as { playerId?: string } | null;
-      return a?.playerId ?? null;
+      const a = ws.deserializeAttachment() as { username?: string } | null;
+      return a?.username ?? null;
     } catch {
       return null;
     }
@@ -129,7 +135,7 @@ export class Room extends DurableObject<Env> {
   private async handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
       case "hello":
-        return this.onHello(ws, msg.nickname, msg.playerId, msg.wordLength);
+        return this.onHello(ws, msg.username, msg.wordLength);
       case "start":
         return this.onStart(ws);
       case "guess":
@@ -140,6 +146,8 @@ export class Room extends DurableObject<Env> {
         return this.onChat(ws, msg.text);
       case "set_length":
         return this.onSetLength(ws, msg.wordLength);
+      case "rename":
+        return this.onRename(ws, msg.name);
       case "ping":
         // Client heartbeat — round-trip with no state change so the network path
         // and DO both stay warm and the client can detect a dead conn faster.
@@ -148,63 +156,75 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  private async onHello(ws: WebSocket, nicknameRaw: string, playerId: string, wordLength?: number): Promise<void> {
-    // Defense in depth: client uses textContent, but we also sanitize at the boundary.
-    // Strip ASCII control chars and angle brackets to neuter HTML/script tag attempts.
-    const nickname =
-      (nicknameRaw ?? "")
-        .replace(/[ -<>]/g, "")
-        .trim()
-        .slice(0, 20) || "Player";
-    if (!playerId || playerId.length > 64) {
-      this.send(ws, { type: "error", message: "bad player id" });
+  private async onHello(ws: WebSocket, usernameRaw: string, wordLength?: number): Promise<void> {
+    const username = (usernameRaw ?? "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 20);
+    if (username.length < 3) {
+      this.send(ws, { type: "error", message: "bad username" });
       return;
     }
-    ws.serializeAttachment({ playerId });
-    const existing = this.state.players.find((p) => p.id === playerId);
+    ws.serializeAttachment({ username });
+
+    const existing = this.state.players.find((p) => p.username === username);
     if (existing) {
       const wasOffline = !existing.connected;
       existing.connected = true;
-      existing.nickname = nickname;
-      if (wasOffline) this.pushSystem(`${nickname} reconnected`);
+      if (wasOffline) this.pushSystem(`${username} reconnected`);
     } else {
       if (this.state.players.length >= MAX_PLAYERS) {
         this.send(ws, { type: "error", message: "room full" });
         return;
       }
-      const player: PlayerState = {
-        id: playerId,
-        nickname,
-        connected: true,
-        guesses: [],
-        status: "playing",
-      };
-      this.state.players.push(player);
-      if (!this.state.hostId) {
-        this.state.hostId = playerId;
-        // First connect = host. Adopt their preferred word length if valid AND we're
-        // still in pristine lobby state (no one's started a game yet).
-        if (
-          wordLength != null &&
-          isSupportedSize(wordLength) &&
-          this.state.phase === "lobby" &&
-          this.state.round === 0
-        ) {
-          this.state.wordLength = wordLength;
-          this.state.maxGuesses = guessesFor(wordLength);
-        }
+      this.state.players.push({ username, connected: true, guesses: [], status: "playing" });
+      if (
+        wordLength != null &&
+        isSupportedSize(wordLength) &&
+        this.state.phase === "lobby" &&
+        this.state.round === 0
+      ) {
+        this.state.wordLength = wordLength;
+        this.state.maxGuesses = guessesFor(wordLength);
       }
-      this.pushSystem(`${nickname} joined`);
+      this.pushSystem(`${username} joined`);
+    }
+
+    // Register this player in the directory so profiles are discoverable (sitemap). Best-effort.
+    try {
+      await this.env.DIRECTORY.put(`user:${username}`, "1");
+    } catch (e) {
+      console.error("user register failed", username, (e as Error).message);
+    }
+
+    // Register the room under its owner (directory + owner profile) — best effort.
+    if (username === this.state.owner) {
+      void this.registerRoom();
     }
     await this.persistAndBroadcast();
   }
 
-  private async onSetLength(ws: WebSocket, length: number): Promise<void> {
-    const pid = this.pidFor(ws);
-    if (pid !== this.state.hostId) {
-      this.send(ws, { type: "error", message: "only host can change word length" });
-      return;
+  private async registerRoom(): Promise<void> {
+    const [owner, slug] = this.state.path.split("/");
+    if (!owner || !slug) return;
+    try {
+      await this.env.DIRECTORY.put(`room:${this.state.path}`, JSON.stringify({ name: this.state.name }));
+      await this.env.USER.get(this.env.USER.idFromName(owner)).fetch("https://do/room", {
+        method: "POST",
+        body: JSON.stringify({ slug, name: this.state.name, lastPlayedAt: Date.now() }),
+      });
+    } catch (e) {
+      console.error("registerRoom failed", this.state.path, (e as Error).message);
     }
+  }
+
+  private async onRename(ws: WebSocket, nameRaw: string): Promise<void> {
+    const name = (nameRaw ?? "").replace(/[\x00-\x1f\x7f<>]/g, "").trim().slice(0, 40);
+    if (!name) return;
+    this.state.name = name;
+    this.pushSystem(`Room renamed to “${name}”`);
+    void this.registerRoom();
+    await this.persistAndBroadcast();
+  }
+
+  private async onSetLength(ws: WebSocket, length: number): Promise<void> {
     if (this.state.phase !== "lobby") {
       this.send(ws, { type: "error", message: "can't change length mid-game" });
       return;
@@ -216,17 +236,12 @@ export class Room extends DurableObject<Env> {
     if (length === this.state.wordLength) return;
     this.state.wordLength = length;
     this.state.maxGuesses = guessesFor(length);
-    const host = this.state.players.find((p) => p.id === this.state.hostId);
-    this.pushSystem(`${host?.nickname ?? "host"} set word length to ${length}`);
+    const who = this.userFor(ws) ?? "someone";
+    this.pushSystem(`${who} set word length to ${length}`);
     await this.persistAndBroadcast();
   }
 
   private async onStart(ws: WebSocket): Promise<void> {
-    const pid = this.pidFor(ws);
-    if (pid !== this.state.hostId) {
-      this.send(ws, { type: "error", message: "only host can start" });
-      return;
-    }
     if (this.state.phase === "playing") return;
     if (this.state.players.length < 1) return;
     const pool = WORDS_BY_SIZE[this.state.wordLength];
@@ -237,7 +252,7 @@ export class Room extends DurableObject<Env> {
     this.state.word = pool.answers[Math.floor(Math.random() * pool.answers.length)] ?? null;
     if (!this.state.word) return;
     this.state.phase = "playing";
-    this.state.winnerId = null;
+    this.state.winner = null;
     this.state.startedAt = Date.now();
     this.state.finishedAt = null;
     this.state.round += 1;
@@ -245,8 +260,8 @@ export class Room extends DurableObject<Env> {
       p.guesses = [];
       p.status = "playing";
     }
-    const host = this.state.players.find((p) => p.id === this.state.hostId);
-    this.pushSystem(`${host?.nickname ?? "host"} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
+    const who = this.userFor(ws) ?? "someone";
+    this.pushSystem(`${who} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
     await this.persistAndBroadcast();
   }
 
@@ -255,9 +270,9 @@ export class Room extends DurableObject<Env> {
       this.send(ws, { type: "error", message: "game not in progress" });
       return;
     }
-    const pid = this.pidFor(ws);
-    if (!pid) return;
-    const player = this.state.players.find((p) => p.id === pid);
+    const username = this.userFor(ws);
+    if (!username) return;
+    const player = this.state.players.find((p) => p.username === username);
     if (!player || player.status !== "playing") return;
     if (player.guesses.length >= this.state.maxGuesses) return;
 
@@ -278,35 +293,61 @@ export class Room extends DurableObject<Env> {
     const allGreen = mask.every((c) => c === "green");
     if (allGreen) {
       player.status = "won";
-      if (!this.state.winnerId) this.state.winnerId = player.id;
+      if (!this.state.winner) this.state.winner = player.username;
     } else if (player.guesses.length >= this.state.maxGuesses) {
       player.status = "lost";
     }
     if (this.isGameOver()) {
       this.state.phase = "finished";
       this.state.finishedAt = Date.now();
-      const winner = this.state.winnerId
-        ? this.state.players.find((p) => p.id === this.state.winnerId)
+      const winner = this.state.winner
+        ? this.state.players.find((p) => p.username === this.state.winner)
         : null;
       if (winner) {
-        this.pushSystem(`${winner.nickname} got it in ${winner.guesses.length}! The word was ${this.state.word}`);
+        this.pushSystem(`${winner.username} got it in ${winner.guesses.length}! The word was ${this.state.word}`);
       } else {
         this.pushSystem(`Nobody got it. The word was ${this.state.word}`);
       }
+      await this.finishGame();
     }
     await this.persistAndBroadcast();
   }
 
-  private async onRematch(ws: WebSocket): Promise<void> {
-    const pid = this.pidFor(ws);
-    if (pid !== this.state.hostId) {
-      this.send(ws, { type: "error", message: "only host can rematch" });
-      return;
+  /** On the finish transition: bump the room scoreboard, then report a personalized
+   *  record to each player's User DO. Best-effort — never blocks the game finishing. */
+  private async finishGame(): Promise<void> {
+    this.state.scoreboard = bumpScoreboard(this.state.scoreboard, {
+      winner: this.state.winner,
+      participants: this.state.players.map((p) => p.username),
+    });
+    const records = buildGameRecords({
+      roomPath: this.state.path,
+      word: this.state.word ?? "",
+      wordLength: this.state.wordLength,
+      finishedAt: this.state.finishedAt ?? Date.now(),
+      players: this.state.players.map((p) => ({
+        username: p.username,
+        status: p.status,
+        guesses: p.guesses.length,
+      })),
+    });
+    for (const [username, record] of Object.entries(records)) {
+      try {
+        await this.env.USER.get(this.env.USER.idFromName(username)).fetch("https://do/append", {
+          method: "POST",
+          body: JSON.stringify(record),
+        });
+      } catch (e) {
+        console.error("report failed", username, (e as Error).message); // best-effort; never block finish
+      }
     }
+  }
+
+  private async onRematch(ws: WebSocket): Promise<void> {
     if (this.state.phase !== "finished") return;
     this.state.phase = "lobby";
     this.state.word = null;
-    this.state.winnerId = null;
+    this.state.winner = null;
     this.state.startedAt = null;
     this.state.finishedAt = null;
     for (const p of this.state.players) {
@@ -317,11 +358,11 @@ export class Room extends DurableObject<Env> {
   }
 
   private async onChat(ws: WebSocket, textRaw: string): Promise<void> {
-    const pid = this.pidFor(ws);
-    if (!pid) return;
-    const player = this.state.players.find((p) => p.id === pid);
+    const username = this.userFor(ws);
+    if (!username) return;
+    const player = this.state.players.find((p) => p.username === username);
     if (!player) return;
-    // Strip control chars + angle brackets at the boundary (same as nicknames).
+    // Strip control chars + angle brackets at the boundary (same as usernames).
     const text =
       (textRaw ?? "")
         .replace(/[\x00-\x1f\x7f<>]/g, "")
@@ -329,13 +370,13 @@ export class Room extends DurableObject<Env> {
         .slice(0, MAX_CHAT_LEN);
     if (!text) return;
     const now = Date.now();
-    const last = this.chatThrottle.get(pid) ?? 0;
+    const last = this.chatThrottle.get(username) ?? 0;
     if (now - last < CHAT_THROTTLE_MS) {
       this.send(ws, { type: "error", message: "slow down a sec" });
       return;
     }
-    this.chatThrottle.set(pid, now);
-    this.state.chat.push({ kind: "user", from: player.nickname, text, t: now });
+    this.chatThrottle.set(username, now);
+    this.state.chat.push({ kind: "user", from: player.username, text, t: now });
     this.capChat();
     await this.persistAndBroadcast();
   }
@@ -353,7 +394,7 @@ export class Room extends DurableObject<Env> {
 
   private isGameOver(): boolean {
     // Race ends as soon as someone wins OR all connected players have exhausted/lost.
-    if (this.state.winnerId) return true;
+    if (this.state.winner) return true;
     const active = this.state.players.filter((p) => p.connected);
     if (active.length === 0) return false;
     return active.every((p) => p.status !== "playing");
