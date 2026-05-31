@@ -139,89 +139,270 @@ function showHome() {
   // No chat available outside a room.
   const topBtn = $("#chatTopBtn");
   if (topBtn) topBtn.hidden = true;
+
   const input = $("#usernameInput");
   input.value = getUsername();
-  buildLengthPicker(getPreferredLength());
-  wireProfileLink();
-  input.focus();
-  $("#createBtn").addEventListener("click", () => {
-    const username = setUsername(input.value);
-    if (username.length < 3) {
-      input.focus();
-      input.style.outline = "2px solid var(--error)";
-      setTimeout(() => (input.style.outline = ""), 700);
-      toast("Pick a username — at least 3 letters", { error: true, duration: 1800 });
-      return;
-    }
-    importLocalStatsOnce(username);
-    const slug = generateRoomCode();
-    history.pushState(null, "", `/@${username}/${slug}`);
-    showRoom(username, slug);
-  });
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") $("#createBtn").click();
-  });
-}
+  buildHomeLengthSelect();
 
-// Show a "view profile" link for the saved username, with a "switch user" reset.
-function wireProfileLink() {
-  const wrap = $("#profileLink");
-  if (!wrap) return;
-  const u = getUsername();
-  if (!u) {
-    wrap.hidden = true;
-    return;
-  }
-  wrap.hidden = false;
-  const link = $("#profileLinkA");
-  if (link) {
-    link.textContent = `@${u}`;
-    link.href = `/@${u}`;
-    link.onclick = (e) => { e.preventDefault(); navigate(`/@${u}`); };
-  }
+  // Two intents share one create→navigate→showRoom path; only autoStart differs.
+  $("#startPlayingBtn").addEventListener("click", () => enterNewRoom({ autoStart: true }));
+  $("#inviteFriendBtn").addEventListener("click", () => enterNewRoom({ autoStart: false }));
+  // Enter in the username field is the spontaneous path → Start playing.
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") $("#startPlayingBtn").click();
+  });
+
+  // Switch-user reset (returning users): drop identity, reveal the intro, refocus.
   const switchBtn = $("#switchUserBtn");
   if (switchBtn) {
     switchBtn.onclick = () => {
       clearUsername();
-      const input = $("#usernameInput");
-      if (input) { input.value = ""; input.focus(); }
-      wireProfileLink();
+      renderHomeIdentity();
+      const i = $("#usernameInput");
+      if (i) { i.value = ""; i.focus(); }
     };
+  }
+
+  // Filter tabs.
+  $("#roomFilterRecent").addEventListener("click", () => setRoomFilter("recent"));
+  $("#roomFilterYours").addEventListener("click", () => setRoomFilter("yours"));
+
+  renderHomeIdentity();
+}
+
+// Toggle greeting vs. intro based on whether we know who the player is, and kick
+// off the rooms fetch for returning users.
+function renderHomeIdentity() {
+  const u = getUsername();
+  const greeting = $("#homeGreeting");
+  const intro = $("#homeIntro");
+  const rooms = $("#homeRooms");
+  if (u) {
+    if (greeting) greeting.hidden = false;
+    if (intro) intro.hidden = true;
+    const nameEl = $("#greetingName");
+    if (nameEl) nameEl.textContent = `@${u}`;
+    loadHomeRooms(u);
+  } else {
+    if (greeting) greeting.hidden = true;
+    if (intro) intro.hidden = false;
+    if (rooms) rooms.hidden = true;
+    const i = $("#usernameInput");
+    if (i) i.focus();
   }
 }
 
-function buildLengthPicker(selected) {
-  const root = $("#lengthPicker");
-  if (!root) return;
-  root.textContent = "";
+function buildHomeLengthSelect() {
+  const sel = $("#homeLengthSelect");
+  if (!sel) return;
+  sel.textContent = "";
+  const pref = getPreferredLength();
   for (const n of SUPPORTED_LENGTHS) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "length-btn" + (n === selected ? " selected" : "");
-    b.dataset.len = String(n);
-    b.textContent = String(n);
-    b.setAttribute("role", "radio");
-    b.setAttribute("aria-checked", n === selected ? "true" : "false");
-    b.addEventListener("click", () => {
-      setPreferredLength(n);
-      buildLengthPicker(n);
-    });
-    root.appendChild(b);
+    const opt = document.createElement("option");
+    opt.value = String(n);
+    opt.textContent = `${n} letters`;
+    if (n === pref) opt.selected = true;
+    sel.appendChild(opt);
   }
+  sel.addEventListener("change", () => {
+    const n = parseInt(sel.value, 10);
+    if (SUPPORTED_LENGTHS.includes(n)) setPreferredLength(n);
+  });
+}
+
+// Shared create flow for both CTAs. autoStart=true → solo game begins on the
+// first lobby snapshot (see onServerMessage); false → land in the lobby to invite.
+function enterNewRoom({ autoStart }) {
+  const input = $("#usernameInput");
+  const username = setUsername(input ? input.value : getUsername());
+  if (username.length < 3) {
+    if (input) {
+      input.focus();
+      input.style.outline = "2px solid var(--error)";
+      setTimeout(() => (input.style.outline = ""), 700);
+    }
+    toast("Pick a username — at least 3 letters", { error: true, duration: 1800 });
+    return;
+  }
+  importLocalStatsOnce(username);
+  const slug = generateRoomCode();
+  history.pushState(null, "", `/@${username}/${slug}`);
+  showRoom(username, slug);
+  // showRoom resets game state, so set the one-shot flag after it.
+  if (autoStart) {
+    game.autoStart = true;
+  } else {
+    // Invite path: hand over the link immediately (still in the click gesture, so
+    // navigator.share is allowed) rather than making them find the lobby button.
+    shareRoomInvite();
+  }
+}
+
+// --- Home rooms list ---
+
+let homeRoomRows = [];
+let homeRoomFilter = "recent";
+
+async function loadHomeRooms(username) {
+  homeRoomRows = [];
+  try {
+    const res = await fetch(`/api/user/${encodeURIComponent(username)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const profile = await res.json();
+    homeRoomRows = buildRoomRows(profile, username);
+  } catch (e) {
+    // Degrade silently — greeting + CTAs still carry the screen.
+    console.error("loadHomeRooms failed:", e);
+  }
+  const rooms = $("#homeRooms");
+  if (!rooms) return; // user navigated away mid-fetch
+  if (homeRoomRows.length === 0) {
+    rooms.hidden = true;
+    return;
+  }
+  rooms.hidden = false;
+  renderRoomList();
+}
+
+// Merge owned rooms with rooms derived from game history, dedupe by path
+// (owned name wins), sort most-recent-first.
+function buildRoomRows(profile, username) {
+  const byPath = new Map();
+  for (const r of profile.ownedRooms || []) {
+    const path = `/@${username}/${r.slug}`;
+    byPath.set(path, {
+      path,
+      name: r.name || titleCaseSlug(r.slug),
+      ts: r.lastPlayedAt || 0,
+      mine: true,
+      owned: true,
+    });
+  }
+  for (const g of profile.games || []) {
+    const roomPath = g.roomPath || "";
+    if (!roomPath.includes("/")) continue;
+    const path = `/@${roomPath}`;
+    const slug = roomPath.split("/")[1] || "";
+    const owner = roomPath.split("/")[0];
+    const existing = byPath.get(path);
+    if (existing) {
+      // Owned name already wins; just keep the most recent timestamp.
+      existing.ts = Math.max(existing.ts, g.finishedAt || 0);
+      continue;
+    }
+    byPath.set(path, {
+      path,
+      name: titleCaseSlug(slug),
+      ts: g.finishedAt || 0,
+      mine: owner === username,
+      owned: false,
+    });
+  }
+  return Array.from(byPath.values()).sort((a, b) => b.ts - a.ts);
+}
+
+function setRoomFilter(filter) {
+  homeRoomFilter = filter;
+  const recentBtn = $("#roomFilterRecent");
+  const yoursBtn = $("#roomFilterYours");
+  const isRecent = filter === "recent";
+  if (recentBtn) { recentBtn.classList.toggle("selected", isRecent); recentBtn.setAttribute("aria-selected", String(isRecent)); }
+  if (yoursBtn) { yoursBtn.classList.toggle("selected", !isRecent); yoursBtn.setAttribute("aria-selected", String(!isRecent)); }
+  renderRoomList();
+}
+
+function renderRoomList() {
+  const list = $("#roomList");
+  if (!list) return;
+  const rows = homeRoomFilter === "yours" ? homeRoomRows.filter((r) => r.owned) : homeRoomRows;
+  list.textContent = "";
+  if (rows.length === 0) {
+    const li = document.createElement("li");
+    li.className = "room-empty muted small";
+    li.textContent = homeRoomFilter === "yours" ? "You haven't created any rooms yet." : "No rooms yet.";
+    list.appendChild(li);
+    return;
+  }
+  for (const row of rows) {
+    const li = document.createElement("li");
+    li.className = "room-row";
+    li.tabIndex = 0;
+    li.setAttribute("role", "button");
+
+    const main = document.createElement("div");
+    main.className = "room-row-main";
+    const name = document.createElement("span");
+    name.className = "room-row-name";
+    name.textContent = row.name; // textContent → inherently XSS-safe
+    main.appendChild(name);
+    if (!row.mine) {
+      const tag = document.createElement("span");
+      tag.className = "room-row-owner";
+      tag.textContent = `@${row.path.split("/")[1]}`; // /@owner/slug → owner
+      main.appendChild(tag);
+    }
+
+    const time = document.createElement("span");
+    time.className = "room-row-time muted small";
+    time.textContent = relativeTime(row.ts);
+
+    li.appendChild(main);
+    li.appendChild(time);
+    li.addEventListener("click", () => navigate(row.path));
+    li.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(row.path); }
+    });
+    list.appendChild(li);
+  }
+}
+
+// "crunchy-zebra" → "Crunchy Zebra"
+function titleCaseSlug(slug) {
+  return String(slug || "")
+    .split("-")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+// Compact relative time: "just now" / "5m ago" / "3h ago" / "2d ago".
+function relativeTime(ts) {
+  if (!ts) return "";
+  const diff = Date.now() - ts;
+  if (diff < 0) return "just now";
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}d ago`;
+  const wk = Math.floor(day / 7);
+  if (wk < 5) return `${wk}w ago`;
+  return `${Math.floor(day / 30)}mo ago`;
 }
 
 function showRoomEntry(owner, slug) {
-  // For joiners with no username yet — show home but pre-fill the join path.
+  // For joiners with no username yet — show home but pre-fill the join path and
+  // repurpose the primary CTA as "Join room".
   mount("tpl-home");
-  $(".tagline").textContent = `Join ${owner}'s Wordle Race room.`;
+  const topBtn = $("#chatTopBtn");
+  if (topBtn) topBtn.hidden = true;
+  $("#homeGreeting").hidden = true;
+  $("#homeRooms").hidden = true;
+  $("#homeIntro").hidden = false;
+  $(".tagline").textContent = `Join @${owner}'s Wordle Race room.`;
   $(".sub").textContent = "Pick a username to join.";
-  wireProfileLink();
+  // Length is decided by the room, so the picker is irrelevant here.
+  $("#homeLengthSelect").hidden = true;
+  $("#inviteFriendBtn").hidden = true;
+
   const input = $("#usernameInput");
   input.value = getUsername();
   input.focus();
-  const btn = $("#createBtn");
+  const btn = $("#startPlayingBtn");
   btn.textContent = "Join room →";
-  btn.addEventListener("click", () => {
+  const join = () => {
     const username = setUsername(input.value);
     if (username.length < 3) {
       input.focus();
@@ -230,9 +411,10 @@ function showRoomEntry(owner, slug) {
     }
     importLocalStatsOnce(username);
     showRoom(owner, slug);
-  });
+  };
+  btn.addEventListener("click", join);
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") btn.click();
+    if (e.key === "Enter") join();
   });
 }
 
@@ -257,6 +439,7 @@ const game = {
   exploding: false,
   reconnectToastTimer: null,
   heartbeatTimer: null,
+  autoStart: false,  // one-shot: "Start playing" auto-begins the solo game on first lobby snapshot
 };
 const REVEAL_STAGGER_MS = 220;
 const REVEAL_FLIP_HALF_MS = 275; // matches the 0.55s tile-reveal keyframe halfway point
@@ -274,37 +457,13 @@ function showRoom(owner, slug) {
   game.unreadChat = 0;
   game.chatCollapsed = false;
   game.lastGuessCounts = new Map();
+  game.autoStart = false;
   mount("tpl-room");
   renderRoomHeader();
-  const inviteUrl = `${location.origin}/@${owner}/${slug}`;
   const hasNativeShare = typeof navigator.share === "function";
   const inviteLabel = $("#inviteLabel");
-  const inviteBtn = $("#inviteBtn");
   if (inviteLabel) inviteLabel.textContent = hasNativeShare ? "Share" : "Copy link";
-  inviteBtn.addEventListener("click", async () => {
-    const shareData = {
-      title: `Wordle Race — ${game.name || game.slug}`,
-      text: `Race me on Wordle in ${game.owner}'s room!`,
-      url: inviteUrl,
-    };
-    if (hasNativeShare) {
-      try {
-        await navigator.share(shareData);
-        return;
-      } catch (e) {
-        // User cancelled → don't toast. Real error → fall through to clipboard.
-        if (e && e.name === "AbortError") return;
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      const ok = $("#copyOk");
-      ok.hidden = false;
-      setTimeout(() => (ok.hidden = true), 1500);
-    } catch {
-      prompt("Copy this link:", inviteUrl);
-    }
-  });
+  $("#inviteBtn").addEventListener("click", () => shareRoomInvite());
   $("#startBtn").addEventListener("click", () => send({ type: "start" }));
   $("#rematchBtn").addEventListener("click", () => {
     game.hasShownEndStats = false;
@@ -314,6 +473,36 @@ function showRoom(owner, slug) {
   wireChat();
   buildKeyboard();
   connect();
+}
+
+// Hand the player the invite link with minimum ceremony: native share sheet on
+// mobile, clipboard + a clear toast on desktop. Used by the lobby invite button
+// AND auto-fired right after "Invite friend" creates a room, so sharing is the
+// first thing that happens — no hunting for a button. MUST be called inside a
+// user-gesture call stack (a click) for navigator.share to be allowed.
+async function shareRoomInvite() {
+  const inviteUrl = `${location.origin}/@${game.owner}/${game.slug}`;
+  if (typeof navigator.share === "function") {
+    try {
+      await navigator.share({
+        title: `Wordle Race — ${game.name || game.slug}`,
+        text: `Race me on Wordle in ${game.owner}'s room!`,
+        url: inviteUrl,
+      });
+      return;
+    } catch (e) {
+      // User cancelled → done. Real error → fall through to clipboard.
+      if (e && e.name === "AbortError") return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(inviteUrl);
+    const ok = $("#copyOk");
+    if (ok) { ok.hidden = false; setTimeout(() => (ok.hidden = true), 1500); }
+    toast("Link copied — send it to a friend!", { duration: 2400 });
+  } catch {
+    prompt("Copy this link:", inviteUrl);
+  }
 }
 
 // Render the room name + owner + a rename affordance. Control is shared (anyone
@@ -511,6 +700,13 @@ function onServerMessage(msg) {
   if (msg.type === "snapshot") {
     const prev = game.snapshot;
     game.snapshot = msg.room;
+    // "Start playing" one-shot: kick off the solo game as soon as we're in the
+    // lobby. Cleared immediately so a reconnect (which replays a snapshot) can't
+    // re-trigger it, and lobby-gated so it never fires mid-game.
+    if (game.autoStart && msg.room.phase === "lobby") {
+      game.autoStart = false;
+      send({ type: "start" });
+    }
     const me = msg.room.players.find((p) => p.username === getUsername());
     const prevMe = prev?.players.find((p) => p.username === getUsername());
     // Server accepted our guess → clear pending letters.

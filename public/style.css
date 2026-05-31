@@ -131,6 +131,55 @@ body {
 .btn.small { padding: 8px 14px; font-size: 13px; }
 .btn.block { width: 100%; }
 
+/* Welcome-back home */
+.home-greeting { text-align: center; display: flex; flex-direction: column; gap: 4px; }
+.greeting-title { font-size: clamp(22px, 4.5vw, 28px); margin: 0; line-height: 1.15; }
+.greeting-name { color: var(--green); }
+.home-intro { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+.home-cta { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.home-length {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 2px;
+}
+.home-length .label {
+  font-size: 12px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+
+.home-rooms { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+.room-filter {
+  display: flex; gap: 4px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 3px;
+}
+.room-filter-btn {
+  flex: 1; background: transparent; color: var(--muted);
+  border: 0; border-radius: 6px; padding: 8px 12px;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  transition: background 0.15s, color 0.15s;
+}
+.room-filter-btn.selected { background: var(--green); color: white; }
+
+.room-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.room-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.room-row:hover, .room-row:focus-visible {
+  border-color: var(--green); outline: none;
+}
+.room-row-main { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.room-row-name {
+  font-weight: 700; font-size: 15px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.room-row-owner { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.room-row-time { flex-shrink: 0; white-space: nowrap; }
+.room-empty { list-style: none; padding: 12px 4px; text-align: center; }
+
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 

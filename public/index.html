@@ -71,24 +71,41 @@
 <!-- Templates -->
 <template id="tpl-home">
   <section class="screen home">
-    <h1 class="tagline">Race your friends on the same Wordle.</h1>
-    <p class="sub">No password. Pick a username, share a link, keep score.</p>
-    <label class="field">
-      <span>Your username</span>
-      <input id="usernameInput" maxlength="20" placeholder="e.g. yan" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
-    </label>
-    <p id="profileLink" class="profile-link muted small" hidden>
-      Playing as <a id="profileLinkA" href="#" class="link">@you</a>
-      · <button id="switchUserBtn" type="button" class="linklike">switch user</button>
-    </p>
-    <div class="field">
-      <span>Word length</span>
-      <div id="lengthPicker" class="length-picker" role="radiogroup" aria-label="Word length">
-        <!-- buttons injected -->
-      </div>
+    <!-- Returning user: greeting + switch-user. Hidden for new users. -->
+    <div id="homeGreeting" class="home-greeting" hidden>
+      <h1 class="greeting-title">👋 Welcome back, <span id="greetingName" class="greeting-name">@you</span></h1>
+      <p class="muted small">Not you? <button id="switchUserBtn" type="button" class="linklike">switch user</button></p>
     </div>
-    <button id="createBtn" class="btn primary">Create a room →</button>
-    <p class="muted small">One try per turn per player. First to guess wins.</p>
+
+    <!-- New user: tagline + username field. Collapsible via switch-user. -->
+    <div id="homeIntro" class="home-intro">
+      <h1 class="tagline">Race your friends on the same Wordle.</h1>
+      <p class="sub">No password. Pick a username, share a link, keep score.</p>
+      <label class="field">
+        <span>Your username</span>
+        <input id="usernameInput" maxlength="20" placeholder="e.g. yan" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+      </label>
+    </div>
+
+    <div class="home-cta">
+      <button id="startPlayingBtn" class="btn primary block">▶ Start playing</button>
+      <button id="inviteFriendBtn" class="btn ghost block">＋ Invite friend</button>
+      <label class="home-length">
+        <span class="label">Word length</span>
+        <select id="homeLengthSelect" class="length-select" aria-label="Word length"></select>
+      </label>
+    </div>
+
+    <!-- Returning user: rooms to rejoin. Hidden when empty or for new users. -->
+    <section id="homeRooms" class="home-rooms" hidden>
+      <div class="room-filter" role="tablist" aria-label="Which rooms">
+        <button id="roomFilterRecent" class="room-filter-btn selected" type="button" role="tab" aria-selected="true">Recent</button>
+        <button id="roomFilterYours" class="room-filter-btn" type="button" role="tab" aria-selected="false">Yours</button>
+      </div>
+      <ul id="roomList" class="room-list"></ul>
+    </section>
+
+    <p class="muted small home-foot">One try per turn per player. First to guess wins.</p>
   </section>
 </template>
 
