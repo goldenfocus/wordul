@@ -18,3 +18,27 @@ describe("wallet", () => {
     localStorage.setItem("wordul.gold", "not-a-number"); expect(getGold()).toBe(50);
   });
 });
+
+import { resolveEdition, companionReact } from "/edition.js";
+
+describe("editions + companion", () => {
+  it("resolveEdition falls back to default for unknown id", () => {
+    expect(resolveEdition("nope").id).toBe("default");
+    expect(resolveEdition("default").id).toBe("default");
+  });
+  it("companionReact returns a line for each event type", () => {
+    for (const ev of ["invalid", "wrong", "win", "loss", "idle"]) {
+      const r = companionReact(ev, { answer: "CRANE" });
+      expect(typeof r.text).toBe("string");
+      expect(r.text.length).toBeGreaterThan(0);
+    }
+  });
+  it("companionReact substitutes {answer}", () => {
+    expect(companionReact("loss", { answer: "CRANE" }).text).toContain("CRANE");
+  });
+  it("companion lines rotate on repeat calls", () => {
+    const a = companionReact("wrong").text;
+    const b = companionReact("wrong").text;
+    expect(a === b).toBe(false);
+  });
+});

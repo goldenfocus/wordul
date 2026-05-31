@@ -25,3 +25,22 @@ export function spendGold(cost) {
   setGold(g - cost);
   return true;
 }
+
+let activeId = "default";
+const reactCounters = {};
+
+export function resolveEdition(id) { return getEdition(id); }
+export function getActiveEditionId() {
+  return localStorage.getItem(LS.edition) ?? "default";
+}
+
+export function companionReact(event, ctx = {}) {
+  const ed = getEdition(activeId);
+  const bank = ed.companion?.lines?.[event] ?? [];
+  if (bank.length === 0) return { text: "", speak: false };
+  const i = (reactCounters[event] = (reactCounters[event] ?? -1) + 1) % bank.length;
+  let text = bank[i];
+  if (ctx.answer) text = text.replace("{answer}", ctx.answer);
+  const muted = localStorage.getItem(LS.muted) === "1";
+  return { text, speak: !!ed.sound?.voice?.on && !muted };
+}
