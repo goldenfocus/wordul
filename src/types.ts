@@ -3,6 +3,7 @@ import type { Color } from "./color.ts";
 export interface Env {
   ASSETS: Fetcher;
   ROOM: DurableObjectNamespace;
+  DESIGNS: R2Bucket;
 }
 
 export type GuessRow = { word: string; mask: Color[] };
