@@ -11,7 +11,11 @@ export class User extends DurableObject<Env> {
   private async load(username: string): Promise<UserProfile> {
     const saved = await this.ctx.storage.get<UserProfile>("profile");
     if (saved) return saved;
-    return { username, createdAt: Date.now(), stats: emptyStats(), games: [], ownedRooms: [] };
+    // Anchor the profile on first contact (any access path) so createdAt and the
+    // username are stable across reads — not regenerated on every cold GET.
+    const fresh: UserProfile = { username, createdAt: Date.now(), stats: emptyStats(), games: [], ownedRooms: [] };
+    await this.ctx.storage.put("profile", fresh);
+    return fresh;
   }
 
   async fetch(req: Request): Promise<Response> {
