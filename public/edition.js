@@ -44,3 +44,52 @@ export function companionReact(event, ctx = {}) {
   const muted = localStorage.getItem(LS.muted) === "1";
   return { text, speak: !!ed.sound?.voice?.on && !muted };
 }
+
+const VAR_MAP = {
+  bg: "--bg", fg: "--fg", muted: "--muted", border: "--border",
+  tileEmpty: "--tile-empty", tilePendingBorder: "--tile-pending-border",
+  keyBg: "--key-bg", green: "--green", yellow: "--yellow", gray: "--gray",
+  accent: "--accent", bgCard: "--bg-card", error: "--error",
+};
+
+export function applyEdition(id) {
+  const ed = getEdition(id);
+  activeId = ed.id;
+  const html = document.documentElement;
+  html.dataset.edition = ed.id;
+  for (const [k, cssVar] of Object.entries(VAR_MAP)) {
+    if (ed.palette[k] != null) html.style.setProperty(cssVar, ed.palette[k]);
+  }
+  html.style.setProperty("--font-display", ed.fonts.display);
+  html.style.setProperty("--font-body", ed.fonts.body);
+  if (ed.fonts.link) injectFontLink(ed.id, ed.fonts.link);
+  window.WordulMotion = { ...ed.motion };
+  localStorage.setItem(LS.edition, ed.id);
+  return ed;
+}
+
+function injectFontLink(id, href) {
+  const elId = `wordul-font-${id}`;
+  if (document.getElementById(elId)) return;
+  const link = document.createElement("link");
+  link.id = elId; link.rel = "stylesheet"; link.href = href;
+  document.head.appendChild(link);
+}
+
+export function renderEditionPicker(rootEl, onPick) {
+  rootEl.innerHTML = "";
+  const current = getActiveEditionId();
+  for (const ed of EDITIONS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "edition-chip" + (ed.id === current ? " is-active" : "");
+    btn.textContent = ed.name;
+    btn.addEventListener("click", () => {
+      applyEdition(ed.id);
+      rootEl.querySelectorAll(".edition-chip").forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      onPick?.(ed.id);
+    });
+    rootEl.appendChild(btn);
+  }
+}
