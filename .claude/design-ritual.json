@@ -1,0 +1,6 @@
+{
+  "site": "wordul.com",
+  "publisher": "r2-worker",
+  "r2_bucket": "wordul-designs",
+  "designs_prefix": "designs/"
+}

@@ -28,3 +28,4 @@ yarn-error.log*
 .idea/
 .vscode/
 *.swp
+.claude/worktrees/
