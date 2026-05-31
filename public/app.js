@@ -440,6 +440,7 @@ const game = {
   reconnectToastTimer: null,
   heartbeatTimer: null,
   autoStart: false,  // one-shot: "Start playing" auto-begins the solo game on first lobby snapshot
+  shareImage: null,  // { file, url, text, canvas } — pre-rendered result card for sharing
 };
 const REVEAL_STAGGER_MS = 220;
 const REVEAL_FLIP_HALF_MS = 275; // matches the 0.55s tile-reveal keyframe halfway point
@@ -458,6 +459,7 @@ function showRoom(owner, slug) {
   game.chatCollapsed = false;
   game.lastGuessCounts = new Map();
   game.autoStart = false;
+  game.shareImage = null;
   mount("tpl-room");
   renderRoomHeader();
   const hasNativeShare = typeof navigator.share === "function";
@@ -1440,7 +1442,10 @@ function openStats(opts = {}) {
     playAgain.hidden = true;
   }
 
-  $("#modalShare").onclick = () => shareResult(opts);
+  // Pre-render the share card now (modal open) so the Share click can fire
+  // navigator.share synchronously — iOS rejects share() after an async toBlob.
+  prepareShareCard();
+  $("#modalShare").onclick = () => shareResult();
 
   modal.addEventListener("click", onModalClick);
 }
@@ -1455,35 +1460,207 @@ function closeStats() {
 }
 
 // --- Share ---
+// The share is an IMAGE card (score grid + the word + a "beat me" CTA with a link
+// straight into this room), not plain text — something you'd actually want to send.
 
-function shareResult(opts) {
+// Build the card and cache a PNG File so shareResult() can call navigator.share
+// synchronously inside the click gesture (iOS requirement). Called on modal open.
+function prepareShareCard() {
+  game.shareImage = null;
   const snap = game.snapshot;
-  let text = "";
-  if (snap && snap.phase === "finished") {
-    const me = snap.players.find((p) => p.username === getUsername());
-    const guesses = me ? me.guesses.length : 0;
-    const result = me?.status === "won" ? `${guesses}/6` : "X/6";
-    text = `Wordle Race ${result}\n\n`;
-    if (me) {
-      for (const g of me.guesses) {
-        text += g.mask.map((c) => c === "green" ? "🟩" : c === "yellow" ? "🟨" : "⬛").join("") + "\n";
-      }
+  if (!snap || snap.phase !== "finished") return;
+  const me = snap.players.find((p) => p.username === getUsername());
+  if (!me) return;
+
+  const maxG = snap.maxGuesses ?? 6;
+  const won = me.status === "won";
+  const score = won ? `${me.guesses.length}/${maxG}` : `X/${maxG}`;
+  const roomUrl = `${location.origin}/@${game.owner}/${game.slug}`;
+  const canvas = renderResultCanvas({
+    guesses: me.guesses || [],
+    won,
+    score,
+    cols: snap.wordLength ?? 5,
+    word: (snap.word || "").toUpperCase(),
+    shortUrl: roomUrl.replace(/^https?:\/\//, ""),
+  });
+  const text = won
+    ? `Solved Wordle Race in ${score} — beat me?`
+    : `Wordle Race got me. Your turn?`;
+  // Sync essentials available immediately; the File arrives a tick later.
+  game.shareImage = { file: null, url: roomUrl, text, canvas };
+  canvas.toBlob((blob) => {
+    if (blob && game.shareImage && game.shareImage.canvas === canvas) {
+      game.shareImage.file = new File([blob], "wordle-race.png", { type: "image/png" });
     }
-    text += `\nPlay: ${location.origin}`;
-  } else {
-    text = `Wordle Race — race your friends!\n${location.origin}`;
-  }
-  if (navigator.share) {
-    navigator.share({ text }).catch(() => fallbackCopy(text));
-  } else {
-    fallbackCopy(text);
-  }
+  }, "image/png");
 }
+
+async function shareResult() {
+  const img = game.shareImage;
+  // Best: native share of the image card + room link.
+  if (img?.file && navigator.canShare?.({ files: [img.file] })) {
+    try {
+      await navigator.share({ files: [img.file], text: img.text, url: img.url });
+      return;
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
+    }
+  }
+  // Native share without files (link only) where image sharing isn't supported.
+  if (img && navigator.share) {
+    try {
+      await navigator.share({ text: img.text, url: img.url });
+      return;
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
+    }
+  }
+  // Desktop fallback: download the card image + copy the room link.
+  if (img?.canvas) {
+    downloadCanvas(img.canvas, "wordle-race.png");
+    try {
+      await navigator.clipboard.writeText(img.url);
+      toast("Card saved · link copied — go invite someone!", { duration: 2800 });
+    } catch {
+      toast("Card saved", { duration: 2000 });
+    }
+    return;
+  }
+  // Last resort (no finished game): just share/copy a join link.
+  const url = `${location.origin}/@${game.owner}/${game.slug}`;
+  if (navigator.share) navigator.share({ text: "Race me on Wordle Race!", url }).catch(() => fallbackCopy(url));
+  else fallbackCopy(url);
+}
+
 function fallbackCopy(text) {
   navigator.clipboard?.writeText(text).then(
     () => toast("Copied to clipboard"),
-    () => prompt("Copy your result:", text),
+    () => prompt("Copy this:", text),
   );
+}
+
+function downloadCanvas(canvas, name) {
+  const a = document.createElement("a");
+  a.href = canvas.toDataURL("image/png");
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+// Draw the result card. Portrait, dark-themed to match the app; retina-sharp via dpr.
+function renderResultCanvas({ guesses, won, score, cols, word, shortUrl }) {
+  const dpr = 2;
+  const W = 560;
+  const P = 40;
+  const gap = 8;
+  const tile = Math.min(64, Math.floor((W - 2 * P - (cols - 1) * gap) / cols));
+  const gridW = cols * tile + (cols - 1) * gap;
+  const gridX = (W - gridW) / 2;
+  const rows = guesses.length;
+  const gridH = rows > 0 ? rows * tile + (rows - 1) * gap : 0;
+
+  const SEC = { header: 38, score: 46, word: word ? 30 : 0, cta: 64 };
+  const H = P + SEC.header + 22 + SEC.score + 24 + gridH
+    + (word ? 22 + SEC.word : 0) + 26 + SEC.cta + P;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = "#121213";
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+  let cy = P;
+
+  // Header: WORDLE ● RACE
+  drawHeader(ctx, W / 2, cy + SEC.header / 2, FONT);
+  cy += SEC.header + 22;
+
+  // Score line
+  ctx.font = `800 36px ${FONT}`;
+  ctx.fillStyle = won ? "#538d4e" : "#a6a6a8";
+  ctx.fillText(won ? `Solved in ${score}` : `Stumped · ${score}`, W / 2, cy + SEC.score / 2);
+  cy += SEC.score + 24;
+
+  // Grid of guesses
+  const COLORS = { green: "#538d4e", yellow: "#b59f3b", gray: "#565758" };
+  let gy = cy;
+  for (let r = 0; r < rows; r++) {
+    const g = guesses[r];
+    for (let c = 0; c < cols; c++) {
+      const x = gridX + c * (tile + gap);
+      roundRect(ctx, x, gy, tile, tile, 6);
+      ctx.fillStyle = COLORS[g.mask[c]] || "#3a3a3c";
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = `800 ${Math.floor(tile * 0.5)}px ${FONT}`;
+      ctx.fillText((g.word[c] || "").toUpperCase(), x + tile / 2, gy + tile / 2 + 1);
+    }
+    gy += tile + gap;
+  }
+  cy += gridH;
+
+  // The word
+  if (word) {
+    cy += 22;
+    ctx.font = `600 23px ${FONT}`;
+    ctx.fillStyle = "#bdbdbf";
+    ctx.fillText(`The word: ${word}`, W / 2, cy + SEC.word / 2);
+    cy += SEC.word;
+  }
+
+  // CTA pill: "Beat my score →" + link
+  cy += 26;
+  roundRect(ctx, P, cy, W - 2 * P, SEC.cta, 12);
+  ctx.fillStyle = "#538d4e";
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.font = `800 22px ${FONT}`;
+  ctx.fillText("Beat my score →", W / 2, cy + SEC.cta / 2 - 11);
+  ctx.font = `600 18px ${FONT}`;
+  ctx.fillText(shortUrl, W / 2, cy + SEC.cta / 2 + 13);
+
+  return canvas;
+}
+
+function drawHeader(ctx, cx, cy, font) {
+  ctx.font = `800 30px ${font}`;
+  const left = "WORDLE";
+  const right = "RACE";
+  const lw = ctx.measureText(left).width;
+  const rw = ctx.measureText(right).width;
+  const dot = 14;
+  const sp = 12;
+  const total = lw + sp + dot + sp + rw;
+  let x = cx - total / 2;
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(left, x, cy);
+  x += lw + sp;
+  ctx.fillStyle = "#538d4e";
+  ctx.beginPath();
+  ctx.arc(x + dot / 2, cy, dot / 2, 0, Math.PI * 2);
+  ctx.fill();
+  x += dot + sp;
+  ctx.fillStyle = "#fff";
+  ctx.fillText(right, x, cy);
+  ctx.textAlign = "center";
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 // --- top-level UI wiring ---
