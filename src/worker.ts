@@ -45,6 +45,36 @@ export default {
       return Response.redirect(url.origin + "/", 301);
     }
 
+    // Design gallery: serve /designs/* from the DESIGNS R2 bucket (permanent,
+    // upload-only — no redeploy needed to publish a new prototype).
+    if (url.pathname === "/designs" || url.pathname === "/designs/") {
+      const idx = await env.DESIGNS.get("designs/index.html");
+      if (idx) {
+        return new Response(idx.body, {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
+      return new Response("No designs yet.", { status: 404 });
+    }
+    if (url.pathname.startsWith("/designs/")) {
+      const key = url.pathname.slice(1); // drop leading "/"
+      // Pretty slug URLs (/designs/<slug>) map to <slug>.html objects; fall back
+      // when the verbatim key misses so manifest.json / index.html still hit directly.
+      const obj =
+        (await env.DESIGNS.get(key)) ??
+        (key.endsWith(".html") ? null : await env.DESIGNS.get(key + ".html"));
+      if (obj) {
+        const ct = obj.httpMetadata?.contentType ?? "text/html; charset=utf-8";
+        return new Response(obj.body, { headers: { "content-type": ct } });
+      }
+      return new Response(
+        "<!doctype html><meta charset=utf-8><title>Design not found</title>" +
+          "<body style=font-family:system-ui;padding:3rem><h1>Design not found</h1>" +
+          "<p><a href=/designs/>← back to the gallery</a></p>",
+        { status: 404, headers: { "content-type": "text/html; charset=utf-8" } },
+      );
+    }
+
     // Profile + room pages: serve SPA shell with per-route meta injected.
     const profileMatch = url.pathname.match(PROFILE_RE);
     const roomMatch = url.pathname.match(ROOM_RE);
@@ -52,7 +82,7 @@ export default {
       return injectMeta(env, url, profileMatch, roomMatch);
     }
 
-    // Everything else: static asset.
+    // Everything else: static asset (SPA fallback handled by wrangler).
     return env.ASSETS.fetch(req);
   },
 };

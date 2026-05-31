@@ -40,6 +40,11 @@
     }
   ],
 
+  // Design gallery prototypes, served at /designs/* from R2.
+  "r2_buckets": [
+    { "binding": "DESIGNS", "bucket_name": "wordul-designs" }
+  ],
+
   // The live Room DO uses the KV-style storage API (ctx.storage.get("state") /
   // ctx.storage.put("state", ...) + getAlarm) and Hibernatable WebSockets
   // (acceptWebSocket / serializeAttachment), NOT SQLite storage. So the

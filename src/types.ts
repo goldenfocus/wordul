@@ -18,6 +18,7 @@ export interface Env {
   ROOM: DurableObjectNamespace;
   USER: DurableObjectNamespace;
   DIRECTORY: KVNamespace;
+  DESIGNS: R2Bucket;
 }
 
 export type GuessRow = { word: string; mask: Color[] };
