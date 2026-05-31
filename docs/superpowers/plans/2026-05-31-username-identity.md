@@ -823,7 +823,7 @@ git commit -m "feat: owner-nested routing, sitemap, /r redirect, export User"
 ```html
 <title data-meta="title">Wordle Race — race your friends on the same Wordle</title>
 <meta name="description" data-meta="description" content="Race your friends on the same Wordle. Pick a username, get a profile, keep score across games." />
-<link rel="canonical" data-meta="canonical" href="https://wordle.goldenfoc.us/" />
+<link rel="canonical" data-meta="canonical" href="https://wordul.com/" />
 <meta property="og:title" data-meta="og:title" content="Wordle Race" />
 <meta property="og:description" data-meta="og:description" content="Race your friends on the same Wordle." />
 <meta property="og:image" content="/og.png" />
@@ -1282,7 +1282,7 @@ git commit -m "feat(ui): one-time device stats import on first claim"
 ```
 User-agent: *
 Allow: /
-Sitemap: https://wordle.goldenfoc.us/sitemap.xml
+Sitemap: https://wordul.com/sitemap.xml
 ```
 
 - [ ] **Step 2: `public/llms.txt`** (concise):
