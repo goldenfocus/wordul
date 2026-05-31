@@ -1,0 +1,57 @@
+{
+  // Wrangler config for the deployed Worker "wordle-race".
+  // Reconciled with the VERIFIED Cloudflare API config (the authority for what is LIVE):
+  //   compatibility_date 2026-04-25, compatibility_flags ["nodejs_compat"],
+  //   bindings ASSETS (assets ./public) + ROOM (durable_object_namespace, class "Room"),
+  //   migration tag v1 -> new_classes ["Room"].
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wordle-race",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    // Static assets are served via env.ASSETS.fetch(req) for all non-/ws routes.
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOM",
+        "class_name": "Room"
+        // Live namespace_id on the deployed script: 4948d60bb9274d829a7ef1d49f3bf1c1
+        // (managed by wrangler; do NOT hardcode it here).
+      }
+    ]
+  },
+
+  // The live Room DO uses the KV-style storage API (ctx.storage.get("state") /
+  // ctx.storage.put("state", ...) + getAlarm) and Hibernatable WebSockets
+  // (acceptWebSocket / serializeAttachment), NOT SQLite storage. So the
+  // verified migration is "new_classes", NOT "new_sqlite_classes".
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["Room"]
+    }
+  ],
+
+  "observability": {
+    "enabled": true
+  }
+
+  // DIVERGENCE (transcript vs live):
+  //  - The build-session transcript (f04) wrangler.jsonc used
+  //    "new_sqlite_classes" for the migration; the verified API config uses
+  //    "new_classes" (matching the KV-style storage the live code actually uses).
+  //    "new_classes" is authoritative and is what is written above.
+  //  - The transcript also declared a production route + SPA asset handling:
+  //      "routes": [{ "pattern": "wordle.goldenfoc.us/*", "zone_name": "goldenfoc.us" }],
+  //      "assets": { ..., "not_found_handling": "single-page-application" }
+  //    These are NOT confirmed by the verified API config (workers/domains was
+  //    empty; the custom domain wordle.goldenfoc.us is likely a zone Route
+  //    attached out-of-band). Omitted here to match the verified runtime config;
+  //    re-add and confirm against the dashboard if reproducing the route.
+}

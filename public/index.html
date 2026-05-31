@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<meta name="theme-color" content="#121213" />
+<title>Wordle Race — play with friends</title>
+<meta name="description" content="Race your friends on the same Wordle. No login. Pick a nickname, share a link, go." />
+<meta property="og:title" content="Wordle Race" />
+<meta property="og:description" content="Race your friends on the same Wordle. No login required." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://wordle.goldenfoc.us" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23538d4e'/%3E%3Ctext x='50%25' y='52%25' text-anchor='middle' dominant-baseline='middle' fill='white' font-family='system-ui,sans-serif' font-weight='800' font-size='40'%3EW%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">WORDLE <span class="brand-dot">●</span> RACE</div>
+  <div class="topbar-actions">
+    <button id="chatTopBtn" class="icon-btn topbar-chat-btn" title="Chat" aria-label="Chat" hidden>
+      💬<span id="chatTopBadge" class="topbar-chat-badge" hidden>0</span>
+    </button>
+    <button id="statsBtn" class="icon-btn" title="Stats" aria-label="Stats">📊</button>
+    <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">⚙</button>
+  </div>
+</header>
+
+<main id="app">
+  <!-- Screens injected by app.js -->
+</main>
+
+<!-- Templates -->
+<template id="tpl-home">
+  <section class="screen home">
+    <h1 class="tagline">Race your friends on the same Wordle.</h1>
+    <p class="sub">No login. Pick a nickname, share a link, go.</p>
+    <label class="field">
+      <span>Your nickname</span>
+      <input id="nicknameInput" maxlength="20" placeholder="e.g. yan" autocomplete="off" autocapitalize="off" />
+    </label>
+    <div class="field">
+      <span>Word length</span>
+      <div id="lengthPicker" class="length-picker" role="radiogroup" aria-label="Word length">
+        <!-- buttons injected -->
+      </div>
+    </div>
+    <button id="createBtn" class="btn primary">Create a room →</button>
+    <p class="muted small">One try per turn per player. First to guess wins.</p>
+  </section>
+</template>
+
+<template id="tpl-room">
+  <section class="screen room">
+    <div class="lobby-bar">
+      <div class="room-info">
+        <span class="label">Room</span>
+        <code id="roomCode"></code>
+        <button id="inviteBtn" class="btn small ghost invite-btn">
+          <span id="inviteLabel">Copy link</span>
+          <span class="invite-icon" aria-hidden="true">↗</span>
+        </button>
+        <span id="copyOk" class="copy-ok" hidden>Copied!</span>
+      </div>
+      <div id="lobbyControls" class="lobby-controls" hidden>
+        <div id="lengthControl" class="length-control" hidden>
+          <span class="label">Letters</span>
+          <select id="lengthSelect" class="length-select" aria-label="Word length"></select>
+        </div>
+        <span id="lobbyHint" class="muted small"></span>
+        <button id="startBtn" class="btn primary small" hidden>Start game</button>
+      </div>
+      <div id="endControls" class="lobby-controls" hidden>
+        <button id="rematchBtn" class="btn primary small" hidden>Play again</button>
+      </div>
+    </div>
+
+    <div id="boards" class="boards"></div>
+    <div id="messageRow" class="message-row" aria-live="polite"></div>
+
+    <div id="chatBackdrop" class="chat-backdrop" hidden></div>
+    <section id="chatPanel" class="chat-panel" aria-label="Chat">
+      <button id="chatToggle" class="chat-toggle" type="button" aria-expanded="true">
+        <span class="chat-toggle-label">Chat</span>
+        <span id="chatBadge" class="chat-badge" hidden>0</span>
+        <span class="chat-toggle-caret" aria-hidden="true">▾</span>
+        <button id="chatCloseBtn" class="chat-close-btn" type="button" aria-label="Close chat">✕</button>
+      </button>
+      <div id="chatBody" class="chat-body">
+        <div id="chatLog" class="chat-log" role="log" aria-live="polite"></div>
+        <form id="chatForm" class="chat-form" autocomplete="off">
+          <input id="chatInput" class="chat-input" maxlength="200" placeholder="Say something…" />
+          <button type="submit" class="chat-send" aria-label="Send">↑</button>
+        </form>
+      </div>
+    </section>
+
+    <div id="keyboard" class="keyboard" aria-label="On-screen keyboard"></div>
+  </section>
+</template>
+
+<!-- Stats modal -->
+<div id="statsModal" class="modal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-card" role="dialog" aria-label="Statistics">
+    <button class="modal-close" data-close aria-label="Close">✕</button>
+    <h2 class="modal-title">STATISTICS</h2>
+    <div class="stats-grid">
+      <div><div class="stat-num" id="statPlayed">0</div><div class="stat-label">Played</div></div>
+      <div><div class="stat-num" id="statWinPct">0</div><div class="stat-label">Win %</div></div>
+      <div><div class="stat-num" id="statCurStreak">0</div><div class="stat-label">Current Streak</div></div>
+      <div><div class="stat-num" id="statMaxStreak">0</div><div class="stat-label">Max Streak</div></div>
+    </div>
+    <h3 class="modal-subtitle">GUESS DISTRIBUTION</h3>
+    <div id="dist" class="dist"></div>
+    <div id="endgameMsg" class="endgame" hidden></div>
+    <div class="modal-actions">
+      <button id="modalPlayAgain" class="btn primary block" hidden>PLAY AGAIN! ⟳</button>
+      <div class="modal-divider"></div>
+      <button id="modalShare" class="btn ghost block">SHARE ↗</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div id="settingsModal" class="modal" hidden>
+  <div class="modal-backdrop" data-close-settings></div>
+  <div class="modal-card settings-card" role="dialog" aria-label="Settings">
+    <button class="modal-close" data-close-settings aria-label="Close">✕</button>
+    <h2 class="modal-title">SETTINGS</h2>
+
+    <label class="setting-row" for="setHardMode">
+      <div class="setting-text">
+        <div class="setting-name">Hard Mode</div>
+        <div class="setting-desc">Any revealed hints must be used in subsequent guesses</div>
+      </div>
+      <span class="switch">
+        <input type="checkbox" id="setHardMode" />
+        <span class="switch-slider" aria-hidden="true"></span>
+      </span>
+    </label>
+
+    <label class="setting-row" for="setColorBlind">
+      <div class="setting-text">
+        <div class="setting-name">Color Blind Mode</div>
+        <div class="setting-desc">High-contrast colors (blue / orange)</div>
+      </div>
+      <span class="switch">
+        <input type="checkbox" id="setColorBlind" />
+        <span class="switch-slider" aria-hidden="true"></span>
+      </span>
+    </label>
+
+    <label class="setting-row" for="setReducedMotion">
+      <div class="setting-text">
+        <div class="setting-name">Reduced Motion</div>
+        <div class="setting-desc">Skip the flip + explosion animations</div>
+      </div>
+      <span class="switch">
+        <input type="checkbox" id="setReducedMotion" />
+        <span class="switch-slider" aria-hidden="true"></span>
+      </span>
+    </label>
+
+    <div class="setting-row danger">
+      <div class="setting-text">
+        <div class="setting-name">Reset Stats</div>
+        <div class="setting-desc">Clears Played / Streak / Distribution</div>
+      </div>
+      <button id="resetStatsBtn" class="btn ghost small">Reset</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

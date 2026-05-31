@@ -1,0 +1,849 @@
+:root {
+  --bg: #121213;
+  --fg: #ffffff;
+  --muted: #818384;
+  --border: #3a3a3c;
+  --tile-empty: #121213;
+  --tile-pending-border: #565758;
+  --key-bg: #818384;
+  --green: #538d4e;
+  --yellow: #b59f3b;
+  --gray: #565758; /* clearly distinct from --border so submitted "absent" tiles stand out */
+  --accent: #538d4e;
+  --bg-card: #1f1f21;
+  --error: #ff6b6b;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, system-ui, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  /* Disable iOS Safari's 300ms double-tap-zoom on the whole app. Pinch-zoom still works. */
+  touch-action: manipulation;
+}
+/* Belt-and-braces: explicitly disable double-tap zoom on every tap target, and kill
+   the iOS gray tap highlight that looks ugly on dark UI. */
+button, .key, .tile, .icon-btn, .length-btn, .link, select, input, label,
+.chat-toggle, .chat-send, .chat-fab, .topbar-chat-btn, .modal-close, .switch {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+body {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Topbar */
+.topbar {
+  height: 50px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  flex-shrink: 0;
+}
+.topbar-actions { display: flex; gap: 4px; }
+.brand {
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  font-size: 17px;
+}
+.brand-dot { color: var(--green); margin: 0 4px; transition: color 0.2s; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.icon-btn {
+  background: transparent;
+  border: 0;
+  color: var(--fg);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.icon-btn:hover { background: rgba(255,255,255,0.06); }
+
+#app {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  gap: 16px;
+}
+
+/* Home */
+.home { justify-content: center; max-width: 480px; margin: 0 auto; }
+.tagline {
+  font-size: clamp(24px, 5vw, 32px);
+  margin: 0;
+  text-align: center;
+  line-height: 1.15;
+}
+.sub { color: var(--muted); margin: 0; text-align: center; }
+.field { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.field span { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.field input {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 12px;
+  color: var(--fg);
+  font-size: 18px;
+  font-weight: 600;
+  width: 100%;
+}
+.field input:focus {
+  outline: 2px solid var(--green);
+  outline-offset: 1px;
+}
+
+.btn {
+  background: var(--green);
+  color: white;
+  border: 0;
+  border-radius: 6px;
+  padding: 14px 18px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: filter 0.15s;
+}
+.btn:hover:not(:disabled) { filter: brightness(1.1); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.primary { background: var(--green); }
+.btn.ghost { background: var(--gray); }
+.btn.small { padding: 8px 14px; font-size: 13px; }
+.btn.block { width: 100%; }
+
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+
+/* Length picker on home — segmented look. */
+.length-picker {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 4px;
+}
+.length-btn {
+  background: var(--bg-card);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 4px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.length-btn:hover { background: rgba(255,255,255,0.06); }
+.length-btn.selected {
+  background: var(--green);
+  border-color: var(--green);
+  color: white;
+}
+.length-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+/* In-lobby length select (host-only). */
+.length-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.length-control .label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.length-select {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Lobby bar */
+.lobby-bar {
+  width: 100%;
+  max-width: 920px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.room-info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.room-info .label {
+  font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;
+}
+.room-info code {
+  font-family: ui-monospace, SF Mono, Menlo, monospace;
+  font-size: 16px; font-weight: 700;
+  background: var(--bg); padding: 4px 8px; border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.link {
+  background: none; border: 0;
+  color: var(--green); cursor: pointer;
+  font-size: 13px; font-weight: 600;
+  text-decoration: underline;
+  padding: 4px;
+}
+.invite-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  text-transform: none; letter-spacing: 0.02em;
+}
+.invite-icon { font-size: 14px; line-height: 1; }
+.copy-ok { color: var(--green); font-size: 12px; font-weight: 600; }
+.lobby-controls { display: flex; align-items: center; gap: 10px; }
+
+/* Boards */
+.boards {
+  width: 100%;
+  max-width: 920px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr));
+  gap: 20px;
+  justify-items: center;
+  padding: 4px;
+}
+.player-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.player-name {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.player-name .me { color: var(--green); }
+.player-name .badge {
+  font-size: 10px; padding: 2px 6px; border-radius: 999px;
+  background: var(--gray); color: var(--fg); text-transform: uppercase;
+}
+.player-name .badge.won { background: var(--green); }
+.player-name .badge.lost { background: var(--error); }
+.player-name .badge.off { background: var(--gray); opacity: 0.5; }
+
+.grid {
+  display: grid;
+  grid-template-rows: repeat(var(--rows, 6), 1fr);
+  gap: 5px;
+}
+.grid-row {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 5), var(--tile-size, 56px));
+  gap: 5px;
+  justify-content: center;
+}
+.tile {
+  width: var(--tile-size, 56px);
+  height: var(--tile-size, 56px);
+  border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: calc(var(--tile-size, 56px) * 0.55);
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--fg);
+  background: var(--tile-empty);
+  user-select: none;
+  transition: transform 0.05s;
+}
+.tile.filled { border-color: var(--tile-pending-border); }
+.tile.pop { animation: pop 0.1s ease-in-out; }
+.tile.green { background: var(--green); border-color: var(--green); color: white; }
+.tile.yellow { background: var(--yellow); border-color: var(--yellow); color: white; }
+.tile.gray { background: var(--gray); border-color: var(--gray); color: white; }
+
+/* Reveal: tile starts in "filled" look (no color yet), flips edge-on, and we swap
+   to the colored class at the 50% mark — this is what gives Wordle its signature
+   "the answer is REVEALED through the flip" feel. The stagger is set via JS by
+   writing --reveal-delay on each tile. */
+.tile.reveal {
+  animation: tile-reveal 0.55s ease forwards;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+@keyframes tile-reveal {
+  0%  { transform: rotateX(0); }
+  50% { transform: rotateX(90deg); }
+  100% { transform: rotateX(0); }
+}
+
+.grid-row.shake { animation: shake 0.5s; }
+@keyframes pop { 50% { transform: scale(1.08); } }
+@keyframes shake {
+  10%,90% { transform: translateX(-2px); }
+  20%,80% { transform: translateX(4px); }
+  30%,50%,70% { transform: translateX(-8px); }
+  40%,60% { transform: translateX(8px); }
+}
+
+/* Spectator boards (others) — smaller tiles, no letters visible */
+.player-board.spectator .tile {
+  --tile-size: 28px;
+  font-size: 0;
+}
+
+/* Dynamic tile sizing: scales DOWN as word length grows. The base 56px works for
+   5 letters; longer words need to shrink proportionally to fit the viewport on mobile.
+   var(--cols) is set per board via JS based on this room's wordLength. */
+.player-board {
+  --tile-size: clamp(28px, calc((100vw - 80px) / max(var(--cols, 5), 8)), 56px);
+}
+.player-board.spectator { --tile-size: 22px; }
+
+/* Tighter clamp on small screens for very long words. */
+@media (max-width: 520px) {
+  .player-board {
+    --tile-size: clamp(20px, calc((100vw - 32px) / max(var(--cols, 5), 6)), 44px);
+  }
+  .player-board.spectator { --tile-size: 18px; }
+}
+
+/* Lose sequence — full-screen red shockwave + tile explosion + falling confetti debris. */
+.lose-flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 80;
+  background: radial-gradient(circle at center, #ff3838 0%, #ff8c00 30%, transparent 65%);
+  opacity: 0;
+  transform: scale(0.4);
+  animation: lose-flash 0.65s cubic-bezier(.18,.71,.28,1) forwards;
+  mix-blend-mode: screen;
+}
+@keyframes lose-flash {
+  0%   { opacity: 0;    transform: scale(0.3); }
+  20%  { opacity: 0.95; transform: scale(1.6); }
+  60%  { opacity: 0.5;  transform: scale(2.2); }
+  100% { opacity: 0;    transform: scale(2.6); }
+}
+
+/* Each tile flies away with a random translation + rotation set as CSS vars. */
+.tile.explode {
+  animation: tile-explode 1.35s cubic-bezier(.28,.4,.7,1) forwards;
+  animation-delay: var(--ex-delay, 0ms);
+  z-index: 1;
+}
+@keyframes tile-explode {
+  0%   { transform: translate(0,0) rotate(0); opacity: 1; }
+  10%  { transform: scale(1.2) translate(0,0); }
+  100% {
+    transform: translate(var(--ex-tx,0), var(--ex-ty,0)) rotate(var(--ex-rot,0));
+    opacity: 0;
+  }
+}
+
+/* A short ground shake so the surrounding UI feels the boom. */
+.lose-shake { animation: lose-shake 0.5s ease-in-out; }
+@keyframes lose-shake {
+  0%,100% { transform: translate(0,0); }
+  20% { transform: translate(-4px,2px); }
+  40% { transform: translate(5px,-2px); }
+  60% { transform: translate(-3px,3px); }
+  80% { transform: translate(2px,-1px); }
+}
+
+/* Confetti shards scattered from board center. JS sets per-shard color + delay. */
+.shard {
+  position: fixed;
+  top: 50%; left: 50%;
+  width: 10px; height: 14px;
+  pointer-events: none;
+  z-index: 90;
+  border-radius: 2px;
+  animation: shard-fly 1.4s cubic-bezier(.24,.4,.7,1) forwards;
+  animation-delay: var(--shard-delay, 0ms);
+  opacity: 0;
+}
+@keyframes shard-fly {
+  0%   { transform: translate(-50%,-50%) rotate(0); opacity: 0; }
+  10%  { opacity: 1; }
+  100% {
+    transform:
+      translate(calc(-50% + var(--shard-tx,0)), calc(-50% + var(--shard-ty,0)))
+      rotate(var(--shard-rot,0));
+    opacity: 0;
+  }
+}
+
+/* When stats modal shows a joke instead of a win banner, scale the wording. */
+.endgame.joke {
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 700;
+  font-style: normal;
+  padding: 4px 6px 0;
+}
+.endgame.joke .roast {
+  color: #ff8c8c;
+  display: block;
+  margin-bottom: 6px;
+}
+.endgame.joke .reveal {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 13px;
+}
+.endgame.joke .reveal .word {
+  color: var(--green);
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.18em;
+  margin-left: 4px;
+}
+
+/* Chat */
+.chat-panel {
+  width: 100%;
+  max-width: 520px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.chat-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 10px 14px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+.chat-toggle:hover { background: rgba(255,255,255,0.04); }
+.chat-toggle-label { flex: 1; }
+.chat-badge {
+  background: var(--green);
+  color: white;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 800;
+}
+.chat-toggle-caret { color: var(--muted); transition: transform 0.2s; }
+.chat-panel.collapsed .chat-body { display: none; }
+.chat-panel.collapsed .chat-toggle-caret { transform: rotate(-90deg); }
+.chat-body {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+.chat-log {
+  list-style: none;
+  margin: 0;
+  padding: 8px 12px;
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.35;
+  scrollbar-width: thin;
+}
+.chat-log:empty::before {
+  content: "Be the first to say something.";
+  color: var(--muted);
+  font-style: italic;
+  font-size: 12px;
+}
+.chat-row { word-wrap: break-word; }
+.chat-row.system {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+.chat-row.user .from {
+  color: var(--green);
+  font-weight: 700;
+  margin-right: 6px;
+}
+.chat-row.user.mine .from { color: var(--yellow); }
+.chat-form {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  background: rgba(0,0,0,0.2);
+}
+.chat-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  color: var(--fg);
+  font-size: 14px;
+  min-width: 0;
+}
+.chat-input:focus { outline: 2px solid var(--green); outline-offset: 0; }
+.chat-send {
+  background: var(--green);
+  color: white;
+  border: 0;
+  border-radius: 4px;
+  width: 38px;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Topbar chat button (hidden on desktop, visible on mobile when in a room) */
+.topbar-chat-btn { display: none; position: relative; }
+.topbar-chat-badge {
+  position: absolute;
+  top: 2px; right: 0;
+  background: var(--green);
+  color: white;
+  font-size: 9px;
+  font-weight: 800;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.chat-close-btn {
+  display: none;
+  background: transparent;
+  border: 0;
+  color: var(--fg);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin-left: auto;
+}
+
+/* === Mobile: chat becomes a slide-up bottom sheet === */
+@media (max-width: 520px) {
+  /* Hide the inline chat panel; it'll be repositioned + animated. */
+  .chat-panel {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    width: 100%;
+    max-width: none;
+    max-height: 80vh;
+    border-radius: 14px 14px 0 0;
+    border: none;
+    border-top: 1px solid var(--border);
+    background: var(--bg-card);
+    transform: translateY(100%);
+    transition: transform 0.28s cubic-bezier(.32,.72,.32,1);
+    z-index: 70;
+    box-shadow: 0 -8px 28px rgba(0,0,0,0.5);
+  }
+  .chat-panel.sheet-open { transform: translateY(0); }
+  /* While closed, ignore taps so the underlying board is interactive. */
+  .chat-panel:not(.sheet-open) { pointer-events: none; }
+  .chat-panel.sheet-open { pointer-events: auto; }
+
+  /* The collapse caret + badge are desktop UI; on mobile we use the X close button. */
+  .chat-toggle { padding: 14px 16px; }
+  .chat-toggle-caret, .chat-badge { display: none; }
+  .chat-close-btn { display: inline-flex; }
+
+  /* Always expanded on mobile — collapse is meaningless when the sheet hides itself. */
+  .chat-panel.collapsed .chat-body { display: flex !important; }
+  .chat-body { flex: 1; min-height: 0; flex-direction: column; }
+  .chat-log { max-height: none; flex: 1; min-height: 160px; }
+
+  .chat-form {
+    /* Stick the input above the soft keyboard inset on mobile. */
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0));
+  }
+
+  /* Backdrop dimmer behind the sheet. */
+  .chat-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 65;
+    opacity: 0;
+    transition: opacity 0.22s ease;
+    pointer-events: none;
+  }
+  .chat-backdrop.sheet-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Topbar chat trigger — only shown on mobile, and only inside a room (JS controls hidden). */
+  .topbar-chat-btn { display: inline-flex; align-items: center; }
+}
+
+/* Keyboard */
+.keyboard {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  user-select: none;
+}
+.kb-row { display: flex; gap: 6px; justify-content: center; }
+.kb-row.middle { padding: 0 5%; }
+.key {
+  flex: 1;
+  min-height: 58px;
+  background: var(--key-bg);
+  color: var(--fg);
+  border: 0;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.05s;
+}
+.key:active { transform: scale(0.95); }
+.key.wide { flex: 1.6; font-size: 11px; }
+.key.green { background: var(--green); color: white; }
+.key.yellow { background: var(--yellow); color: white; }
+.key.gray { background: var(--gray); color: white; }
+
+/* Floating toast for in-game messages — sits over the board so it's impossible to miss. */
+.message-row {
+  min-height: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+.toast-bubble {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--fg);
+  color: var(--bg);
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  z-index: 40;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+  animation: toast-in 0.2s ease forwards;
+  pointer-events: none;
+}
+.toast-bubble.error { background: #ff6b6b; color: white; }
+.toast-bubble.fade { animation: toast-out 0.25s ease forwards; }
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes toast-out {
+  to { opacity: 0; transform: translate(-50%, -8px); }
+}
+
+/* Modal */
+.modal {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50;
+}
+.modal[hidden] { display: none; }
+[hidden] { display: none !important; }
+.modal-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.6);
+}
+.modal-card {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 24px 24px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.modal-close {
+  position: absolute; top: 10px; right: 12px;
+  background: transparent; border: 0; color: var(--fg);
+  font-size: 18px; cursor: pointer;
+}
+.modal-title {
+  text-align: center;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  margin: 0 0 14px;
+}
+.modal-subtitle {
+  text-align: center;
+  font-size: 14px;
+  letter-spacing: 0.12em;
+  margin: 18px 0 10px;
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  text-align: center;
+}
+.stat-num { font-size: 32px; font-weight: 400; line-height: 1.1; }
+.stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.2; }
+.dist { display: flex; flex-direction: column; gap: 4px; }
+.dist-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.dist-row .num { width: 12px; text-align: center; color: var(--fg); }
+/* Bar container = full row width; the inner .fill shrinks/grows. This way the
+   count number can sit at the END of the fill (not the row), matching NYT. */
+.dist-row .bar-track {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 20px;
+}
+.dist-row .fill {
+  background: #4a4a4d;
+  border-radius: 2px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 8px;
+  color: white;
+  font-weight: 700;
+  font-size: 12px;
+  min-width: 24px;
+  transition: width 0.35s ease;
+}
+.dist-row.current .fill { background: var(--green); }
+.dist-row.empty .fill {
+  width: 24px;
+  background: #3a3a3c;
+  padding: 0;
+  justify-content: center;
+}
+.endgame {
+  margin: 16px 0 0;
+  text-align: center;
+  font-weight: 700;
+  color: var(--fg);
+}
+.endgame .word {
+  display: inline-block;
+  margin-left: 6px;
+  letter-spacing: 0.18em;
+  font-family: ui-monospace, monospace;
+  color: var(--green);
+}
+.modal-actions {
+  display: flex; gap: 12px; align-items: stretch;
+  margin-top: 16px;
+}
+.modal-divider {
+  width: 1px;
+  background: var(--border);
+  align-self: stretch;
+}
+.modal-actions .btn { flex: 1; }
+
+/* Settings */
+.settings-card { max-height: calc(100dvh - 32px); }
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.setting-row:last-child { border-bottom: 0; }
+.setting-text { flex: 1; min-width: 0; }
+.setting-name { font-size: 15px; font-weight: 600; }
+.setting-desc { color: var(--muted); font-size: 12px; margin-top: 2px; line-height: 1.35; }
+.setting-row.danger .setting-name { color: var(--error); }
+
+/* iOS-style toggle switch */
+.switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch-slider {
+  position: absolute; inset: 0;
+  background: #3a3a3c;
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+.switch-slider::before {
+  content: "";
+  position: absolute;
+  height: 18px; width: 18px;
+  top: 3px; left: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.switch input:checked + .switch-slider { background: var(--green); }
+.switch input:checked + .switch-slider::before { transform: translateX(18px); }
+.switch input:focus-visible + .switch-slider { box-shadow: 0 0 0 2px var(--green); }
+
+/* Color Blind Mode — body class overrides the green/yellow tokens. */
+body.cb {
+  --green: #2c80ff;
+  --yellow: #f5793a;
+}
+
+/* Reduced Motion — disable the expensive animations. */
+body.reduced-motion .tile.reveal,
+body.reduced-motion .tile.explode,
+body.reduced-motion .tile.pop,
+body.reduced-motion .lose-flash,
+body.reduced-motion .shard,
+body.reduced-motion .grid-row.shake,
+body.reduced-motion .lose-shake {
+  animation: none !important;
+  transition: none !important;
+}
+body.reduced-motion .tile.reveal { opacity: 1 !important; transform: none !important; }
+body.reduced-motion .tile.explode { display: none !important; }
+body.reduced-motion .shard { display: none !important; }
+body.reduced-motion .lose-flash { display: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .tile.reveal, .tile.explode, .shard, .lose-flash, .lose-shake { animation-duration: 0.01ms !important; }
+}
