@@ -36,11 +36,15 @@
 <template id="tpl-home">
   <section class="screen home">
     <h1 class="tagline">Race your friends on the same Wordle.</h1>
-    <p class="sub">No login. Pick a nickname, share a link, go.</p>
+    <p class="sub">No password. Pick a username, share a link, keep score.</p>
     <label class="field">
-      <span>Your nickname</span>
-      <input id="nicknameInput" maxlength="20" placeholder="e.g. yan" autocomplete="off" autocapitalize="off" />
+      <span>Your username</span>
+      <input id="usernameInput" maxlength="20" placeholder="e.g. yan" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
     </label>
+    <p id="profileLink" class="profile-link muted small" hidden>
+      Playing as <a id="profileLinkA" href="#" class="link">@you</a>
+      · <button id="switchUserBtn" type="button" class="linklike">switch user</button>
+    </p>
     <div class="field">
       <span>Word length</span>
       <div id="lengthPicker" class="length-picker" role="radiogroup" aria-label="Word length">
@@ -56,8 +60,9 @@
   <section class="screen room">
     <div class="lobby-bar">
       <div class="room-info">
-        <span class="label">Room</span>
-        <code id="roomCode"></code>
+        <span class="room-name" id="roomName"></span>
+        <button id="renameBtn" class="icon-btn rename-btn" type="button" title="Rename room" aria-label="Rename room">✎</button>
+        <a id="roomOwner" class="room-owner link" href="#">@owner</a>
         <button id="inviteBtn" class="btn small ghost invite-btn">
           <span id="inviteLabel">Copy link</span>
           <span class="invite-icon" aria-hidden="true">↗</span>
@@ -78,6 +83,7 @@
     </div>
 
     <div id="boards" class="boards"></div>
+    <div id="scoreboard" class="scoreboard" hidden></div>
     <div id="messageRow" class="message-row" aria-live="polite"></div>
 
     <div id="chatBackdrop" class="chat-backdrop" hidden></div>
@@ -98,6 +104,13 @@
     </section>
 
     <div id="keyboard" class="keyboard" aria-label="On-screen keyboard"></div>
+  </section>
+</template>
+
+<template id="tpl-profile">
+  <section class="screen profile">
+    <a id="profileBack" href="/" class="link profile-back">← Home</a>
+    <div id="profileMount" class="profile-mount"></div>
   </section>
 </template>
 

@@ -1,10 +1,10 @@
 // Wordle Race — client
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { generateRoomCode } from "/codes.js";
+import { renderProfile } from "/profile.js";
 
 const LS = {
-  playerId: "wr.playerId",
-  nickname: "wr.nickname",
+  username: "wr.username",
   stats: "wr.stats",
   settings: "wr.settings",
   preferredLength: "wr.length",
@@ -44,19 +44,36 @@ function applySettings(s) {
 }
 
 // --- identity ---
-function getPlayerId() {
-  let id = localStorage.getItem(LS.playerId);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(LS.playerId, id);
-  }
-  return id;
+// A username (no password) is the player's identity everywhere. Normalized to
+// [a-z0-9_-], min 3, max 20 — matching the server's onHello + worker regexes.
+function normalizeUsername(u) {
+  return (u || "").toLowerCase().replace(/[^a-z0-9_-]/g, "").replace(/^[-_]+|[-_]+$/g, "").slice(0, 20);
 }
-function getNickname() {
-  return localStorage.getItem(LS.nickname) || "";
+function getUsername() {
+  return localStorage.getItem(LS.username) || "";
 }
-function setNickname(n) {
-  localStorage.setItem(LS.nickname, n);
+function setUsername(u) {
+  const clean = normalizeUsername(u);
+  localStorage.setItem(LS.username, clean);
+  // Cookie cache so the server can recognise returning players if needed.
+  document.cookie = `wr_user=${clean}; path=/; max-age=31536000; samesite=lax`;
+  return clean;
+}
+function clearUsername() {
+  localStorage.removeItem(LS.username);
+  document.cookie = "wr_user=; path=/; max-age=0";
+}
+
+// One-time device-stats import guard. The backend exposes no /import endpoint
+// (User DO only has /append + /room), and the legacy localStorage stats shape
+// (aggregate counts, no per-game records) can't be cleanly mapped onto the
+// server's per-game applyGame model. Per the plan's G4 fallback, we ship without
+// import and just set the guard flag so the server profile starts fresh. The
+// local stats stay on-device and still power the existing stats modal.
+function importLocalStatsOnce(username) {
+  const flag = "wr.imported." + username;
+  if (localStorage.getItem(flag)) return;
+  localStorage.setItem(flag, "1");
 }
 
 // --- stats ---
@@ -92,13 +109,15 @@ function recordResult(won, guessCount) {
 }
 
 // --- routing ---
-// Accepts word-pair codes (happy-otter) or legacy alphanumeric (5sy7uk).
-const ROOM_CODE_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/i;
-function getRoomCodeFromPath() {
-  const m = location.pathname.match(/^\/r\/([A-Za-z0-9-]{3,40})$/);
-  if (!m) return null;
-  const code = m[1].toLowerCase();
-  return ROOM_CODE_RE.test(code) ? code : null;
+// Owner-nested rooms (/@owner/<slug>) and public profiles (/@username).
+const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
+const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;
+function parseRoute() {
+  const room = location.pathname.match(ROOM_RE);
+  if (room) return { kind: "room", owner: room[1], slug: room[2] };
+  const prof = location.pathname.match(PROFILE_RE);
+  if (prof) return { kind: "profile", username: prof[1] };
+  return { kind: "home" };
 }
 
 // --- DOM helpers ---
@@ -119,26 +138,55 @@ function showHome() {
   // No chat available outside a room.
   const topBtn = $("#chatTopBtn");
   if (topBtn) topBtn.hidden = true;
-  const input = $("#nicknameInput");
-  input.value = getNickname();
+  const input = $("#usernameInput");
+  input.value = getUsername();
   buildLengthPicker(getPreferredLength());
+  wireProfileLink();
   input.focus();
   $("#createBtn").addEventListener("click", () => {
-    const nickname = (input.value || "").trim().slice(0, 20);
-    if (!nickname) {
+    const username = setUsername(input.value);
+    if (username.length < 3) {
       input.focus();
       input.style.outline = "2px solid var(--error)";
       setTimeout(() => (input.style.outline = ""), 700);
+      toast("Pick a username — at least 3 letters", { error: true, duration: 1800 });
       return;
     }
-    setNickname(nickname);
-    const code = generateRoomCode();
-    history.pushState(null, "", `/r/${code}`);
-    showRoom(code);
+    importLocalStatsOnce(username);
+    const slug = generateRoomCode();
+    history.pushState(null, "", `/@${username}/${slug}`);
+    showRoom(username, slug);
   });
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") $("#createBtn").click();
   });
+}
+
+// Show a "view profile" link for the saved username, with a "switch user" reset.
+function wireProfileLink() {
+  const wrap = $("#profileLink");
+  if (!wrap) return;
+  const u = getUsername();
+  if (!u) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  const link = $("#profileLinkA");
+  if (link) {
+    link.textContent = `@${u}`;
+    link.href = `/@${u}`;
+    link.onclick = (e) => { e.preventDefault(); navigate(`/@${u}`); };
+  }
+  const switchBtn = $("#switchUserBtn");
+  if (switchBtn) {
+    switchBtn.onclick = () => {
+      clearUsername();
+      const input = $("#usernameInput");
+      if (input) { input.value = ""; input.focus(); }
+      wireProfileLink();
+    };
+  }
 }
 
 function buildLengthPicker(selected) {
@@ -161,21 +209,26 @@ function buildLengthPicker(selected) {
   }
 }
 
-function showRoomEntry(code) {
-  // For joiners with no nickname yet — show home but pre-fill the join path.
+function showRoomEntry(owner, slug) {
+  // For joiners with no username yet — show home but pre-fill the join path.
   mount("tpl-home");
-  $(".tagline").textContent = `Join the race in room ${code}.`;
-  $(".sub").textContent = "Pick a nickname to join.";
-  const input = $("#nicknameInput");
-  input.value = getNickname();
+  $(".tagline").textContent = `Join ${owner}'s Wordle Race room.`;
+  $(".sub").textContent = "Pick a username to join.";
+  wireProfileLink();
+  const input = $("#usernameInput");
+  input.value = getUsername();
   input.focus();
   const btn = $("#createBtn");
   btn.textContent = "Join room →";
   btn.addEventListener("click", () => {
-    const nickname = (input.value || "").trim().slice(0, 20);
-    if (!nickname) { input.focus(); return; }
-    setNickname(nickname);
-    showRoom(code);
+    const username = setUsername(input.value);
+    if (username.length < 3) {
+      input.focus();
+      toast("Pick a username — at least 3 letters", { error: true, duration: 1800 });
+      return;
+    }
+    importLocalStatsOnce(username);
+    showRoom(owner, slug);
   });
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") btn.click();
@@ -186,8 +239,10 @@ function showRoomEntry(code) {
 
 const game = {
   ws: null,
-  code: null,
-  myId: null,
+  owner: null,
+  slug: null,
+  path: null,
+  name: null,
   snapshot: null,
   pending: "",       // current guess being typed
   toastTimer: null,
@@ -205,9 +260,11 @@ const game = {
 const REVEAL_STAGGER_MS = 220;
 const REVEAL_FLIP_HALF_MS = 275; // matches the 0.55s tile-reveal keyframe halfway point
 
-function showRoom(code) {
-  game.code = code;
-  game.myId = getPlayerId();
+function showRoom(owner, slug) {
+  game.owner = owner;
+  game.slug = slug;
+  game.path = `${owner}/${slug}`;
+  game.name = slug.replace(/-/g, " ");
   game.snapshot = null;
   game.pending = "";
   game.hasShownEndStats = false;
@@ -216,16 +273,16 @@ function showRoom(code) {
   game.chatCollapsed = false;
   game.lastGuessCounts = new Map();
   mount("tpl-room");
-  $("#roomCode").textContent = code;
-  const inviteUrl = `${location.origin}/r/${code}`;
+  renderRoomHeader();
+  const inviteUrl = `${location.origin}/@${owner}/${slug}`;
   const hasNativeShare = typeof navigator.share === "function";
   const inviteLabel = $("#inviteLabel");
   const inviteBtn = $("#inviteBtn");
   if (inviteLabel) inviteLabel.textContent = hasNativeShare ? "Share" : "Copy link";
   inviteBtn.addEventListener("click", async () => {
     const shareData = {
-      title: "Wordle Race",
-      text: `Race me on Wordle — room ${code}`,
+      title: `Wordle Race — ${game.name || game.slug}`,
+      text: `Race me on Wordle in ${game.owner}'s room!`,
       url: inviteUrl,
     };
     if (hasNativeShare) {
@@ -255,6 +312,35 @@ function showRoom(code) {
   wireChat();
   buildKeyboard();
   connect();
+}
+
+// Render the room name + owner + a rename affordance. Control is shared (anyone
+// present can rename), matching the server's "kindness model".
+function renderRoomHeader() {
+  const nameEl = $("#roomName");
+  const ownerEl = $("#roomOwner");
+  if (nameEl) nameEl.textContent = game.name || game.slug;
+  if (ownerEl) {
+    ownerEl.textContent = `@${game.owner}`;
+    ownerEl.href = `/@${game.owner}`;
+    ownerEl.onclick = (e) => { e.preventDefault(); navigate(`/@${game.owner}`); };
+  }
+  const renameBtn = $("#renameBtn");
+  if (renameBtn) {
+    renameBtn.onclick = () => {
+      const next = prompt("Rename this room:", game.name || game.slug);
+      if (next == null) return;
+      const clean = next.replace(/[\x00-\x1f\x7f<>]/g, "").trim().slice(0, 40);
+      if (!clean) return;
+      send({ type: "rename", name: clean });
+    };
+  }
+}
+
+// SPA navigation: pushState + re-dispatch the router.
+function navigate(path) {
+  history.pushState(null, "", path);
+  route();
 }
 
 function wireChat() {
@@ -346,7 +432,7 @@ const HEARTBEAT_MS = 25_000;
 
 function connect() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const url = `${proto}//${location.host}/ws?code=${encodeURIComponent(game.code)}`;
+  const url = `${proto}//${location.host}/ws?room=${encodeURIComponent(game.path)}`;
   const ws = new WebSocket(url);
   game.ws = ws;
 
@@ -357,8 +443,7 @@ function connect() {
     setConnectionStatus("ok");
     send({
       type: "hello",
-      nickname: getNickname() || "Player",
-      playerId: game.myId,
+      username: getUsername(),
       wordLength: getPreferredLength(),
     });
     // Kick off heartbeat so the path stays warm.
@@ -424,8 +509,8 @@ function onServerMessage(msg) {
   if (msg.type === "snapshot") {
     const prev = game.snapshot;
     game.snapshot = msg.room;
-    const me = msg.room.players.find((p) => p.id === game.myId);
-    const prevMe = prev?.players.find((p) => p.id === game.myId);
+    const me = msg.room.players.find((p) => p.username === getUsername());
+    const prevMe = prev?.players.find((p) => p.username === getUsername());
     // Server accepted our guess → clear pending letters.
     if (me && prevMe && me.guesses.length > prevMe.guesses.length) {
       game.pending = "";
@@ -456,10 +541,16 @@ function onServerMessage(msg) {
 function render() {
   if (!game.snapshot) return;
   const snap = game.snapshot;
-  const me = snap.players.find((p) => p.id === game.myId);
+  const me = snap.players.find((p) => p.username === getUsername());
 
-  // Lobby controls
-  const isHost = snap.hostId === game.myId;
+  // Keep the header name in sync with server renames.
+  if (snap.name && snap.name !== game.name) {
+    game.name = snap.name;
+    const nameEl = $("#roomName");
+    if (nameEl) nameEl.textContent = game.name;
+  }
+
+  // Lobby controls. Control is shared — anyone present can start/rename/rematch.
   const lobby = $("#lobbyControls");
   const startBtn = $("#startBtn");
   const endControls = $("#endControls");
@@ -468,28 +559,24 @@ function render() {
   if (snap.phase === "lobby") {
     lobby.hidden = false;
     endControls.hidden = true;
-    syncLengthSelect(snap, isHost);
-    if (isHost) {
-      startBtn.hidden = false;
-      $("#lobbyHint").textContent = snap.players.length < 2
-        ? `Waiting for friends — share the link. (You can start solo too.)`
-        : `${snap.players.length} players in.`;
-    } else {
-      startBtn.hidden = true;
-      $("#lobbyHint").textContent = `Waiting for host to start a ${snap.wordLength}-letter round…`;
-    }
+    syncLengthSelect(snap);
+    startBtn.hidden = false;
+    $("#lobbyHint").textContent = snap.players.length < 2
+      ? `Waiting for friends — share the link. (You can start solo too.)`
+      : `${snap.players.length} players in.`;
   } else if (snap.phase === "playing") {
     lobby.hidden = true;
     endControls.hidden = true;
   } else if (snap.phase === "finished") {
     lobby.hidden = true;
     endControls.hidden = false;
-    rematchBtn.hidden = !isHost;
+    rematchBtn.hidden = false;
   }
 
   renderBoards(snap, me);
   renderKeyboard(me);
   renderChat(snap);
+  renderScoreboard(snap);
 
   // Show the keyboard only when a guess is actually possible — keeps the lobby
   // unambiguous (no dead keys to mash) and post-game state minimal.
@@ -532,7 +619,7 @@ function renderChatRow(entry) {
     row.className = "chat-row system";
     row.textContent = entry.text;
   } else {
-    const mine = entry.from && entry.from === currentNickname();
+    const mine = entry.from && entry.from === getUsername();
     row.className = "chat-row user" + (mine ? " mine" : "");
     const from = document.createElement("span");
     from.className = "from";
@@ -541,11 +628,6 @@ function renderChatRow(entry) {
     row.appendChild(document.createTextNode(entry.text));
   }
   return row;
-}
-
-function currentNickname() {
-  const me = game.snapshot?.players.find((p) => p.id === game.myId);
-  return me?.nickname ?? getNickname();
 }
 
 function scrollChatToBottom() {
@@ -572,15 +654,10 @@ function updateChatBadge() {
   }
 }
 
-function syncLengthSelect(snap, isHost) {
+function syncLengthSelect(snap) {
   const wrap = $("#lengthControl");
   const sel = $("#lengthSelect");
   if (!wrap || !sel) return;
-  if (!isHost) {
-    // Joiners just see the current length in the hint; no control.
-    wrap.hidden = true;
-    return;
-  }
   wrap.hidden = false;
   // Build options once.
   if (sel.options.length === 0) {
@@ -601,32 +678,63 @@ function syncLengthSelect(snap, isHost) {
   if (parseInt(sel.value, 10) !== snap.wordLength) sel.value = String(snap.wordLength);
 }
 
+// Per-room cumulative scoreboard (wins/played across rounds), sorted by wins desc.
+function renderScoreboard(snap) {
+  const root = $("#scoreboard");
+  if (!root) return;
+  const board = (snap.scoreboard || []).slice().sort((a, b) => b.wins - a.wins || b.played - a.played);
+  if (board.length === 0) {
+    root.hidden = true;
+    return;
+  }
+  root.hidden = false;
+  root.textContent = "";
+  const title = document.createElement("div");
+  title.className = "scoreboard-title";
+  title.textContent = "Scoreboard";
+  root.appendChild(title);
+  const me = getUsername();
+  for (const e of board) {
+    const row = document.createElement("div");
+    row.className = "score-row" + (e.username === me ? " mine" : "");
+    const name = document.createElement("span");
+    name.className = "score-name";
+    name.textContent = e.username + (e.username === me ? " (you)" : "");
+    const tally = document.createElement("span");
+    tally.className = "score-tally";
+    tally.textContent = `${e.wins}W · ${e.played}P`;
+    row.appendChild(name);
+    row.appendChild(tally);
+    root.appendChild(row);
+  }
+}
+
 function renderBoards(snap, me) {
   const root = $("#boards");
   const ordered = [
     ...(me ? [me] : []),
-    ...snap.players.filter((p) => p.id !== game.myId),
+    ...snap.players.filter((p) => p.username !== getUsername()),
   ];
   // While my board's tiles are mid-explosion, preserve the existing DOM so the
   // animations don't get nuked by a snapshot from another player's guess. Update
   // everyone else's boards as normal by removing only their nodes.
   if (game.exploding) {
     for (const board of root.querySelectorAll(".player-board")) {
-      if (board.dataset.playerId !== game.myId) board.remove();
+      if (board.dataset.player !== getUsername()) board.remove();
     }
   } else {
     root.textContent = "";
   }
   for (const p of ordered) {
-    if (game.exploding && p.id === game.myId) continue; // keep existing exploding board
+    if (game.exploding && p.username === getUsername()) continue; // keep existing exploding board
     const board = document.createElement("div");
-    board.className = "player-board" + (p.id === game.myId ? "" : " spectator");
-    board.dataset.playerId = p.id;
+    board.className = "player-board" + (p.username === getUsername() ? "" : " spectator");
+    board.dataset.player = p.username;
     const name = document.createElement("div");
     name.className = "player-name";
     const nameSpan = document.createElement("span");
-    if (p.id === game.myId) nameSpan.className = "me";
-    nameSpan.textContent = p.nickname + (p.id === game.myId ? " (you)" : "");
+    if (p.username === getUsername()) nameSpan.className = "me";
+    nameSpan.textContent = p.username + (p.username === getUsername() ? " (you)" : "");
     name.appendChild(nameSpan);
 
     if (p.status === "won") {
@@ -646,9 +754,9 @@ function renderBoards(snap, me) {
     board.style.setProperty("--cols", String(cols));
     board.style.setProperty("--rows", String(rows));
     grid.style.setProperty("--rows", String(rows));
-    const isMe = p.id === game.myId;
+    const isMe = p.username === getUsername();
     const pending = (isMe && snap.phase === "playing" && p.status === "playing") ? game.pending : "";
-    const prevCount = game.lastGuessCounts.get(p.id) ?? 0;
+    const prevCount = game.lastGuessCounts.get(p.username) ?? 0;
     const freshRowIdx = p.guesses.length > prevCount ? p.guesses.length - 1 : -1;
 
     for (let r = 0; r < rows; r++) {
@@ -682,7 +790,7 @@ function renderBoards(snap, me) {
     }
     board.appendChild(grid);
     root.appendChild(board);
-    game.lastGuessCounts.set(p.id, p.guesses.length);
+    game.lastGuessCounts.set(p.username, p.guesses.length);
   }
 }
 
@@ -763,7 +871,7 @@ function onPhysicalKey(e) {
   if (e.target instanceof HTMLInputElement) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (!game.snapshot || game.snapshot.phase !== "playing") return;
-  const me = game.snapshot.players.find((p) => p.id === game.myId);
+  const me = game.snapshot.players.find((p) => p.username === getUsername());
   if (!me || me.status !== "playing") return;
 
   if (e.key === "Enter") { submitGuess(); e.preventDefault(); }
@@ -791,7 +899,7 @@ function submitGuess() {
   }
   const s = getSettings();
   if (s.hardMode) {
-    const me = game.snapshot?.players.find((p) => p.id === game.myId);
+    const me = game.snapshot?.players.find((p) => p.username === getUsername());
     const violation = checkHardMode(game.pending, me?.guesses ?? []);
     if (violation) {
       flashShake();
@@ -829,7 +937,7 @@ function flashShake() {
   // Shake my current row.
   const myBoard = $$(".player-board")[0];
   if (!myBoard) return;
-  const me = game.snapshot?.players.find((p) => p.id === game.myId);
+  const me = game.snapshot?.players.find((p) => p.username === getUsername());
   if (!me) return;
   const rows = myBoard.querySelectorAll(".grid-row");
   const row = rows[me.guesses.length];
@@ -897,7 +1005,7 @@ function pickJoke(arr, winnerName) {
 }
 
 function handleGameOver(snap) {
-  const me = snap.players.find((p) => p.id === game.myId);
+  const me = snap.players.find((p) => p.username === getUsername());
   if (!me) return;
   const won = me.status === "won";
   const guessCount = me.guesses.length;
@@ -919,10 +1027,10 @@ function handleGameOver(snap) {
 
 function triggerLoseSequence(snap, me) {
   game.exploding = true;
-  const winner = snap.players.find((p) => p.id === snap.winnerId);
-  const beatenBySomeone = winner && winner.id !== game.myId;
+  const winner = snap.winner;
+  const beatenBySomeone = winner && winner !== getUsername();
   const joke = beatenBySomeone
-    ? pickJoke(RACE_LOSE_JOKES, winner.nickname)
+    ? pickJoke(RACE_LOSE_JOKES, winner)
     : pickJoke(SOLO_LOSE_JOKES);
 
   // 1. Screen flash.
@@ -971,7 +1079,7 @@ function triggerLoseSequence(snap, me) {
   //    a clean board behind the modal, then show the joke.
   setTimeout(() => {
     game.exploding = false;
-    if (game.snapshot) renderBoards(game.snapshot, game.snapshot.players.find((p) => p.id === game.myId));
+    if (game.snapshot) renderBoards(game.snapshot, game.snapshot.players.find((p) => p.username === getUsername()));
     openStats({
       snap: game.snapshot ?? snap,
       me,
@@ -1030,7 +1138,7 @@ function openStats(opts = {}) {
   eg.className = "endgame";
   if (opts.justFinished && opts.snap) {
     const snap = opts.snap;
-    const winner = snap.players.find((p) => p.id === snap.winnerId);
+    const winner = snap.winner; // winner username (string) or null
     if (opts.joke) {
       // Loss path: roast joke prominent, then a quieter "The word was X" reveal.
       eg.classList.add("joke");
@@ -1048,10 +1156,10 @@ function openStats(opts = {}) {
         reveal.appendChild(w);
         eg.appendChild(reveal);
       }
-    } else if (opts.won && winner && winner.id === game.myId) {
+    } else if (opts.won && winner && winner === getUsername()) {
       eg.appendChild(document.createTextNode(`🎉 You got it in ${opts.lastGuessCount}!`));
     } else if (winner) {
-      eg.appendChild(document.createTextNode(`${winner.nickname} got it. The word was`));
+      eg.appendChild(document.createTextNode(`${winner} got it. The word was`));
       if (snap.word) {
         eg.appendChild(document.createTextNode(" "));
         const w = document.createElement("span");
@@ -1076,7 +1184,7 @@ function openStats(opts = {}) {
 
   const playAgain = $("#modalPlayAgain");
   const snap = game.snapshot;
-  if (snap && snap.phase === "finished" && snap.hostId === game.myId) {
+  if (snap && snap.phase === "finished") {
     playAgain.hidden = false;
     playAgain.onclick = () => {
       game.hasShownEndStats = false;
@@ -1107,7 +1215,7 @@ function shareResult(opts) {
   const snap = game.snapshot;
   let text = "";
   if (snap && snap.phase === "finished") {
-    const me = snap.players.find((p) => p.id === game.myId);
+    const me = snap.players.find((p) => p.username === getUsername());
     const guesses = me ? me.guesses.length : 0;
     const result = me?.status === "won" ? `${guesses}/6` : "X/6";
     text = `Wordle Race ${result}\n\n`;
@@ -1138,7 +1246,7 @@ document.addEventListener("DOMContentLoaded", () => {
   applySettings(getSettings());
   $("#statsBtn").addEventListener("click", () => openStats());
   $("#settingsBtn").addEventListener("click", openSettings);
-  bootstrap();
+  route();
 });
 
 function openSettings() {
@@ -1190,17 +1298,40 @@ function closeSettings() {
   modal.removeEventListener("click", onSettingsModalClick);
 }
 
-function bootstrap() {
-  const code = getRoomCodeFromPath();
-  if (code) {
-    if (getNickname()) {
-      showRoom(code);
+// Tear down any live room connection when leaving a room view.
+function leaveRoom() {
+  stopHeartbeat();
+  if (game.ws) {
+    try { game.ws.onclose = null; game.ws.close(); } catch {}
+    game.ws = null;
+  }
+}
+
+function showProfile(username) {
+  leaveRoom();
+  const topBtn = $("#chatTopBtn");
+  if (topBtn) topBtn.hidden = true;
+  document.title = `@${username} — Wordle Race`;
+  mount("tpl-profile");
+  const backBtn = $("#profileBack");
+  if (backBtn) backBtn.onclick = (e) => { e.preventDefault(); navigate("/"); };
+  renderProfile(username, $("#profileMount"));
+}
+
+function route() {
+  const r = parseRoute();
+  if (r.kind === "room") {
+    if (getUsername()) {
+      showRoom(r.owner, r.slug);
     } else {
-      showRoomEntry(code);
+      showRoomEntry(r.owner, r.slug);
     }
+  } else if (r.kind === "profile") {
+    showProfile(r.username);
   } else {
+    leaveRoom();
     showHome();
   }
 }
 
-window.addEventListener("popstate", bootstrap);
+window.addEventListener("popstate", route);
