@@ -1,0 +1,18 @@
+# Wordle Race
+
+> Race your friends on the same Wordle. No password — pick a username, get a public profile, create a room, share the link, and keep score across games.
+
+## How it works
+- Pick a username. You're recognized anywhere just by typing it again — no password, no signup.
+- Create a room at `/@<username>/<room-name>` and share the link to invite friends.
+- Everyone races the same secret word; first to solve it wins.
+- Each room keeps a running scoreboard across rounds, and every player has a public profile of lifetime stats and past games.
+
+## Key URLs
+- Profile + lifetime stats: `/@<username>` (e.g. `/@yan`)
+- Game room: `/@<username>/<room-name>` (e.g. `/@yan/friday-night`)
+- Profile data (machine-readable JSON): `/api/user/<username>`
+
+## Site
+- Home: https://wordul.com
+- Sitemap: https://wordul.com/sitemap.xml

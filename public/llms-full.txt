@@ -1,0 +1,33 @@
+# Wordle Race — full reference
+
+> Race your friends on the same Wordle. No password — pick a username, get a public profile, create a room, share the link, and keep score across games.
+
+Wordle Race is a real-time multiplayer word game. Players guess the same hidden word at the same time; the first to solve it wins the round. It is designed for casual play with friends and family — no accounts, no passwords.
+
+## Identity
+- A **username** is your identity. Type it on any device, anywhere, and you are that player — there is no password (a deliberate, low-friction "kindness" trust model for a casual game).
+- Your username is also your public profile URL: `/@<username>`.
+
+## Rooms
+- Anyone can create a room at `/@<username>/<room-name>`. The room belongs to that username, but control is shared — anyone in the room can start a round, change the word length, rename the room, or rematch.
+- Rooms are persistent: come back next week and the room, its chat, and its scoreboard are still there.
+- Share the room link to invite friends; opening an invite link leads a new player straight into picking a username and joining.
+
+## Two scoreboards
+- **Per-room scoreboard:** cumulative wins and games played for everyone in that room, across every round.
+- **Per-player profile:** lifetime stats — games played, wins, win rate, current streak, best streak, and a guess distribution — plus a history of recent games and the rooms you own.
+
+## Key URLs
+- Profile + lifetime stats: `/@<username>` — e.g. `/@yan`
+- Game room: `/@<username>/<room-name>` — e.g. `/@yan/friday-night`
+- Profile data (machine-readable JSON): `/api/user/<username>` — returns `{ username, createdAt, stats, games, ownedRooms }`
+- Sitemap: `/sitemap.xml`
+
+## How to play a round
+1. Open a room link (or create one).
+2. Pick a username to join.
+3. Everyone guesses the same word; green = right letter and spot, yellow = right letter wrong spot, gray = not in the word.
+4. First to all-green wins; the room scoreboard and each player's profile update automatically.
+
+## Site
+- Home: https://wordul.com
