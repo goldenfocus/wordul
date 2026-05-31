@@ -1,6 +1,6 @@
 // src/records.ts — pure: turn a finished room into one record per player.
 
-export type GameOutcome = "won" | "lost";
+import type { GameOutcome } from "./stats.ts";
 export type Opponent = { username: string; result: GameOutcome; guesses: number };
 
 export type GameRecord = {

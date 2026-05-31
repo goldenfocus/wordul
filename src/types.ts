@@ -1,15 +1,29 @@
 import type { Color } from "./color.ts";
+import type { UserStats } from "./stats.ts";
+import type { GameRecord } from "./records.ts";
+import type { RoomScore } from "./scoreboard.ts";
+
+export type OwnedRoom = { slug: string; name: string; lastPlayedAt: number };
+
+export type UserProfile = {
+  username: string;
+  createdAt: number;
+  stats: UserStats;
+  games: GameRecord[];     // most-recent-first, capped
+  ownedRooms: OwnedRoom[];
+};
 
 export interface Env {
   ASSETS: Fetcher;
   ROOM: DurableObjectNamespace;
+  USER: DurableObjectNamespace;
+  DIRECTORY: KVNamespace;
 }
 
 export type GuessRow = { word: string; mask: Color[] };
 
 export type PlayerState = {
-  id: string;
-  nickname: string;
+  username: string;
   connected: boolean;
   guesses: GuessRow[];
   status: "playing" | "won" | "lost";
@@ -22,27 +36,30 @@ export type ChatEntry =
   | { kind: "system"; text: string; t: number };
 
 export type RoomSnapshot = {
-  code: string;
+  path: string;            // "<owner>/<slug>"
+  owner: string;           // owner username
+  name: string;            // display name (renameable)
   phase: RoomPhase;
-  hostId: string;
   players: PlayerState[];
-  word: string | null;   // null while playing, revealed when finished
-  winnerId: string | null;
+  word: string | null;
+  winner: string | null;   // winner username
   startedAt: number | null;
   finishedAt: number | null;
   round: number;
   chat: ChatEntry[];
-  wordLength: number;    // letters per guess (4-12)
-  maxGuesses: number;    // rows per board, derived from wordLength
+  wordLength: number;      // letters per guess (4-12)
+  maxGuesses: number;      // rows per board, derived from wordLength
+  scoreboard: RoomScore[];
 };
 
 export type ClientMessage =
-  | { type: "hello"; nickname: string; playerId: string; wordLength?: number }
+  | { type: "hello"; username: string; wordLength?: number }
   | { type: "start" }
   | { type: "guess"; word: string }
   | { type: "rematch" }
   | { type: "chat"; text: string }
   | { type: "set_length"; wordLength: number }
+  | { type: "rename"; name: string }
   | { type: "ping" };
 
 export type ServerMessage =
