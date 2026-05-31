@@ -112,13 +112,13 @@ async function injectMeta(
   profileMatch: RegExpMatchArray | null,
   roomMatch: RegExpMatchArray | null,
 ): Promise<Response> {
-  let title = "Wordle Race";
+  let title = "Wordul";
   let description = "Race your friends on the same Wordle.";
 
   if (roomMatch) {
     const [, owner, slug] = roomMatch;
-    title = `${slug.replace(/-/g, " ")} — a Wordle Race room by ${owner}`;
-    description = `Join ${owner}'s Wordle Race room and race on the same word.`;
+    title = `${slug.replace(/-/g, " ")} — a Wordul room by ${owner}`;
+    description = `Join ${owner}'s Wordul room and race on the same word.`;
   } else if (profileMatch) {
     const [, name] = profileMatch;
     // Best-effort: a DO hiccup or odd payload must degrade to default meta, not 500 the page.
@@ -128,15 +128,15 @@ async function injectMeta(
         const p = (await res.json()) as { stats?: { wins?: number; bestStreak?: number } };
         const wins = p.stats?.wins ?? 0;
         const streak = p.stats?.bestStreak ?? 0;
-        title = `${name} on Wordle Race — ${wins} wins, best streak ${streak}`;
-        description = `${name}'s Wordle Race profile: ${wins} wins, best streak ${streak}.`;
+        title = `${name} on Wordul — ${wins} wins, best streak ${streak}`;
+        description = `${name}'s Wordul profile: ${wins} wins, best streak ${streak}.`;
       } else {
-        title = `${name} on Wordle Race`;
-        description = `${name}'s Wordle Race profile.`;
+        title = `${name} on Wordul`;
+        description = `${name}'s Wordul profile.`;
       }
     } catch {
-      title = `${name} on Wordle Race`;
-      description = `${name}'s Wordle Race profile.`;
+      title = `${name} on Wordul`;
+      description = `${name}'s Wordul profile.`;
     }
   }
 

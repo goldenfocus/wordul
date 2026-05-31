@@ -1,8 +1,8 @@
-# Wordle Race — full reference
+# Wordul — full reference
 
 > Race your friends on the same Wordle. No password — pick a username, get a public profile, create a room, share the link, and keep score across games.
 
-Wordle Race is a real-time multiplayer word game. Players guess the same hidden word at the same time; the first to solve it wins the round. It is designed for casual play with friends and family — no accounts, no passwords.
+Wordul is a real-time multiplayer word game. Players guess the same hidden word at the same time; the first to solve it wins the round. It is designed for casual play with friends and family — no accounts, no passwords.
 
 ## Identity
 - A **username** is your identity. Type it on any device, anywhere, and you are that player — there is no password (a deliberate, low-friction "kindness" trust model for a casual game).

@@ -1,4 +1,4 @@
-# Wordle Race
+# Wordul
 
 > Race your friends on the same Wordle. No password — pick a username, get a public profile, create a room, share the link, and keep score across games.
 
