@@ -47,7 +47,8 @@ function applySettings(s) {
 // A username (no password) is the player's identity everywhere. Normalized to
 // [a-z0-9_-], min 3, max 20 — matching the server's onHello + worker regexes.
 function normalizeUsername(u) {
-  return (u || "").toLowerCase().replace(/[^a-z0-9_-]/g, "").replace(/^[-_]+|[-_]+$/g, "").slice(0, 20);
+  // Mirrors src/identity.ts: re-trim after the slice in case clipping exposes a trailing separator.
+  return (u || "").toLowerCase().replace(/[^a-z0-9_-]/g, "").replace(/^[-_]+|[-_]+$/g, "").slice(0, 20).replace(/^[-_]+|[-_]+$/g, "");
 }
 function getUsername() {
   return localStorage.getItem(LS.username) || "";
@@ -261,6 +262,7 @@ const REVEAL_STAGGER_MS = 220;
 const REVEAL_FLIP_HALF_MS = 275; // matches the 0.55s tile-reveal keyframe halfway point
 
 function showRoom(owner, slug) {
+  leaveRoom(); // tear down any prior room's socket so room->room nav can't leave a zombie WS
   game.owner = owner;
   game.slug = slug;
   game.path = `${owner}/${slug}`;
@@ -543,11 +545,12 @@ function render() {
   const snap = game.snapshot;
   const me = snap.players.find((p) => p.username === getUsername());
 
-  // Keep the header name in sync with server renames.
+  // Keep the header name (and tab title) in sync with server renames.
   if (snap.name && snap.name !== game.name) {
     game.name = snap.name;
     const nameEl = $("#roomName");
     if (nameEl) nameEl.textContent = game.name;
+    document.title = `${game.name} — Wordle Race`;
   }
 
   // Lobby controls. Control is shared — anyone present can start/rename/rematch.

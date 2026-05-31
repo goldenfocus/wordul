@@ -53,7 +53,7 @@ export async function renderProfile(username, mountEl) {
       <div class="pstat"><span class="pstat-num">${winRate}%</span><span class="pstat-label">Win rate</span></div>
       <div class="pstat"><span class="pstat-num">🔥 ${curStreak}</span><span class="pstat-label">Streak (best ${bestStreak})</span></div>
     </div>
-    <h2 class="profile-h2">Your rooms</h2>
+    <h2 class="profile-h2">Rooms</h2>
     <ul class="profile-list">${rooms || '<li class="muted">No rooms yet</li>'}</ul>
     <h2 class="profile-h2">Recent games</h2>
     <ul class="profile-list">${recent || '<li class="muted">No games yet</li>'}</ul>`;
