@@ -151,9 +151,9 @@
     <div id="hacklog" class="hacklog" hidden></div>
 
     <p id="powerHints" class="power-hints" hidden></p>
-    <div id="powerups" class="powerups" hidden>
-      <button id="revealBtn" class="powerup" type="button">🎰 Reveal a letter <span class="cost">−4000</span></button>
-      <button id="vowelBtn" class="powerup" type="button">🔍 Vowel count <span class="cost">−200</span></button>
+    <div class="magic-bar">
+      <button id="magicBtn" class="magic-icon" type="button" title="Power-ups" aria-label="Power-ups" aria-haspopup="true" hidden>✨</button>
+      <div id="magicPopover" class="magic-popover" role="menu" aria-label="Power-ups" hidden></div>
     </div>
 
     <div id="keyboard" class="keyboard" aria-label="On-screen keyboard"></div>
@@ -259,17 +259,6 @@
       </div>
       <span class="switch">
         <input type="checkbox" id="setReducedMotion" />
-        <span class="switch-slider" aria-hidden="true"></span>
-      </span>
-    </label>
-
-    <label class="setting-row" for="setEzMode">
-      <div class="setting-text">
-        <div class="setting-name">EZ Mode</div>
-        <div class="setting-desc">Spend gold on power-ups: reveal a letter, count the vowels</div>
-      </div>
-      <span class="switch">
-        <input type="checkbox" id="setEzMode" />
         <span class="switch-slider" aria-hidden="true"></span>
       </span>
     </label>

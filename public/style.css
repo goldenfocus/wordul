@@ -907,19 +907,34 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 /* Dead (absent) letters fade back so the live board pops. Colored keys stay vivid. */
 .key.gray { background: var(--gray); color: white; opacity: 0.45; }
 
-/* EZ-mode power-ups (shown above the keyboard when EZ mode is on) */
-.powerups { display: flex; gap: 8px; width: 100%; max-width: 520px; margin: 0 auto; padding: 0 8px 6px; }
-.powerup {
-  flex: 1; min-height: 44px; border: 1px solid var(--border); border-radius: 8px;
-  background: var(--bg-card, var(--key-bg)); color: var(--fg);
-  font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  transition: border-color 0.15s, opacity 0.15s, transform 0.05s;
+/* ✨ Power-ups: one subtle magic icon, hidden until you can afford the cheapest
+   power-up. Tapping opens a popover of currently-affordable power-ups — icons only,
+   no price (you learn the cost by watching the balance dip). */
+.magic-bar { position: relative; display: flex; justify-content: center; width: 100%; max-width: 520px; margin: 0 auto; padding: 0 8px 6px; }
+.magic-icon {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--bg-card, var(--key-bg));
+  font-size: 20px; line-height: 1; cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s, transform 0.08s, box-shadow 0.15s;
 }
-.powerup:hover:not(:disabled) { border-color: var(--accent); }
-.powerup:active:not(:disabled) { transform: scale(0.97); }
-.powerup:disabled { opacity: 0.45; cursor: not-allowed; }
-.powerup .cost { color: var(--accent); font-weight: 700; }
+.magic-icon:hover { border-color: var(--accent); }
+.magic-icon:active { transform: scale(0.92); }
+.magic-popover {
+  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px; padding: 8px;
+  background: var(--bg-card, var(--key-bg)); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 30;
+}
+.magic-option {
+  width: 48px; height: 48px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg, var(--key-bg)); color: var(--fg);
+  font-size: 22px; line-height: 1; cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s, transform 0.05s;
+}
+.magic-option:hover { border-color: var(--accent); }
+.magic-option:active { transform: scale(0.94); }
 .power-hints {
   width: 100%; max-width: 520px; margin: 2px auto; text-align: center;
   color: var(--accent); font-size: 13px; font-weight: 600;

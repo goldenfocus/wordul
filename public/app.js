@@ -7,6 +7,7 @@ import { speakLine } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
 import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence } from "/gold.js";
 import { createHacklog } from "/hacklog.js";
+import { renderPowerups, resetPowerHints, handlePowerupMessage } from "/powerups.js";
 
 // Apply the active edition at module load (before motion consts read WordulMotion).
 applyEdition(getActiveEditionId());
@@ -35,7 +36,6 @@ const DEFAULT_SETTINGS = {
   hardMode: false,
   colorBlind: false,
   reducedMotion: false,
-  ezMode: false,
   keyboardLayout: "qwerty",
 };
 function getSettings() {
@@ -52,7 +52,6 @@ function saveSettings(s) {
 function applySettings(s) {
   document.body.classList.toggle("cb", !!s.colorBlind);
   document.body.classList.toggle("reduced-motion", !!s.reducedMotion);
-  document.body.classList.toggle("ez", !!s.ezMode);
 }
 
 // --- identity ---
@@ -489,6 +488,19 @@ const game = {
   // wasted this game. The first reuse costs the base penalty; each repeat escalates.
   deadLetterReuse: new Map(),
 };
+// Dependency bundle handed to the power-ups module (it must not import app.js — the
+// <script type="module"> entry — or the graph would cycle). All app-owned helpers it
+// reaches for, in one place. Function refs resolve lazily (hoisted declarations).
+const powerupsCtx = {
+  game,
+  send: (msg) => send(msg),
+  render: () => render(),
+  toast: (text, opts) => toast(text, opts),
+  renderGoldHud,
+  getSettings,
+  getGold,
+  spendGold,
+};
 // The hacker-log terminal: lazily mounted into #hacklog on first payout, reused
 // across guesses within a room, cleared per round. reducedMotion is read live.
 let hacklog = null;
@@ -496,7 +508,7 @@ function getHacklog() {
   const el = $("#hacklog");
   if (!el) return null;
   if (!hacklog) hacklog = createHacklog(el, { reducedMotion: getSettings().reducedMotion });
-  el.hidden = false; // reveal on every payout (resetPowerHints re-hides between rounds)
+  el.hidden = false; // reveal on every payout (resetRound re-hides between rounds)
   return hacklog;
 }
 // The localStorage key is per-game (slug + round) so distinct games never clobber
@@ -839,7 +851,7 @@ function onServerMessage(msg) {
     // EZ-mode hints belong to a single round — wipe them on any new round (start,
     // rematch, or reconnecting into a different round).
     if (msg.room.phase === "playing" && msg.room.round !== game.ezRound) {
-      resetPowerHints(msg.room.round);
+      resetRound(msg.room.round);
     }
     // "Start playing" one-shot: kick off the solo game as soon as we're in the
     // lobby. Cleared immediately so a reconnect (which replays a snapshot) can't
@@ -987,25 +999,8 @@ function onServerMessage(msg) {
       `rejected  ${rejected || reason}  −${GOLD.invalidPenalty}`,
       { tone: "loss" },
     );
-  } else if (msg.type === "revealed_letter") {
-    game.pendingReveal = false;
-    // Charge only when this is genuinely new info (immune to duplicate responses).
-    if (!game.revealed.some((r) => r.index === msg.index)) {
-      game.revealed.push({ index: msg.index, letter: msg.letter });
-      spendGold(GOLD.revealCost);
-      toast(`Position ${msg.index + 1} is ${msg.letter}`, { duration: 2600 });
-      renderGoldHud();
-    }
-    if (game.snapshot) render();
-  } else if (msg.type === "vowels") {
-    game.pendingVowel = false;
-    if (game.vowels == null) {
-      game.vowels = msg.count;
-      spendGold(GOLD.vowelCost);
-      toast(`${msg.count} vowel${msg.count === 1 ? "" : "s"} in the word`, { duration: 2600 });
-      renderGoldHud();
-    }
-    if (game.snapshot) render();
+  } else if (msg.type === "revealed_letter" || msg.type === "vowels") {
+    handlePowerupMessage(powerupsCtx, msg);
   } else if (msg.type === "error") {
     toast(msg.message || "Error", { error: true });
   }
@@ -1072,7 +1067,7 @@ function render() {
   renderKeyboard(me);
   renderChat(snap);
   renderScoreboard(snap);
-  renderPowerups(snap, me);
+  renderPowerups(powerupsCtx, snap, me);
 
   // Show the keyboard only when a guess is actually possible — keeps the lobby
   // unambiguous (no dead keys to mash) and post-game state minimal.
@@ -1081,15 +1076,13 @@ function render() {
   if (kb) kb.hidden = !canType;
 }
 
-// --- EZ-mode power-ups ---
+// --- Per-round reset ---
 
-// Reset accumulated hints when a fresh round starts.
-function resetPowerHints(round) {
-  game.ezRound = round;
-  game.revealed = [];
-  game.vowels = null;
-  game.pendingReveal = false;
-  game.pendingVowel = false;
+// A fresh round: clear the power-up hints (owned by powerups.js) AND the gold-economy
+// / clearer-wins per-round state (owned here). Both halves reset together on the same
+// new-round snapshot hook.
+function resetRound(round) {
+  resetPowerHints(game, round); // ezRound, revealed, vowels, pending* (power-up state)
   game.goldThisRound = 0; // per-round earnings, shown as your score on the end screen
   // Clearer-wins: a fresh round starts an empty replay + a cleared hacker-log.
   game.replay = [];
@@ -1100,56 +1093,6 @@ function resetPowerHints(round) {
     hacklog.clear();
     const el = $("#hacklog");
     if (el) el.hidden = true;
-  }
-}
-
-function renderPowerHints() {
-  const el = $("#powerHints");
-  if (!el) return;
-  const parts = game.revealed
-    .slice()
-    .sort((a, b) => a.index - b.index)
-    .map((r) => `pos ${r.index + 1} = ${r.letter}`);
-  if (game.vowels != null) parts.push(`${game.vowels} vowel${game.vowels === 1 ? "" : "s"}`);
-  el.textContent = parts.join("  ·  ");
-  el.hidden = parts.length === 0;
-}
-
-let powerupsWired = false;
-function renderPowerups(snap, me) {
-  const box = $("#powerups");
-  if (!box) return;
-  const ezOn = !!getSettings().ezMode;
-  const canPlay = ezOn && snap.phase === "playing" && me && me.status === "playing";
-  box.hidden = !canPlay;
-  if (ezOn) renderGoldHud();
-  if (!canPlay) {
-    const h = $("#powerHints");
-    if (h) h.hidden = true;
-  } else {
-    const reveal = $("#revealBtn");
-    const vowel = $("#vowelBtn");
-    const gold = getGold();
-    const allRevealed = game.revealed.length >= snap.wordLength;
-    if (reveal) reveal.disabled = game.pendingReveal || gold < GOLD.revealCost || allRevealed;
-    if (vowel) vowel.disabled = game.pendingVowel || gold < GOLD.vowelCost || game.vowels != null;
-    if (!powerupsWired) {
-      powerupsWired = true;
-      reveal?.addEventListener("click", () => {
-        if (game.pendingReveal || getGold() < GOLD.revealCost) return;
-        game.pendingReveal = true; reveal.disabled = true;
-        // Send what we already know so the server reveals a NEW letter each buy.
-        send({ type: "reveal_letter", known: game.revealed.map((r) => r.index) });
-        // Safety: if nothing new is left the server is silent — re-enable shortly.
-        setTimeout(() => { if (game.pendingReveal) { game.pendingReveal = false; if (game.snapshot) render(); } }, 2000);
-      });
-      vowel?.addEventListener("click", () => {
-        if (game.pendingVowel || getGold() < GOLD.vowelCost || game.vowels != null) return;
-        game.pendingVowel = true; vowel.disabled = true;
-        send({ type: "vowel_count" });
-      });
-    }
-    renderPowerHints();
   }
 }
 
@@ -2213,11 +2156,9 @@ function openSettings() {
   const hm = $("#setHardMode");
   const cb = $("#setColorBlind");
   const rm = $("#setReducedMotion");
-  const ez = $("#setEzMode");
   if (hm) hm.checked = s.hardMode;
   if (cb) cb.checked = s.colorBlind;
   if (rm) rm.checked = s.reducedMotion;
-  if (ez) ez.checked = s.ezMode;
 
   // Wire toggles every open (idempotent — replace old listeners by cloning).
   const wire = (el, key) => {
@@ -2234,7 +2175,6 @@ function openSettings() {
   wire(hm, "hardMode");
   wire(cb, "colorBlind");
   wire(rm, "reducedMotion");
-  wire(ez, "ezMode");
 
   // Theme/edition picker. Picking applies the edition live; re-apply settings so
   // colorblind layers on top, and refresh the board to pick up new tile colors.
