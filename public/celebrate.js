@@ -15,3 +15,21 @@ export function newGreensInLast(guesses) {
   }
   return count;
 }
+
+// Count positions that turned yellow in the LATEST guess but were not yellow in any
+// earlier guess at that position — the "new yellow" discoveries worth paying gold for.
+export function newYellowsInLast(guesses) {
+  if (!guesses || guesses.length === 0) return 0;
+  const last = guesses[guesses.length - 1];
+  if (!last || !last.mask) return 0;
+  const wasYellow = new Set();
+  for (let g = 0; g < guesses.length - 1; g++) {
+    const mask = guesses[g].mask || [];
+    for (let i = 0; i < mask.length; i++) if (mask[i] === "yellow") wasYellow.add(i);
+  }
+  let count = 0;
+  for (let i = 0; i < last.mask.length; i++) {
+    if (last.mask[i] === "yellow" && !wasYellow.has(i)) count++;
+  }
+  return count;
+}

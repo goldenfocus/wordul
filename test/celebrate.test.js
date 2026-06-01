@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { newGreensInLast } from "/celebrate.js";
+import { newGreensInLast, newYellowsInLast } from "/celebrate.js";
 
 const g = (word, mask) => ({ word, mask });
 const G = "green", Y = "yellow", X = "gray";
@@ -28,5 +28,25 @@ describe("newGreensInLast", () => {
   });
   it("ignores yellows", () => {
     expect(newGreensInLast([g("CRANE", [Y, Y, X, X, Y])])).toBe(0);
+  });
+});
+
+describe("newYellowsInLast", () => {
+  it("returns 0 for no guesses", () => {
+    expect(newYellowsInLast([])).toBe(0);
+    expect(newYellowsInLast(undefined)).toBe(0);
+  });
+  it("counts yellows in the only guess", () => {
+    expect(newYellowsInLast([g("CRANE", [Y, X, Y, X, X])])).toBe(2);
+  });
+  it("only counts yellows that are NEW per position vs prior guesses", () => {
+    const guesses = [
+      g("CRANE", [Y, X, X, X, X]),   // col 0 yellow
+      g("COVEN", [Y, X, Y, X, X]),   // col 0 already yellow, col 2 is new
+    ];
+    expect(newYellowsInLast(guesses)).toBe(1);
+  });
+  it("ignores greens", () => {
+    expect(newYellowsInLast([g("CRANE", [G, G, X, X, X])])).toBe(0);
   });
 });

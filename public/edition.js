@@ -2,7 +2,7 @@
 import { EDITIONS, getEdition } from "/editions/index.js";
 
 const LS = { edition: "wordul.edition", gold: "wordul.gold", muted: "wordul.muted" };
-const DEFAULT_GOLD = 50;
+const DEFAULT_GOLD = 0; // you start broke and earn your way up
 
 export function getGold() {
   const n = parseInt(localStorage.getItem(LS.gold) ?? "", 10);
@@ -14,16 +14,14 @@ export function setGold(n) {
   localStorage.setItem(LS.gold, String(v));
   return v;
 }
-export function earnGold(guessCount) {
-  const payout = Math.max(10, 70 - guessCount * 10);
-  setGold(getGold() + payout);
-  return payout;
-}
 export function spendGold(cost) {
   const g = getGold();
   if (g < cost) return false;
   setGold(g - cost);
   return true;
+}
+export function addGold(delta) {
+  return setGold(getGold() + delta);
 }
 
 let activeId = "default";

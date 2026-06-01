@@ -2,9 +2,9 @@
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
-import { applyEdition, getActiveEditionId, getGold, earnGold, spendGold, companionReact, renderEditionPicker } from "/edition.js";
+import { applyEdition, getActiveEditionId, getGold, addGold, spendGold, companionReact, renderEditionPicker } from "/edition.js";
 import { speakLine } from "/voice.js";
-import { newGreensInLast } from "/celebrate.js";
+import { newGreensInLast, newYellowsInLast } from "/celebrate.js";
 
 // Apply the active edition at module load (before motion consts read WordulMotion).
 applyEdition(getActiveEditionId());
@@ -586,6 +586,69 @@ function renderGoldHud() {
   hud.textContent = `◆ ${getGold()}`;
 }
 
+// --- Gold economy: earn on progress, with combo multipliers, raining from the sky. ---
+const GOLD = {
+  green: 25,             // each newly-revealed green
+  yellow: 8,             // each newly-revealed yellow
+  solve: 100,            // flat solve bonus
+  speedPerGuessLeft: 60, // × unused guesses — solve fast, earn more
+  revealCost: 1000,      // a letter is a splurge (gold is precious)
+  vowelCost: 150,        // a cheap, frequent nudge
+};
+
+// Multiple discoveries in ONE guess pay a combo bonus: 2→1.5×, 3→2×, 4→2.5×, 5→3×.
+function comboMultiplier(discoveries) {
+  return discoveries >= 2 ? 1 + (discoveries - 1) * 0.5 : 1;
+}
+
+// Add gold and play the "raining from the sky" payout: balance counts up + coins fall.
+function awardGold(delta) {
+  if (!delta) return;
+  const before = getGold();
+  addGold(delta);
+  game.goldThisRound = (game.goldThisRound || 0) + delta;
+  let hud = document.getElementById("goldHud");
+  if (!hud) { renderGoldHud(); hud = document.getElementById("goldHud"); }
+  if (!hud) return;
+  const after = getGold();
+  if (!getSettings().reducedMotion) spawnGoldCoins(Math.min(28, Math.max(6, Math.round(delta / 18))));
+  animateCount(hud, before, after);
+  hud.classList.remove("gold-bump"); void hud.offsetWidth; hud.classList.add("gold-bump");
+}
+
+// A satisfying combo flourish: ascending arpeggio + a "✦ N× COMBO" toast.
+function celebrateCombo(discoveries, mult) {
+  playChime([[523, 0], [659, 0.08], [784, 0.16], [1047, 0.26]]);
+  toast(`✦ ${mult}× COMBO · ${discoveries} in one shot`, { duration: 1600 });
+}
+
+// Tween the balance number old→new with an easeOutCubic so it visibly climbs.
+function animateCount(el, from, to) {
+  const dur = 650, start = performance.now();
+  function step(now) {
+    const t = Math.min(1, (now - start) / dur);
+    const v = Math.round(from + (to - from) * (1 - Math.pow(1 - t, 3)));
+    el.textContent = `◆ ${v}`;
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// Gold coins raining from the top of the screen.
+function spawnGoldCoins(n) {
+  for (let i = 0; i < n; i++) {
+    const c = document.createElement("div");
+    c.className = "gold-coin";
+    c.textContent = "◆";
+    c.style.left = `${8 + Math.random() * 84}vw`;
+    c.style.setProperty("--gc-x", `${(Math.random() - 0.5) * 120}px`);
+    c.style.setProperty("--gc-delay", `${Math.random() * 220}ms`);
+    c.style.setProperty("--gc-dur", `${900 + Math.random() * 700}ms`);
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 1900);
+  }
+}
+
 // Surface the active edition's companion line for an event, reusing the toast.
 function showCompanion(event, ctx) {
   const { text, raw, speak } = companionReact(event, ctx);
@@ -815,11 +878,25 @@ function onServerMessage(msg) {
       // A valid guess landed. If it didn't end the game, the companion reacts —
       // and in Yang's edition, new greens get a scaled celebration instead.
       if (me.status === "playing") {
-        const newGreens = getActiveEditionId() === "yang" ? newGreensInLast(me.guesses) : 0;
-        if (newGreens >= 1) {
-          const flipDoneMs = (me.guesses[me.guesses.length - 1].word.length) * REVEAL_STAGGER_MS + REVEAL_FLIP_HALF_MS;
-          setTimeout(() => celebrateGreens(newGreens), flipDoneMs);
-        } else {
+        // Gold flows on progress for EVERY edition: new greens + yellows pay out, with
+        // a combo multiplier for multiple hits in one shot — synced to the tile flip so
+        // the coins rain exactly as the colors land.
+        const ng = newGreensInLast(me.guesses);
+        const ny = newYellowsInLast(me.guesses);
+        const discoveries = ng + ny;
+        const mult = comboMultiplier(discoveries);
+        const earned = Math.round((ng * GOLD.green + ny * GOLD.yellow) * mult);
+        const flipDoneMs = me.guesses[me.guesses.length - 1].word.length * REVEAL_STAGGER_MS + REVEAL_FLIP_HALF_MS;
+        if (earned > 0) {
+          setTimeout(() => {
+            awardGold(earned);
+            if (discoveries >= 2) celebrateCombo(discoveries, mult);
+          }, flipDoneMs);
+        }
+        // Yang keeps its green party; other editions only get nudged on a dud guess.
+        if (getActiveEditionId() === "yang" && ng >= 1) {
+          setTimeout(() => celebrateGreens(ng), flipDoneMs);
+        } else if (earned === 0) {
           showCompanion("wrong");
         }
         resetIdle();
@@ -847,7 +924,7 @@ function onServerMessage(msg) {
     // Charge only when this is genuinely new info (immune to duplicate responses).
     if (!game.revealed.some((r) => r.index === msg.index)) {
       game.revealed.push({ index: msg.index, letter: msg.letter });
-      spendGold(20);
+      spendGold(GOLD.revealCost);
       toast(`Position ${msg.index + 1} is ${msg.letter}`, { duration: 2600 });
       renderGoldHud();
     }
@@ -856,7 +933,7 @@ function onServerMessage(msg) {
     game.pendingVowel = false;
     if (game.vowels == null) {
       game.vowels = msg.count;
-      spendGold(10);
+      spendGold(GOLD.vowelCost);
       toast(`${msg.count} vowel${msg.count === 1 ? "" : "s"} in the word`, { duration: 2600 });
       renderGoldHud();
     }
@@ -936,6 +1013,7 @@ function resetPowerHints(round) {
   game.vowels = null;
   game.pendingReveal = false;
   game.pendingVowel = false;
+  game.goldThisRound = 0; // per-round earnings, shown as your score on the end screen
 }
 
 function renderPowerHints() {
@@ -966,12 +1044,12 @@ function renderPowerups(snap, me) {
     const vowel = $("#vowelBtn");
     const gold = getGold();
     const allRevealed = game.revealed.length >= snap.wordLength;
-    if (reveal) reveal.disabled = game.pendingReveal || gold < 20 || allRevealed;
-    if (vowel) vowel.disabled = game.pendingVowel || gold < 10 || game.vowels != null;
+    if (reveal) reveal.disabled = game.pendingReveal || gold < GOLD.revealCost || allRevealed;
+    if (vowel) vowel.disabled = game.pendingVowel || gold < GOLD.vowelCost || game.vowels != null;
     if (!powerupsWired) {
       powerupsWired = true;
       reveal?.addEventListener("click", () => {
-        if (game.pendingReveal || getGold() < 20) return;
+        if (game.pendingReveal || getGold() < GOLD.revealCost) return;
         game.pendingReveal = true; reveal.disabled = true;
         // Send what we already know so the server reveals a NEW letter each buy.
         send({ type: "reveal_letter", known: game.revealed.map((r) => r.index) });
@@ -979,7 +1057,7 @@ function renderPowerups(snap, me) {
         setTimeout(() => { if (game.pendingReveal) { game.pendingReveal = false; if (game.snapshot) render(); } }, 2000);
       });
       vowel?.addEventListener("click", () => {
-        if (game.pendingVowel || getGold() < 10 || game.vowels != null) return;
+        if (game.pendingVowel || getGold() < GOLD.vowelCost || game.vowels != null) return;
         game.pendingVowel = true; vowel.disabled = true;
         send({ type: "vowel_count" });
       });
@@ -1186,8 +1264,21 @@ function renderBoards(snap, me) {
         } else if (isMe && isCurrentRow && pending[c]) {
           tile.classList.add("filled", "pop");
           tile.textContent = pending[c];
+        } else if (
+          isMe && isCurrentRow && c === pending.length &&
+          snap.phase === "playing" && p.status === "playing"
+        ) {
+          // Blinking cursor on the next slot so you always know where you're typing.
+          tile.classList.add("cursor");
         }
         row.appendChild(tile);
+      }
+      // One-shot line clear: tap your active row to wipe the whole guess (no Delete button).
+      if (isMe && isCurrentRow && snap.phase === "playing" && p.status === "playing") {
+        row.classList.add("input-row");
+        row.addEventListener("click", () => {
+          if (game.pending.length) { game.pending = ""; render(); resetIdle(); }
+        });
       }
       grid.appendChild(row);
     }
@@ -1247,19 +1338,8 @@ function buildKeyboard() {
   const root = $("#keyboard");
   root.innerHTML = "";
   rows.forEach((letters, idx) => {
-    const isLast = idx === rows.length - 1;
     const row = document.createElement("div");
-    // QWERTY's short middle row gets centered padding; AZERTY's rows align on their own.
-    row.className = "kb-row" + (layoutId === "qwerty" && idx === 1 ? " middle" : "");
-    // Enter sits at the FAR LEFT of the last row and ⌫ at the FAR RIGHT — the NYT
-    // Wordle convention everyone already has muscle memory for.
-    if (isLast) {
-      const enter = document.createElement("button");
-      enter.className = "key wide";
-      enter.textContent = "Enter";
-      enter.dataset.action = "enter";
-      row.appendChild(enter);
-    }
+    row.className = "kb-row";
     for (const l of letters) {
       const k = document.createElement("button");
       k.className = "key";
@@ -1267,12 +1347,20 @@ function buildKeyboard() {
       k.dataset.key = l;
       row.appendChild(k);
     }
-    if (isLast) {
+    // Match a real computer keyboard: ⌫ sits top-right (end of row 1), Enter
+    // mid-right (end of row 2). The bottom row is letters only.
+    if (idx === 0) {
       const back = document.createElement("button");
       back.className = "key wide";
       back.textContent = "⌫";
       back.dataset.action = "back";
       row.appendChild(back);
+    } else if (idx === 1) {
+      const enter = document.createElement("button");
+      enter.className = "key wide";
+      enter.textContent = "Enter";
+      enter.dataset.action = "enter";
+      row.appendChild(enter);
     }
     root.appendChild(row);
   });
@@ -1556,8 +1644,13 @@ function handleGameOver(snap) {
   game.hasShownEndStats = true;
 
   if (won) {
-    earnGold(guessCount);
-    renderGoldHud();
+    // Solve bonus + speed bonus (fewer guesses = richer) + the winning row's greens.
+    const maxGuesses = snap.maxGuesses ?? 6;
+    const finalGreens = newGreensInLast(me.guesses);
+    const winGold = GOLD.solve
+      + GOLD.speedPerGuessLeft * Math.max(0, maxGuesses - guessCount)
+      + finalGreens * GOLD.green;
+    awardGold(winGold);
     showCompanion("win");
     // Same gentle pacing as before — wait for the final row's flip to finish.
     setTimeout(
@@ -1683,6 +1776,13 @@ function openStats(opts = {}) {
   const eg = $("#endgameMsg");
   eg.textContent = "";
   eg.className = "endgame";
+  // Your score is your gold. Headline the run's earnings + the running balance.
+  if (opts.justFinished) {
+    const goldLine = document.createElement("div");
+    goldLine.className = "endgame-gold";
+    goldLine.textContent = `◆ +${game.goldThisRound || 0} this game · ◆ ${getGold()} total`;
+    eg.appendChild(goldLine);
+  }
   if (opts.justFinished && opts.snap) {
     const snap = opts.snap;
     const winner = snap.winner; // winner username (string) or null
@@ -1968,6 +2068,22 @@ document.addEventListener("DOMContentLoaded", () => {
   applySettings(getSettings());
   $("#statsBtn").addEventListener("click", () => openStats());
   $("#settingsBtn").addEventListener("click", openSettings);
+  // Mute toggle — companion voice + chimes already honor wordul.muted; this is the switch.
+  const muteBtn = $("#muteBtn");
+  if (muteBtn) {
+    const syncMute = () => {
+      const muted = localStorage.getItem("wordul.muted") === "1";
+      muteBtn.textContent = muted ? "🔇" : "🔊";
+      muteBtn.setAttribute("aria-pressed", String(muted));
+    };
+    syncMute();
+    muteBtn.addEventListener("click", () => {
+      const muted = localStorage.getItem("wordul.muted") === "1";
+      localStorage.setItem("wordul.muted", muted ? "0" : "1");
+      syncMute();
+      toast(muted ? "Sound on" : "Muted", { duration: 1000 });
+    });
+  }
   // Global physical-keyboard handler — drives type-to-start on home/lobby and typing in-game.
   document.addEventListener("keydown", onPhysicalKey);
   route();

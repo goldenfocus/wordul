@@ -60,14 +60,56 @@ body {
   font-size: 19px;
 }
 .gold-hud {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--accent);
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  font-size: 14px;
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 8px; /* a coin/chip, not a pill */
+  font-size: 15px;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
+.gold-hud.gold-bump { animation: gold-bump 0.5s ease; }
+@keyframes gold-bump {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.22); color: #fff; }
+  100% { transform: scale(1); }
+}
+
+/* Gold raining from the sky on a payout. */
+.gold-coin {
+  position: fixed;
+  top: -28px;
+  z-index: 9998;
+  pointer-events: none;
+  color: var(--accent);
+  font-size: 22px;
+  font-weight: 700;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 70%, transparent);
+  animation: gold-fall var(--gc-dur, 1200ms) var(--gc-delay, 0ms) cubic-bezier(.4, 0, .7, 1) forwards;
+}
+@keyframes gold-fall {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translate(var(--gc-x, 0), 96vh) rotate(260deg); opacity: 0; }
+}
+
+/* Blinking cursor on the next tile to fill; tap the active row to clear it. */
+.grid-row.input-row { cursor: pointer; }
+.tile.cursor { position: relative; }
+.tile.cursor::after {
+  content: "";
+  position: absolute;
+  left: 50%; top: 20%; bottom: 20%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--accent);
+  animation: caret-blink 1.05s steps(1, end) infinite;
+}
+@keyframes caret-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 .brand-dot { color: var(--accent); margin: 0 1px; transition: color 0.2s; }
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -774,6 +816,7 @@ body {
 .kb-row.middle { padding: 0 5%; }
 .key {
   flex: 1;
+  max-width: 46px;
   min-height: 58px;
   background: var(--key-bg);
   color: var(--fg);
@@ -786,7 +829,7 @@ body {
   transition: background 0.15s, opacity 0.15s, transform 0.05s;
 }
 .key:active { transform: scale(0.95); }
-.key.wide { flex: 1.6; font-size: 13px; }
+.key.wide { flex: 1.6; font-size: 13px; max-width: 80px; }
 .key.green { background: var(--green); color: white; }
 .key.yellow { background: var(--yellow); color: white; }
 /* Dead (absent) letters fade back so the live board pops. Colored keys stay vivid. */
