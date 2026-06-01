@@ -37,12 +37,15 @@ export function getActiveEditionId() {
 export function companionReact(event, ctx = {}) {
   const ed = getEdition(activeId);
   const bank = ed.companion?.lines?.[event] ?? [];
-  if (bank.length === 0) return { text: "", speak: false };
+  if (bank.length === 0) return { text: "", raw: "", speak: false };
   const i = (reactCounters[event] = (reactCounters[event] ?? -1) + 1) % bank.length;
-  let text = bank[i];
+  const raw = bank[i];
+  let text = raw;
   if (ctx.answer) text = text.replace("{answer}", ctx.answer);
+  // Safety net: never show or speak a naked token if no answer was supplied.
+  text = text.replace("{answer}", "that one");
   const muted = localStorage.getItem(LS.muted) === "1";
-  return { text, speak: !!ed.sound?.voice?.on && !muted };
+  return { text, raw, speak: !!ed.sound?.voice?.on && !muted };
 }
 
 const VAR_MAP = {

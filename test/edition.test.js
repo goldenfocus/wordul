@@ -41,6 +41,19 @@ describe("editions + companion", () => {
     const b = companionReact("wrong").text;
     expect(a === b).toBe(false);
   });
+  it("returns the raw template alongside substituted text", () => {
+    const r = companionReact("loss", { answer: "CRANE" });
+    expect(typeof r.raw).toBe("string");
+    expect(r.text).not.toContain("{answer}");
+    // raw is the UNsubstituted template; text is raw with {answer} -> CRANE.
+    expect(r.text).toBe(r.raw.replace("{answer}", "CRANE"));
+  });
+  it("never leaks a {answer} token even with no answer supplied", () => {
+    for (let i = 0; i < 30; i++) {
+      const r = companionReact("loss", {});
+      expect(r.text).not.toContain("{answer}");
+    }
+  });
 });
 
 import { applyEdition } from "/edition.js";
