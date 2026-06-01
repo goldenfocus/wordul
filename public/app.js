@@ -1893,6 +1893,9 @@ function forfeit(reason) {
   game.finishReason = reason;
   recordResult(false, me.guesses.length); // a forfeit is a loss for local stats
   game.hasShownEndStats = true;
+  // Tell the server we're out: it marks us lost (others see OUT) and the next snapshot
+  // reveals the word to US, so the end-screen word card has it by the time it opens.
+  send({ type: "resign" });
   showCompanion("loss", { answer: snap.word });
   triggerLoseSequence(snap, me);
 }

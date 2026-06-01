@@ -160,6 +160,8 @@ export class Room extends DurableObject<Env> {
         return this.onRevealLetter(ws, msg.known);
       case "vowel_count":
         return this.onVowelCount(ws);
+      case "resign":
+        return this.onResign(ws);
       case "ping":
         // Client heartbeat — round-trip with no state change so the network path
         // and DO both stay warm and the client can detect a dead conn faster.
@@ -356,6 +358,33 @@ export class Room extends DurableObject<Env> {
     await this.persistAndBroadcast();
   }
 
+  // A player gives up (💀 / bankruptcy). Mark them lost so others see them OUT, and so
+  // the per-viewer snapshot can reveal the word to THEM (they're done) without leaking it
+  // to players still guessing. Ends the game if they were the last one playing.
+  private async onResign(ws: WebSocket): Promise<void> {
+    const username = this.userFor(ws);
+    if (!username || this.state.phase !== "playing") return;
+    const player = this.state.players.find((p) => p.username === username);
+    if (!player || player.status !== "playing") return;
+    player.status = "lost";
+    if (this.isGameOver()) {
+      this.state.phase = "finished";
+      this.state.finishedAt = Date.now();
+      const winner = this.state.winner
+        ? this.state.players.find((p) => p.username === this.state.winner)
+        : null;
+      if (winner) {
+        this.pushSystem(`${winner.username} got it in ${winner.guesses.length}! The word was ${this.state.word}`);
+      } else {
+        this.pushSystem(`Nobody got it. The word was ${this.state.word}`);
+      }
+      await this.finishGame();
+    } else {
+      this.pushSystem(`${username} gave up`);
+    }
+    await this.persistAndBroadcast();
+  }
+
   // EZ-mode power-up: reveal one letter the player hasn't greened yet. Only the DO
   // holds the answer, so this must happen server-side. No state change, no broadcast —
   // the hint goes only to the requester.
@@ -484,22 +513,27 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  private snapshotFor(_audience: "player" | "all"): RoomSnapshot {
-    // While playing, never leak the word.
+  // Build the snapshot for a specific viewer. The word is revealed once the GAME is
+  // finished OR the viewer is personally done (won/lost/gave up) — so a player who's out
+  // gets the answer + its end-screen intel, while anyone still guessing never sees it.
+  private snapshotFor(viewer: string | null): RoomSnapshot {
+    const me = viewer ? this.state.players.find((p) => p.username === viewer) : null;
+    const reveal = this.state.phase === "finished" || (!!me && me.status !== "playing");
     return {
       ...this.state,
-      word: this.state.phase === "finished" ? this.state.word : null,
+      word: reveal ? this.state.word : null,
       players: this.state.players.map((p) => ({ ...p, guesses: [...p.guesses] })),
     };
   }
 
   private async persistAndBroadcast(): Promise<void> {
     await this.ctx.storage.put("state", this.state);
-    const snap: ServerMessage = { type: "snapshot", room: this.snapshotFor("all") };
-    const payload = JSON.stringify(snap);
+    // Per-socket: each viewer gets a snapshot whose `word` is revealed only if they're
+    // allowed to see it (game over, or they're out). One JSON encode per distinct viewer.
     for (const ws of this.ctx.getWebSockets()) {
       try {
-        ws.send(payload);
+        const snap: ServerMessage = { type: "snapshot", room: this.snapshotFor(this.userFor(ws)) };
+        ws.send(JSON.stringify(snap));
       } catch {
         // ignore broken sockets
       }

@@ -65,6 +65,7 @@ export type ClientMessage =
   | { type: "rename"; name: string }
   | { type: "reveal_letter"; known?: number[] }
   | { type: "vowel_count" }
+  | { type: "resign" }
   | { type: "ping" };
 
 export type ServerMessage =
