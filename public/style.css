@@ -728,7 +728,7 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
   padding: 4px 6px 0;
 }
 .endgame.joke .roast {
-  color: #ff8c8c;
+  color: var(--muted);
   display: block;
   margin-bottom: 6px;
 }
