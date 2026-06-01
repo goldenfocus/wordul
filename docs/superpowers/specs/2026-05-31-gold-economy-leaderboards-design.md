@@ -225,6 +225,36 @@ Capture immediately so no game is lost; viewer is the next push.
 - **Mute button** — companion voice + chimes already honored `wordul.muted`; the
   topbar toggle is now wired. **SHIPPED.**
 
+## Round 3 — playtest feedback (2026-06-01) — "genuinely a very good game"
+
+Yan went 0 → 562 gold and loved it. Refinements to make next:
+
+**Economy feel**
+- **Round numbers.** Two/three-digit granular values (562) feel fiddly. Use big,
+  round payouts — minimum increment ~**100**. Proposed (tunable): green **+100**,
+  yellow **+50**, solve **+500**, speed **+300 × guesses-left**, combos unchanged;
+  round the displayed balance. Letter reveal rescales up too (~**3000–5000**).
+- **They don't lose enough.** Add real bleed (this is P5.1b, now sharper):
+  - **Invalid / non-existent word submitted → lose gold.**
+  - **Reuse a known-dead letter in a submitted guess → lose gold** (per letter).
+  - **Repeat the *same* mistake again → escalating penalty** (more each time —
+    track per-game "mistakes already made"; the 2nd/3rd repeat of the same dead
+    letter costs progressively more).
+
+**Power-ups = signal, not noise**
+- **Hide unaffordable power-ups entirely.** On Yang's table the reveal/vowel
+  buttons show even with too little gold — that's noise. They should simply not
+  appear until affordable. (This *is* the ✨ magic-icon progressive-disclosure
+  from P5.1b — promote it.)
+
+**Hard Mode needs to mean something**
+- Today it's a quiet settings toggle. Give it teeth — this is where the
+  **bankruptcy-explosion** stake lives (negative gold can kill you on Hard Mode).
+
+See the companion spec **`2026-06-01-immersive-ui-and-settings-design.md`** for
+the pure-immersive UI redesign (avatar-as-hub, hidden chrome) and the settings
+reorg (collapsible sections, keyboard auto-detect, equal key widths).
+
 ## Recommended sequencing
 
 1. **Phase 4a — keyboard tune-up** (independent, pre-approved) → ship now.
