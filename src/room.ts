@@ -3,6 +3,7 @@ import { WORDS_BY_SIZE, isSupportedSize } from "./wordsbysize.ts";
 import { scoreGuess, countVowels, revealUngreened } from "./color.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { buildGameRecords } from "./records.ts";
+import { normalizeSlug } from "./identity.ts";
 import type {
   ChatEntry,
   ClientMessage,
@@ -37,6 +38,7 @@ export class Room extends DurableObject<Env> {
     this.state = {
       path: "",
       owner: "",
+      slug: "",
       name: "",
       phase: "lobby",
       players: [],
@@ -71,7 +73,11 @@ export class Room extends DurableObject<Env> {
         this.state.path = path;
         const [owner, slug] = path.split("/");
         this.state.owner = owner ?? "";
+        this.state.slug = slug ?? "";
         if (!this.state.name) this.state.name = (slug ?? "").replace(/-/g, " ");
+      } else if (!this.state.slug) {
+        // Backfill for rooms persisted before display-slug existed.
+        this.state.slug = this.state.path.split("/")[1] ?? "";
       }
       return this.handleUpgrade(req);
     }
@@ -231,8 +237,32 @@ export class Room extends DurableObject<Env> {
     if (!name) return;
     this.state.name = name;
     this.pushSystem(`Room renamed to “${name}”`);
+    await this.adoptSlug(normalizeSlug(name));
     void this.registerRoom();
     await this.persistAndBroadcast();
+  }
+
+  // Point the room's URL at a new slug. The DO key (this.state.path) never moves;
+  // instead we register a KV alias so the new slug — and every previous one — keeps
+  // resolving to this same room. No reconnect, no state migration.
+  private async adoptSlug(next: string): Promise<void> {
+    if (!next || next === this.state.slug) return;
+    const aliasPath = `${this.state.owner}/${next}`;
+    if (aliasPath === this.state.path) {
+      // Renamed back to the canonical slug — just point the display there.
+      this.state.slug = next;
+      return;
+    }
+    try {
+      // Don't hijack a distinct room that already lives at this path.
+      const taken = await this.env.DIRECTORY.get(`room:${aliasPath}`);
+      const existingAlias = await this.env.DIRECTORY.get(`roomalias:${aliasPath}`);
+      if (taken && existingAlias !== this.state.path) return;
+      await this.env.DIRECTORY.put(`roomalias:${aliasPath}`, this.state.path);
+      this.state.slug = next;
+    } catch (e) {
+      console.error("adoptSlug failed", aliasPath, (e as Error).message);
+    }
   }
 
   private async onSetLength(ws: WebSocket, length: number): Promise<void> {

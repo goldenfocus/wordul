@@ -37,8 +37,9 @@ export type ChatEntry =
   | { kind: "system"; text: string; t: number };
 
 export type RoomSnapshot = {
-  path: string;            // "<owner>/<slug>"
+  path: string;            // "<owner>/<slug>" — immutable canonical DO key
   owner: string;           // owner username
+  slug: string;            // current URL slug (renameable; old slugs alias to canonical path)
   name: string;            // display name (renameable)
   phase: RoomPhase;
   players: PlayerState[];

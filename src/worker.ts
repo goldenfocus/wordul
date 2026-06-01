@@ -20,10 +20,13 @@ export default {
       if (!isValidUsername(owner) || slug.length < 1) {
         return new Response("invalid room", { status: 400 });
       }
-      const path = `${owner}/${slug}`;
-      const stub = env.ROOM.get(env.ROOM.idFromName(path));
+      const requested = `${owner}/${slug}`;
+      // A renamed room keeps its original DO key; the new (and any past) slug is a
+      // KV alias back to that canonical path. Resolve it so old + new links both work.
+      const canonical = (await env.DIRECTORY.get(`roomalias:${requested}`)) ?? requested;
+      const stub = env.ROOM.get(env.ROOM.idFromName(canonical));
       const upstream = new URL(req.url);
-      upstream.searchParams.set("room", path);
+      upstream.searchParams.set("room", canonical);
       return stub.fetch(new Request(upstream.toString(), req));
     }
 
