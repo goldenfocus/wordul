@@ -4,6 +4,8 @@ import { scoreGuess, countVowels, revealUngreened } from "./color.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { buildGameRecords, summarizeRoomGame } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
+import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
+import type { RoomMode } from "./modes.ts";
 import type {
   ChatEntry,
   ClientMessage,
@@ -58,6 +60,7 @@ export class Room extends DurableObject<Env> {
       chat: [],
       wordLength: DEFAULT_LENGTH,
       maxGuesses: guessesFor(DEFAULT_LENGTH),
+      mode: DEFAULT_MODE,
       scoreboard: [],
       history: [],
       edition: "default",
@@ -71,6 +74,7 @@ export class Room extends DurableObject<Env> {
         if (!Array.isArray(restored.history)) restored.history = [];
         if (!restored.wordLength) restored.wordLength = DEFAULT_LENGTH;
         if (!restored.maxGuesses) restored.maxGuesses = guessesFor(restored.wordLength);
+        if (!restored.mode) restored.mode = DEFAULT_MODE;
         if (!restored.edition) restored.edition = "default"; // pre-theme rooms
         this.state = restored;
       }
@@ -153,7 +157,7 @@ export class Room extends DurableObject<Env> {
   private async handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
       case "hello":
-        return this.onHello(ws, msg.username, msg.wordLength, msg.edition);
+        return this.onHello(ws, msg.username, msg.wordLength, msg.edition, msg.mode);
       case "start":
         return this.onStart(ws);
       case "guess":
@@ -166,6 +170,8 @@ export class Room extends DurableObject<Env> {
         return this.onSetLength(ws, msg.wordLength);
       case "set_edition":
         return this.onSetEdition(ws, msg.edition);
+      case "set_mode":
+        return this.onSetMode(ws, msg.mode);
       case "rename":
         return this.onRename(ws, msg.name);
       case "reveal_letter":
@@ -182,7 +188,7 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  private async onHello(ws: WebSocket, usernameRaw: string, wordLength?: number, edition?: string): Promise<void> {
+  private async onHello(ws: WebSocket, usernameRaw: string, wordLength?: number, edition?: string, mode?: RoomMode): Promise<void> {
     // Trust model is intentional: identity is passwordless by product decision (a casual
     // word game — "kindness model", see spec 2026-05-31-username-identity). The client-
     // supplied username is taken at face value; control is shared, owner is bookkeeping only.
@@ -226,6 +232,16 @@ export class Room extends DurableObject<Env> {
         this.state.round === 0
       ) {
         this.state.edition = sanitizeEdition(edition);
+      }
+      // Likewise the room's game mode is seeded from its owner's choice, only in a pristine
+      // lobby. After that, anyone changes it via set_mode (shared control).
+      if (
+        username === this.state.owner &&
+        isAvailableMode(mode) &&
+        this.state.phase === "lobby" &&
+        this.state.round === 0
+      ) {
+        this.state.mode = mode;
       }
       this.pushSystem(`${username} joined`);
     }
@@ -322,6 +338,22 @@ export class Room extends DurableObject<Env> {
     this.state.edition = edition;
     const who = this.userFor(ws) ?? "someone";
     this.pushSystem(`${who} set the theme to ${edition}`);
+    await this.persistAndBroadcast();
+  }
+
+  private async onSetMode(ws: WebSocket, mode: RoomMode): Promise<void> {
+    if (this.state.phase !== "lobby") {
+      this.send(ws, { type: "error", message: "can't change mode mid-game" });
+      return;
+    }
+    if (!isAvailableMode(mode)) {
+      this.send(ws, { type: "error", message: "mode not available" });
+      return;
+    }
+    if (mode === this.state.mode) return;
+    this.state.mode = mode;
+    const who = this.userFor(ws) ?? "someone";
+    this.pushSystem(`${who} set mode to ${mode}`);
     await this.persistAndBroadcast();
   }
 
