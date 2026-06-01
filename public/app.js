@@ -263,9 +263,12 @@ function enterNewRoom({ autoStart }) {
 
 let homeRoomRows = [];
 let homeRoomFilter = "recent";
+const HOME_ROOMS_PAGE = 6; // show this many at first; "Show more" reveals another page
+let homeRoomVisible = HOME_ROOMS_PAGE;
 
 async function loadHomeRooms(username) {
   homeRoomRows = [];
+  homeRoomVisible = HOME_ROOMS_PAGE;
   try {
     const res = await fetch(`/api/user/${encodeURIComponent(username)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -324,6 +327,7 @@ function buildRoomRows(profile, username) {
 
 function setRoomFilter(filter) {
   homeRoomFilter = filter;
+  homeRoomVisible = HOME_ROOMS_PAGE; // switching tabs starts the list fresh
   const recentBtn = $("#roomFilterRecent");
   const yoursBtn = $("#roomFilterYours");
   const isRecent = filter === "recent";
@@ -344,7 +348,8 @@ function renderRoomList() {
     list.appendChild(li);
     return;
   }
-  for (const row of rows) {
+  const shown = rows.slice(0, homeRoomVisible);
+  for (const row of shown) {
     const li = document.createElement("li");
     li.className = "room-row";
     li.tabIndex = 0;
@@ -374,6 +379,28 @@ function renderRoomList() {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(row.path); }
     });
     list.appendChild(li);
+  }
+  // "Show more" — reveal the next page rather than scrolling a wall of rooms.
+  const remaining = rows.length - shown.length;
+  if (remaining > 0) {
+    const more = document.createElement("li");
+    more.className = "room-row room-more";
+    more.tabIndex = 0;
+    more.setAttribute("role", "button");
+    const moreLabel = document.createElement("span");
+    moreLabel.className = "room-more-label";
+    moreLabel.textContent = `Show ${Math.min(HOME_ROOMS_PAGE, remaining)} more`;
+    const moreChevron = document.createElement("span");
+    moreChevron.className = "room-more-chevron";
+    moreChevron.textContent = "⌄";
+    more.appendChild(moreLabel);
+    more.appendChild(moreChevron);
+    const showMore = () => { homeRoomVisible += HOME_ROOMS_PAGE; renderRoomList(); };
+    more.addEventListener("click", showMore);
+    more.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showMore(); }
+    });
+    list.appendChild(more);
   }
 }
 

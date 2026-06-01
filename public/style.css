@@ -370,6 +370,15 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 .room-row-time { flex-shrink: 0; white-space: nowrap; }
 .room-empty { list-style: none; padding: 12px 4px; text-align: center; }
 
+/* "Show more" pager row — dashed + centered so it reads as an action, not a room. */
+.room-more {
+  justify-content: center; gap: 6px;
+  background: transparent; border-style: dashed;
+  color: var(--muted); font-weight: 700; font-size: 13px;
+}
+.room-more:hover, .room-more:focus-visible { color: var(--fg); }
+.room-more-chevron { font-size: 16px; line-height: 1; }
+
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 
