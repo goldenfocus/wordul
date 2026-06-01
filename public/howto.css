@@ -1,0 +1,70 @@
+/* Wordul — /how-to-play page styles. Layout + demo sizing only; tile colors
+   (.tile.green/.yellow/.gray) are inherited from style.css so the demos match the
+   live game exactly. */
+
+body.howto { overflow-y: auto; height: auto; }
+
+.brand-link { color: inherit; text-decoration: none; }
+
+.howto-main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 4rem;
+  line-height: 1.6;
+}
+
+.howto-hero { text-align: center; padding: 1rem 0 0.5rem; }
+.howto-hero h1 { font-size: clamp(1.8rem, 6vw, 2.6rem); margin: 0 0 0.5rem; }
+.howto-lede { font-size: 1.05rem; color: var(--muted, #b8b8bd); max-width: 36rem; margin: 0 auto 1.5rem; }
+.howto-lede em { color: var(--green); font-style: normal; font-weight: 600; }
+
+.howto-section { padding: 1.75rem 0; border-top: 1px solid var(--border, #2a2a2e); }
+.howto-section h2 { font-size: 1.4rem; margin: 0 0 0.75rem; }
+.howto-section h3 { font-size: 1rem; margin: 0 0 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* Demo boards — center them and size the tiles down a touch from the live game. */
+.howto-demo { display: flex; justify-content: center; margin: 1.25rem 0 0.5rem; min-height: 60px; }
+.howto-board { --tile-size: 44px; }
+.howto-board .grid-row { display: flex; gap: 5px; justify-content: center; margin-bottom: 5px; }
+.howto-board .tile {
+  width: var(--tile-size); height: var(--tile-size);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 1.4rem; text-transform: uppercase;
+  border: 2px solid var(--border, #3a3a3e); border-radius: 4px;
+}
+
+/* Legend tiles (tappable). */
+.howto-legend { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
+.howto-legend li { display: flex; align-items: center; gap: 0.75rem; }
+.tile.small {
+  width: 38px; height: 38px; flex: 0 0 38px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; border: 2px solid var(--border, #3a3a3e); border-radius: 4px;
+  cursor: pointer; user-select: none;
+}
+
+/* Gold earn/lose cards. */
+.howto-cards { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; }
+@media (max-width: 520px) { .howto-cards { grid-template-columns: 1fr; } }
+.howto-card { padding: 1rem; border-radius: 10px; border: 1px solid var(--border, #2a2a2e); }
+.howto-card.earn { background: color-mix(in srgb, var(--green) 8%, transparent); }
+.howto-card.lose { background: color-mix(in srgb, #c0392b 8%, transparent); }
+.howto-card ul { margin: 0 0 0.5rem; padding-left: 1.1rem; }
+.howto-card li { margin-bottom: 0.3rem; }
+
+/* Power-ups list. */
+.howto-powerups { list-style: none; padding: 0; display: grid; gap: 0.85rem; }
+.howto-powerups li { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+.pu-icon { font-size: 1.4rem; }
+
+.howto-vision p { margin: 0 0 0.85rem; }
+
+.howto-faq details {
+  border: 1px solid var(--border, #2a2a2e); border-radius: 8px;
+  padding: 0.5rem 0.85rem; margin-bottom: 0.6rem;
+}
+.howto-faq summary { cursor: pointer; font-weight: 600; }
+.howto-faq details[open] summary { margin-bottom: 0.5rem; }
+
+.howto-cta { text-align: center; padding: 2.5rem 0 0; }
+.howto-cta .btn.block { max-width: 18rem; margin: 1rem auto 0; }

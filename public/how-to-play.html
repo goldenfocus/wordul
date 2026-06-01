@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>How to Play Wordul — rules, gold, power-ups & the live race</title>
+<meta name="description" content="How Wordul works: green/yellow/gray rules, the gold economy, ✨ power-ups, 💀 give-up, and the live race where everyone solves the same word at once. Watch it play, then jump in." />
+<link rel="canonical" href="https://wordul.com/how-to-play" />
+<meta property="og:title" content="How to Play Wordul" />
+<meta property="og:description" content="Green, yellow, gray — plus gold, power-ups, and a live race on the same word. Here's the whole game in two minutes." />
+<meta property="og:url" content="https://wordul.com/how-to-play" />
+<meta property="og:image" content="/og.png" />
+<meta property="og:type" content="article" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="theme-color" content="#0e0e10" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23538d4e'/%3E%3Ctext x='50%25' y='52%25' text-anchor='middle' dominant-baseline='middle' fill='white' font-family='system-ui,sans-serif' font-weight='800' font-size='40'%3EW%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/style.css" />
+<link rel="stylesheet" href="/howto.css" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "HowTo",
+      "name": "How to play Wordul",
+      "description": "Wordul is a real-time multiplayer Wordle: everyone races the same secret word, earns gold for progress, and spends it on power-ups.",
+      "step": [
+        { "@type": "HowToStep", "name": "Guess the word", "text": "You get 6 tries. After each guess, tiles turn green (right letter, right spot), yellow (right letter, wrong spot), or gray (not in the word)." },
+        { "@type": "HowToStep", "name": "Race your friends", "text": "Everyone in the room solves the same secret word at the same time. First to solve wins the round; everyone else finishes for their own gold." },
+        { "@type": "HowToStep", "name": "Earn gold", "text": "Every green, yellow, and solve pays gold, with combo multipliers for uncovering several letters at once." },
+        { "@type": "HowToStep", "name": "Spend on power-ups", "text": "Tap ✨ to reveal a letter or count the vowels — gold is precious, so spend wisely." }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How is Wordul different from regular Wordle?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Wordul is multiplayer and live. Everyone in a room races the same secret word at the same time, earns gold for progress, and can spend it on power-ups. There's a running scoreboard and public profiles." }
+        },
+        {
+          "@type": "Question",
+          "name": "What do the colors mean?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Green means the right letter in the right spot. Yellow means the right letter in the wrong spot. Gray means that letter isn't in the word (or there are no more of it — duplicates count exactly)." }
+        },
+        {
+          "@type": "Question",
+          "name": "What is gold?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Gold is the universal score. You earn it for every green, yellow, and solve, and lose a little for sloppy guesses. You spend it on power-ups like revealing a letter (4000) or counting the vowels (200)." }
+        },
+        {
+          "@type": "Question",
+          "name": "Do I need an account?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. Pick a username and you're recognized anywhere just by typing it again — no password, no signup. You get a public profile at /@you." }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body class="howto">
+<header class="topbar">
+  <div class="brand"><a href="/" class="brand-link">Wordul<span class="brand-dot">.</span></a></div>
+  <a href="/" class="btn small primary">▶ Play</a>
+</header>
+
+<main class="howto-main">
+
+  <section class="howto-hero">
+    <h1>How Wordul works</h1>
+    <p class="howto-lede">It's Wordle, but everyone in the room is sweating the <em>same</em> secret word at the <em>same</em> time — and every green you uncover rains gold. Here's the whole game in two minutes. (Watch it play. Yes, it's really running.)</p>
+    <div class="howto-demo" data-demo data-answer="REACT" data-guesses="SLATE|TRACE|REACT" aria-hidden="true"></div>
+  </section>
+
+  <section class="howto-section">
+    <h2>1. The basics</h2>
+    <p>Guess the hidden word in <strong>6 tries</strong>. Words run from <strong>4 to 12 letters</strong> (set per room). After each guess, every tile tells you something:</p>
+    <ul class="howto-legend">
+      <li><span class="tile small" data-flip="green">A</span> <strong>Green</strong> — right letter, right spot.</li>
+      <li><span class="tile small" data-flip="yellow">B</span> <strong>Yellow</strong> — right letter, wrong spot.</li>
+      <li><span class="tile small" data-flip="gray">C</span> <strong>Gray</strong> — not in the word (tap a tile to flip it).</li>
+    </ul>
+    <p class="muted small">A guess has to be a real word or it bounces back — and a bounce costs you no guess.</p>
+  </section>
+
+  <section class="howto-section">
+    <h2>2. It's a race 🏁</h2>
+    <p>Everyone in a room solves the <strong>same secret word at the same time</strong>. You watch opponents' rows fill in live — their colors, never their letters. <strong>First to solve wins the round</strong>, but the race doesn't stop there: everyone keeps playing to finish and bank their own gold.</p>
+    <div class="howto-demo" data-demo data-answer="MONEY" data-guesses="ARISE|NOTED|MONEY" aria-hidden="true"></div>
+  </section>
+
+  <section class="howto-section">
+    <h2>3. Gold — the universal score 🪙</h2>
+    <p>Gold is how everyone is scored. You earn it for progress and lose a little for sloppiness.</p>
+    <div class="howto-cards">
+      <div class="howto-card earn">
+        <h3>Earn</h3>
+        <ul>
+          <li>Each new 🟩 green — <strong>+100</strong></li>
+          <li>Each new 🟨 yellow — <strong>+50</strong></li>
+          <li>Solving the word — <strong>+500</strong></li>
+          <li>Speed bonus — <strong>+300 × guesses left</strong></li>
+        </ul>
+        <p class="muted small">Uncover several letters in one guess and a combo multiplier stacks: 2→×1.5, 3→×2, up to 5→×3.</p>
+      </div>
+      <div class="howto-card lose">
+        <h3>Lose</h3>
+        <ul>
+          <li>Submitting a non-word — <strong>−50</strong></li>
+          <li>Reusing a known-dead letter — <strong>−50</strong> each (capped −200/guess)</li>
+        </ul>
+        <p class="muted small">Repeat the same mistake and it escalates. Gold can go negative — and in <strong>Hard Mode</strong>, sinking past −300 ends the game in an explosion. 💥</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="howto-section">
+    <h2>4. Power-ups ✨</h2>
+    <p>The ✨ icon shows up the moment you can afford something. Spending is a real trade-off — gold is precious.</p>
+    <ul class="howto-powerups">
+      <li><span class="pu-icon">🎰</span> <strong>Reveal a letter</strong> — uncovers one unknown letter. <span class="muted">Costs 4000. A splurge.</span></li>
+      <li><span class="pu-icon">🔍</span> <strong>Count the vowels</strong> — tells you how many vowels are in the word. <span class="muted">Costs 200. A cheap nudge.</span></li>
+      <li><span class="pu-icon">💀</span> <strong>Give up</strong> — surfaces when you're stuck. Forfeits with the full explosion, in any mode.</li>
+    </ul>
+  </section>
+
+  <section class="howto-section">
+    <h2>5. Editions 🎨</h2>
+    <p>Reskin the whole game. <strong>Wordul</strong> (default), <strong>Editorial</strong>, <strong>Yang's Table</strong> (with a cloned-voice companion who reacts as you play), <strong>Tactile</strong>, <strong>Arcade</strong>, and <strong>Jackpot</strong>. Editions are pure vibe — the rules hold across all of them. Pick one in the lobby or in Settings.</p>
+  </section>
+
+  <section class="howto-section howto-vision">
+    <h2>6. Where this is going 🚀</h2>
+    <p>Here's the honest pitch: we think the way games exist is about to change. Wordul isn't just a word game — it's becoming a place where <strong>players build their own editions and extensions inside the game itself</strong>. New rules, new vibes, new modes, made by you, played by everyone.</p>
+    <p>We're shipping fast and having fun. Some of it is a little rough around the edges — that's the deal when you build in the open. Modes like <strong>Long Game</strong> (turn-based, a 3-day clock) and <strong>Open Challenge</strong> (one word, beat the record) are on the way. Come break it with us.</p>
+  </section>
+
+  <section class="howto-section howto-faq">
+    <h2>FAQ</h2>
+    <details>
+      <summary>How is Wordul different from regular Wordle?</summary>
+      <p>It's multiplayer and live. Everyone races the same secret word at once, earns gold, spends it on power-ups, and climbs a shared scoreboard.</p>
+    </details>
+    <details>
+      <summary>Do I need an account?</summary>
+      <p>No password, no signup. Pick a username and you're recognized anywhere just by typing it again. You get a public profile at <code>/@you</code>.</p>
+    </details>
+    <details>
+      <summary>How do I invite friends?</summary>
+      <p>Create a room and share its link (<code>wordul.com/@you/friday-night</code>). Anyone who opens it picks a username and joins the same race.</p>
+    </details>
+    <details>
+      <summary>What word lengths can I play?</summary>
+      <p>Anywhere from 4 to 12 letters — the room owner sets it.</p>
+    </details>
+  </section>
+
+  <section class="howto-cta">
+    <h2>Ready?</h2>
+    <p>Pick a username, share a link, go. First across the line wins. 🟩</p>
+    <a href="/" class="btn primary block">▶ Start playing</a>
+  </section>
+
+</main>
+
+<script type="module" src="/howto.js"></script>
+</body>
+</html>
