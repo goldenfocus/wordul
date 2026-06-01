@@ -10,6 +10,8 @@ export default defineConfig({
     alias: [
       { find: /^\/editions\//, replacement: new URL("./public/editions/", import.meta.url).pathname },
       { find: /^\/edition\.js$/, replacement: new URL("./public/edition.js", import.meta.url).pathname },
+      { find: /^\/voice-key\.js$/, replacement: new URL("./public/voice-key.js", import.meta.url).pathname },
+      { find: /^\/voice\.js$/, replacement: new URL("./public/voice.js", import.meta.url).pathname },
     ],
   },
 });
