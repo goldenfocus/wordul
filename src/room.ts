@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { WORDS_BY_SIZE, isSupportedSize } from "./wordsbysize.ts";
-import { scoreGuess } from "./color.ts";
+import { scoreGuess, countVowels, revealUngreened } from "./color.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { buildGameRecords } from "./records.ts";
 import type {
@@ -148,6 +148,10 @@ export class Room extends DurableObject<Env> {
         return this.onSetLength(ws, msg.wordLength);
       case "rename":
         return this.onRename(ws, msg.name);
+      case "reveal_letter":
+        return this.onRevealLetter(ws, msg.known);
+      case "vowel_count":
+        return this.onVowelCount(ws);
       case "ping":
         // Client heartbeat — round-trip with no state change so the network path
         // and DO both stay warm and the client can detect a dead conn faster.
@@ -318,6 +322,27 @@ export class Room extends DurableObject<Env> {
       await this.finishGame();
     }
     await this.persistAndBroadcast();
+  }
+
+  // EZ-mode power-up: reveal one letter the player hasn't greened yet. Only the DO
+  // holds the answer, so this must happen server-side. No state change, no broadcast —
+  // the hint goes only to the requester.
+  private onRevealLetter(ws: WebSocket, known?: number[]): void {
+    if (this.state.phase !== "playing" || !this.state.word) return;
+    const username = this.userFor(ws);
+    const player = this.state.players.find((p) => p.username === username);
+    if (!player || player.status !== "playing") return;
+    const hit = revealUngreened(this.state.word, player.guesses, known ?? []);
+    if (hit) this.send(ws, { type: "revealed_letter", index: hit.index, letter: hit.letter });
+  }
+
+  // EZ-mode power-up: how many vowels are in the answer. Requester-only.
+  private onVowelCount(ws: WebSocket): void {
+    if (this.state.phase !== "playing" || !this.state.word) return;
+    const username = this.userFor(ws);
+    const player = this.state.players.find((p) => p.username === username);
+    if (!player || player.status !== "playing") return;
+    this.send(ws, { type: "vowels", count: countVowels(this.state.word) });
   }
 
   /** On the finish transition: bump the room scoreboard, then report a personalized

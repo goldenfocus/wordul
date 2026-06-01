@@ -791,6 +791,24 @@ body {
 .key.yellow { background: var(--yellow); color: white; }
 .key.gray { background: var(--gray); color: white; }
 
+/* EZ-mode power-ups (shown above the keyboard when EZ mode is on) */
+.powerups { display: flex; gap: 8px; width: 100%; max-width: 520px; margin: 0 auto; padding: 0 8px 6px; }
+.powerup {
+  flex: 1; min-height: 44px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-card, var(--key-bg)); color: var(--fg);
+  font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: border-color 0.15s, opacity 0.15s, transform 0.05s;
+}
+.powerup:hover:not(:disabled) { border-color: var(--accent); }
+.powerup:active:not(:disabled) { transform: scale(0.97); }
+.powerup:disabled { opacity: 0.45; cursor: not-allowed; }
+.powerup .cost { color: var(--accent); font-weight: 700; }
+.power-hints {
+  width: 100%; max-width: 520px; margin: 2px auto; text-align: center;
+  color: var(--accent); font-size: 13px; font-weight: 600;
+}
+
 /* Floating toast for in-game messages — sits over the board so it's impossible to miss. */
 .message-row {
   min-height: 12px;

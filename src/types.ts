@@ -61,10 +61,14 @@ export type ClientMessage =
   | { type: "chat"; text: string }
   | { type: "set_length"; wordLength: number }
   | { type: "rename"; name: string }
+  | { type: "reveal_letter"; known?: number[] }
+  | { type: "vowel_count" }
   | { type: "ping" };
 
 export type ServerMessage =
   | { type: "snapshot"; room: RoomSnapshot }
   | { type: "error"; message: string }
   | { type: "invalid_guess"; reason: string }
+  | { type: "revealed_letter"; index: number; letter: string }
+  | { type: "vowels"; count: number }
   | { type: "pong" };

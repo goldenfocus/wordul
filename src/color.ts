@@ -23,3 +23,32 @@ export function scoreGuess(guess: string, answer: string): Color[] {
   }
   return result;
 }
+
+// --- EZ-mode power-up helpers (server-side: only the DO has the answer) ---
+
+export function countVowels(word: string): number {
+  return (word.toUpperCase().match(/[AEIOU]/g) ?? []).length;
+}
+
+// The set of positions a player has already pinned green across all their guesses.
+export function greenedPositions(guesses: { mask: Color[] }[]): Set<number> {
+  const s = new Set<number>();
+  for (const g of guesses) g.mask.forEach((c, i) => { if (c === "green") s.add(i); });
+  return s;
+}
+
+// Reveal one letter the player doesn't know yet — leftmost position that's neither
+// greened nor already revealed (passed in `known`). null when nothing new is left,
+// so repeated buys progressively uncover the word instead of repeating one letter.
+export function revealUngreened(
+  word: string,
+  guesses: { mask: Color[] }[],
+  known: number[] = [],
+): { index: number; letter: string } | null {
+  const seen = greenedPositions(guesses);
+  for (const k of known) seen.add(k);
+  for (let i = 0; i < word.length; i++) {
+    if (!seen.has(i)) return { index: i, letter: word[i].toUpperCase() };
+  }
+  return null;
+}
