@@ -779,17 +779,18 @@ body {
   color: var(--fg);
   border: 0;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 19px;
   font-weight: 700;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background 0.15s, transform 0.05s;
+  transition: background 0.15s, opacity 0.15s, transform 0.05s;
 }
 .key:active { transform: scale(0.95); }
-.key.wide { flex: 1.6; font-size: 11px; }
+.key.wide { flex: 1.6; font-size: 13px; }
 .key.green { background: var(--green); color: white; }
 .key.yellow { background: var(--yellow); color: white; }
-.key.gray { background: var(--gray); color: white; }
+/* Dead (absent) letters fade back so the live board pops. Colored keys stay vivid. */
+.key.gray { background: var(--gray); color: white; opacity: 0.45; }
 
 /* EZ-mode power-ups (shown above the keyboard when EZ mode is on) */
 .powerups { display: flex; gap: 8px; width: 100%; max-width: 520px; margin: 0 auto; padding: 0 8px 6px; }

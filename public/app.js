@@ -33,6 +33,7 @@ const DEFAULT_SETTINGS = {
   colorBlind: false,
   reducedMotion: false,
   ezMode: false,
+  keyboardLayout: "qwerty",
 };
 function getSettings() {
   try {
@@ -1228,13 +1229,37 @@ function renderKeyboard(me) {
 
 // --- Keyboard build & input ---
 
+const KEYBOARD_LAYOUTS = {
+  qwerty: ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"],
+  azerty: ["AZERTYUIOP", "QSDFGHJKLM", "WXCVBN"],
+};
+const KEYBOARD_LAYOUT_LABELS = { qwerty: "QWERTY", azerty: "AZERTY" };
+
+function activeLayoutId() {
+  const id = getSettings().keyboardLayout;
+  return KEYBOARD_LAYOUTS[id] ? id : "qwerty";
+}
+
+let keyboardWired = false;
 function buildKeyboard() {
-  const rows = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
+  const layoutId = activeLayoutId();
+  const rows = KEYBOARD_LAYOUTS[layoutId];
   const root = $("#keyboard");
   root.innerHTML = "";
   rows.forEach((letters, idx) => {
+    const isLast = idx === rows.length - 1;
     const row = document.createElement("div");
-    row.className = "kb-row" + (idx === 1 ? " middle" : "");
+    // QWERTY's short middle row gets centered padding; AZERTY's rows align on their own.
+    row.className = "kb-row" + (layoutId === "qwerty" && idx === 1 ? " middle" : "");
+    // Enter sits at the FAR LEFT of the last row and ⌫ at the FAR RIGHT — the NYT
+    // Wordle convention everyone already has muscle memory for.
+    if (isLast) {
+      const enter = document.createElement("button");
+      enter.className = "key wide";
+      enter.textContent = "Enter";
+      enter.dataset.action = "enter";
+      row.appendChild(enter);
+    }
     for (const l of letters) {
       const k = document.createElement("button");
       k.className = "key";
@@ -1242,29 +1267,49 @@ function buildKeyboard() {
       k.dataset.key = l;
       row.appendChild(k);
     }
-    // Bottom row: backspace + ENTER on the right, matching iOS Return placement
-    // and the universal "submit lives at the end" convention.
-    if (idx === 2) {
+    if (isLast) {
       const back = document.createElement("button");
       back.className = "key wide";
       back.textContent = "⌫";
       back.dataset.action = "back";
       row.appendChild(back);
-      const enter = document.createElement("button");
-      enter.className = "key wide";
-      enter.textContent = "Enter";
-      enter.dataset.action = "enter";
-      row.appendChild(enter);
     }
     root.appendChild(row);
   });
-  root.addEventListener("click", (e) => {
-    const t = e.target.closest("button.key");
-    if (!t) return;
-    if (t.dataset.action === "enter") submitGuess();
-    else if (t.dataset.action === "back") backspace();
-    else if (t.dataset.key) typeLetter(t.dataset.key);
-  });
+  // Attach the delegated click handler exactly once. innerHTML clears children on
+  // every rebuild (e.g. a layout switch) but leaves this root listener intact.
+  if (!keyboardWired) {
+    keyboardWired = true;
+    root.addEventListener("click", (e) => {
+      const t = e.target.closest("button.key");
+      if (!t) return;
+      if (t.dataset.action === "enter") submitGuess();
+      else if (t.dataset.action === "back") backspace();
+      else if (t.dataset.key) typeLetter(t.dataset.key);
+    });
+  }
+}
+
+// Settings: pick QWERTY / AZERTY. Rebuilds the on-screen keyboard live. Physical
+// typing is unaffected — onPhysicalKey types by character, so layout is purely
+// the visual + click order.
+function renderLayoutPicker(rootEl) {
+  rootEl.innerHTML = "";
+  const current = activeLayoutId();
+  for (const id of Object.keys(KEYBOARD_LAYOUTS)) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "edition-chip" + (id === current ? " is-active" : "");
+    btn.textContent = KEYBOARD_LAYOUT_LABELS[id] ?? id.toUpperCase();
+    btn.addEventListener("click", () => {
+      saveSettings({ ...getSettings(), keyboardLayout: id });
+      rootEl.querySelectorAll(".edition-chip").forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      buildKeyboard();
+      if (game.snapshot) render();
+    });
+    rootEl.appendChild(btn);
+  }
 }
 
 function onPhysicalKey(e) {
@@ -1968,6 +2013,9 @@ function openSettings() {
       toast("Theme applied", { duration: 1000 });
     });
   }
+
+  const layoutPicker = $("#layoutPicker");
+  if (layoutPicker) renderLayoutPicker(layoutPicker);
 
   const reset = $("#resetStatsBtn");
   if (reset) {
