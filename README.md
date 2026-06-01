@@ -2,7 +2,7 @@
 
 **Race your friends on the same word.** No password, no signup — pick a username, share a link, go. First across the line wins. Loser gets an explosion. 💥
 
-Live: **[wordle.goldenfoc.us](https://wordle.goldenfoc.us)**
+Live: **[wordul.com](https://wordul.com)**
 
 ```
    W O R D U L
@@ -93,7 +93,7 @@ npm test           # vitest run
 npm run deploy     # wrangler deploy
 ```
 
-Ships the Worker, static assets, and the Durable Object migration to Cloudflare. Production lives at **[wordle.goldenfoc.us](https://wordle.goldenfoc.us)**.
+Ships the Worker, static assets, and the Durable Object migration to Cloudflare. Production lives at **[wordul.com](https://wordul.com)** (the legacy alias `wordle.goldenfoc.us` still resolves but canonicalizes to wordul.com).
 
 ## Notes
 
