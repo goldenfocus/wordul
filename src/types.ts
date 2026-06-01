@@ -1,6 +1,6 @@
 import type { Color } from "./color.ts";
 import type { UserStats } from "./stats.ts";
-import type { GameRecord } from "./records.ts";
+import type { GameRecord, RoomGame } from "./records.ts";
 import type { RoomScore } from "./scoreboard.ts";
 
 export type OwnedRoom = { slug: string; name: string; lastPlayedAt: number };
@@ -52,6 +52,7 @@ export type RoomSnapshot = {
   wordLength: number;      // letters per guess (4-12)
   maxGuesses: number;      // rows per board, derived from wordLength
   scoreboard: RoomScore[];
+  history: RoomGame[];     // finished games in this room, newest last (capped)
 };
 
 export type ClientMessage =

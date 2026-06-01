@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { WORDS_BY_SIZE, isSupportedSize } from "./wordsbysize.ts";
 import { scoreGuess, countVowels, revealUngreened } from "./color.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
-import { buildGameRecords } from "./records.ts";
+import { buildGameRecords, summarizeRoomGame } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
 import type {
   ChatEntry,
@@ -51,6 +51,7 @@ export class Room extends DurableObject<Env> {
       wordLength: DEFAULT_LENGTH,
       maxGuesses: guessesFor(DEFAULT_LENGTH),
       scoreboard: [],
+      history: [],
     };
     // Async restore — DO ctor can't await, so we kick it off and gate writes via blockConcurrencyWhile.
     ctx.blockConcurrencyWhile(async () => {
@@ -58,6 +59,7 @@ export class Room extends DurableObject<Env> {
       if (restored) {
         if (!Array.isArray(restored.chat)) restored.chat = [];
         if (!Array.isArray(restored.scoreboard)) restored.scoreboard = [];
+        if (!Array.isArray(restored.history)) restored.history = [];
         if (!restored.wordLength) restored.wordLength = DEFAULT_LENGTH;
         if (!restored.maxGuesses) restored.maxGuesses = guessesFor(restored.wordLength);
         this.state = restored;
@@ -384,6 +386,17 @@ export class Room extends DurableObject<Env> {
       winner: this.state.winner,
       participants: this.state.players.map((p) => p.username),
     });
+    // Append a compact summary to the room's game history (newest last, keep last 20).
+    this.state.history.push(
+      summarizeRoomGame({
+        round: this.state.round,
+        word: this.state.word ?? "",
+        winner: this.state.winner,
+        finishedAt: this.state.finishedAt ?? Date.now(),
+        players: this.state.players.map((p) => ({ username: p.username, status: p.status, guesses: p.guesses.length })),
+      }),
+    );
+    if (this.state.history.length > 20) this.state.history = this.state.history.slice(-20);
     const records = buildGameRecords({
       roomPath: this.state.path,
       word: this.state.word ?? "",

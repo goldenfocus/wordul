@@ -17,6 +17,35 @@ type FinishedPlayer = { username: string; status: "won" | "lost" | "playing"; gu
 
 const outcome = (s: FinishedPlayer["status"]): GameOutcome => (s === "won" ? "won" : "lost");
 
+// One compact summary per finished game, kept in room state for the Games tab.
+export type RoomGame = {
+  round: number;
+  word: string;
+  winner: string | null;
+  solo: boolean;
+  finishedAt: number;
+  players: { username: string; result: GameOutcome; guesses: number }[];
+};
+
+// Pure: build a single room-history entry from the finished players + meta.
+export function summarizeRoomGame(params: {
+  round: number;
+  word: string;
+  winner: string | null;
+  finishedAt: number;
+  players: FinishedPlayer[];
+}): RoomGame {
+  const { round, word, winner, finishedAt, players } = params;
+  return {
+    round,
+    word,
+    winner,
+    solo: players.length === 1,
+    finishedAt,
+    players: players.map((p) => ({ username: p.username, result: outcome(p.status), guesses: p.guesses })),
+  };
+}
+
 export function buildGameRecords(params: {
   roomPath: string;
   word: string;
