@@ -3,6 +3,7 @@
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
 import { applyEdition, getActiveEditionId, getGold, earnGold, companionReact } from "/edition.js";
+import { speakLine } from "/voice.js";
 
 // Apply the active edition at module load (before motion consts read WordulMotion).
 applyEdition(getActiveEditionId());
@@ -555,14 +556,33 @@ function renderGoldHud() {
 
 // Surface the active edition's companion line for an event, reusing the toast.
 function showCompanion(event, ctx) {
-  const { text, speak } = companionReact(event, ctx);
+  const { text, raw, speak } = companionReact(event, ctx);
   if (!text) return;
   toast(text, { duration: 3200 });
-  if (speak && window.speechSynthesis) {
-    // VOICE: swap speechSynthesis for cloned-voice audio here later
-    try { window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch (e) {}
-  }
+  // Look up the clip by the RAW template; fall back to speaking the substituted text.
+  if (speak) speakLine(getActiveEditionId(), raw, text);
 }
+
+// --- Idle taunts: the companion checks in when you go quiet mid-game. ---
+let idleTimer = null;
+const IDLE_FIRST_MS = 22000;
+const IDLE_REPEAT_MS = 34000;
+
+function isMyTurn() {
+  const me = game.snapshot?.players.find((p) => p.username === getUsername());
+  return !!(game.snapshot && game.snapshot.phase === "playing" && me && me.status === "playing");
+}
+function clearIdle() { if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; } }
+function armIdle(delay = IDLE_FIRST_MS) {
+  clearIdle();
+  if (!isMyTurn()) return;
+  idleTimer = setTimeout(() => {
+    if (!isMyTurn()) { clearIdle(); return; } // re-check at fire time
+    showCompanion("idle");
+    armIdle(IDLE_REPEAT_MS);
+  }, delay);
+}
+function resetIdle() { armIdle(IDLE_FIRST_MS); }
 
 // SPA navigation: pushState + re-dispatch the router.
 function navigate(path) {
@@ -748,12 +768,15 @@ function onServerMessage(msg) {
     // every player's screen at once. Late joiners (prev === null) don't get it.
     if (prev && prev.phase !== "playing" && msg.room.phase === "playing") {
       triggerStartCelebration();
+      resetIdle();
     }
     const me = msg.room.players.find((p) => p.username === getUsername());
     const prevMe = prev?.players.find((p) => p.username === getUsername());
     // Server accepted our guess → clear pending letters.
     if (me && prevMe && me.guesses.length > prevMe.guesses.length) {
       game.pending = "";
+      // A valid guess landed. If it didn't end the game, the companion reacts.
+      if (me.status === "playing") { showCompanion("wrong"); resetIdle(); }
     }
     // Two ways to end the game from my perspective:
     //   (a) phase transitions to finished (someone won, or everyone is done)
@@ -771,6 +794,7 @@ function onServerMessage(msg) {
     flashShake();
     const reason = msg.reason || "not a word";
     toast(`${reason} — doesn't count, try again`, { error: true, duration: 2500 });
+    showCompanion("invalid");
   } else if (msg.type === "error") {
     toast(msg.message || "Error", { error: true });
   }
@@ -1135,13 +1159,16 @@ function typeLetter(l) {
   if (game.pending.length >= game.snapshot.wordLength) return;
   game.pending += l.toUpperCase();
   render();
+  resetIdle();
 }
 function backspace() {
   if (game.pending.length === 0) return;
   game.pending = game.pending.slice(0, -1);
   render();
+  resetIdle();
 }
 function submitGuess() {
+  resetIdle();
   const len = game.snapshot?.wordLength ?? 5;
   if (game.pending.length !== len) {
     flashShake();
@@ -1288,6 +1315,7 @@ function pickJoke(arr, winnerName) {
 function handleGameOver(snap) {
   const me = snap.players.find((p) => p.username === getUsername());
   if (!me) return;
+  clearIdle();
   const won = me.status === "won";
   const guessCount = me.guesses.length;
   recordResult(won, guessCount);
@@ -1304,6 +1332,7 @@ function handleGameOver(snap) {
     );
   } else {
     // Loss: let the player's last row flip first (if they made one), THEN explode.
+    showCompanion("loss", { answer: snap.word });
     const lastFlipDoneAt = guessCount > 0 ? 1500 : 200;
     setTimeout(() => triggerLoseSequence(snap, me), lastFlipDoneAt);
   }
