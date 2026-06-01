@@ -31,9 +31,24 @@ export function buildKeyboard(root, layoutId, handlers) {
   if (!root) return;
   const rows = KEYBOARD_LAYOUTS[activeLayoutId(layoutId)];
   root.innerHTML = "";
+  // Make every LETTER key the same width across ALL rows (not just within a row): give
+  // each row the same total flex "units" by padding the shorter rows with end spacers.
+  // units = letters (1 each) + a wide key (1.5) on rows 0/1. Deficit vs the widest row is
+  // split as a spacer on each end → all letters render at rowWidth / maxUnits.
+  const WIDE = 1.5;
+  const units = rows.map((letters, idx) => letters.length + (idx <= 1 ? WIDE : 0));
+  const maxUnits = Math.max(...units);
+  const spacer = (flex) => {
+    const s = document.createElement("div");
+    s.className = "kb-spacer";
+    s.style.flex = `${flex} 1 0`;
+    return s;
+  };
   rows.forEach((letters, idx) => {
     const row = document.createElement("div");
     row.className = "kb-row";
+    const pad = (maxUnits - units[idx]) / 2; // split the deficit across both ends
+    if (pad > 0) row.appendChild(spacer(pad));
     for (const l of letters) {
       const k = document.createElement("button");
       k.className = "key";
@@ -56,10 +71,17 @@ export function buildKeyboard(root, layoutId, handlers) {
       enter.dataset.action = "enter";
       row.appendChild(enter);
     }
+    if (pad > 0) row.appendChild(spacer(pad));
     root.appendChild(row);
   });
   if (root.dataset.kbWired !== "1") {
     root.dataset.kbWired = "1";
+    // Keys must NOT steal focus: a focused key button would swallow a physical Enter
+    // (the browser "activates" the focused button on Enter instead of letting
+    // onPhysicalKey submit the guess). preventing mousedown's default keeps focus off.
+    root.addEventListener("mousedown", (e) => {
+      if (e.target.closest("button.key")) e.preventDefault();
+    });
     root.addEventListener("click", (e) => {
       const t = e.target.closest("button.key");
       if (!t) return;

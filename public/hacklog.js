@@ -59,7 +59,7 @@ export function createHacklog(mountEl, opts = {}) {
   const queue = [];          // pending lines to type (so calls never interleave)
   let typing = false;        // is the typewriter loop currently running?
   let typeTimer = null;      // active per-char interval id
-  let collapsed = false;     // ticker vs full scrollback
+  let collapsed = true;      // ticker vs full scrollback — DEFAULT one-line ticker (mobile-pure)
 
   // Render the collapsed ticker from the most recent entry.
   function renderTicker() {
@@ -159,6 +159,6 @@ export function createHacklog(mountEl, opts = {}) {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
   });
 
-  renderTicker();
+  applyState(); // reflect the default collapsed (one-line ticker) state on mount
   return { logLine, addInstant, collapse, expand, getEntries, clear };
 }

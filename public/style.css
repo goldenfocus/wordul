@@ -133,40 +133,43 @@ body {
   100% { transform: translate(-50%, -180%) scale(1.05); opacity: 0; }
 }
 
-/* The hacker-log — a transient green-on-dark terminal that types out the payout
-   line-by-line near the board, then collapses to a 1-line ticker. */
+/* The hacker-log — pinned ABOVE the board as a ONE-LINE ticker (the last event); tap to
+   expand the full scrollback as an OVERLAY that drops over the board, never pushing layout
+   (so the board↔keyboard column stays unbroken on mobile). */
 .hacklog {
-  width: 100%; max-width: 520px; margin: 4px auto;
+  position: relative;
+  width: 100%; max-width: 520px; margin: 0 auto 6px;
+  font-family: ui-monospace, SF Mono, Menlo, monospace;
+  font-size: 12.5px; line-height: 1.5;
+}
+.hacklog-ticker {
+  display: block;
+  padding: 5px 12px; cursor: pointer;
   border: 1px solid color-mix(in srgb, var(--green) 45%, var(--border));
   border-radius: 8px;
   background: color-mix(in srgb, var(--green) 7%, #0a0c0a);
-  font-family: ui-monospace, SF Mono, Menlo, monospace;
-  font-size: 12.5px;
-  line-height: 1.5;
-  overflow: hidden;
-  box-shadow: inset 0 0 24px color-mix(in srgb, var(--green) 14%, transparent);
-}
-.hacklog-body {
-  max-height: 140px;
-  overflow-y: auto;
-  padding: 8px 12px;
   color: color-mix(in srgb, var(--green) 80%, #d9ffe4); /* phosphor green */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--green) 12%, transparent);
 }
+.hacklog-ticker:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.hacklog-body {
+  display: none;
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 40;
+  max-height: 200px; overflow-y: auto;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--green) 45%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--green) 7%, #0a0c0a);
+  color: color-mix(in srgb, var(--green) 80%, #d9ffe4);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45), inset 0 0 18px color-mix(in srgb, var(--green) 12%, transparent);
+}
+/* Expanded (ticker tapped) drops the scrollback as an overlay. Default state = collapsed. */
+.hacklog:not(.collapsed) .hacklog-body { display: block; }
 .hacklog-line { white-space: pre-wrap; word-break: break-word; }
 .hacklog-line.gain { color: var(--accent); }
 .hacklog-line.loss { color: var(--error); }
 .hacklog-line.combo { color: var(--accent); font-weight: 800; }
-.hacklog-ticker {
-  display: none;
-  padding: 6px 12px;
-  cursor: pointer;
-  color: color-mix(in srgb, var(--green) 80%, #d9ffe4);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.hacklog-ticker:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* Collapsed: hide the scrollback, show only the 1-line ticker. */
-.hacklog.collapsed .hacklog-body { display: none; }
-.hacklog.collapsed .hacklog-ticker { display: block; }
 
 /* Blinking cursor on the next tile to fill; tap the active row to clear it. */
 .grid-row.input-row { cursor: pointer; }
@@ -936,18 +939,19 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
    keys within a row are pixel-identical — I and O measure the same (no flexbox
    subpixel drift). Keys cap at 46px and shrink with the track on narrow screens;
    wide keys (⌫ / Enter) span two tracks for their larger footprint. */
+/* Flex rows + per-row end spacers (set inline by buildKeyboard) so every letter key is
+   identical WITHIN and ACROSS rows — each row totals the same flex units. Fits any width
+   (flex), no subpixel drift. Wide keys (⌫/Enter) are 1.5×; spacers absorb the slack. */
 .kb-row {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 6px;
+  display: flex;
   justify-content: center;
+  gap: 6px;
 }
-.kb-row.middle { padding: 0 5%; }
+.kb-spacer { flex: 0.5 1 0; } /* per-row flex overridden inline */
 .key {
+  flex: 1 1 0;
+  min-width: 0;
   max-width: 46px;
-  justify-self: center;
-  width: 100%;
   min-height: 58px;
   background: var(--key-bg);
   color: var(--fg);
@@ -960,7 +964,7 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
   transition: background 0.15s, opacity 0.15s, transform 0.05s;
 }
 .key:active { transform: scale(0.95); }
-.key.wide { grid-column: span 2; max-width: 80px; font-size: 13px; }
+.key.wide { flex: 1.5 1 0; max-width: 70px; font-size: 13px; }
 .key.green { background: var(--green); color: white; }
 .key.yellow { background: var(--yellow); color: white; }
 /* Dead (absent) letters fade back so the live board pops. Colored keys stay vivid. */
@@ -991,7 +995,8 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 .give-up-icon:hover { box-shadow: 0 0 0 3px rgba(255,56,56,0.18); }
 .give-up-icon:active { transform: scale(0.92); }
 .magic-popover {
-  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  /* The magic-bar now sits ABOVE the board, so the popover opens DOWNWARD. */
+  position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
   display: flex; gap: 8px; padding: 8px;
   background: var(--bg-card, var(--key-bg)); border: 1px solid var(--border);
   border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 30;

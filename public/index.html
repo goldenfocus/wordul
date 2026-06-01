@@ -154,18 +154,19 @@
     </nav>
 
     <div id="tabPlay" class="room-tab-panel">
-      <div id="boards" class="boards"></div>
-      <div id="messageRow" class="message-row" aria-live="polite"></div>
-
+      <!-- Top cluster: one-line hacker-log ticker + the ✨/💀 affordances, kept ABOVE the
+           board. Nothing ever sits between the board and the keyboard — on mobile that gap
+           gets eaten by the on-screen keyboard / forces a scroll. -->
       <div id="hacklog" class="hacklog" hidden></div>
-
-      <p id="powerHints" class="power-hints" hidden></p>
       <div class="magic-bar">
         <button id="magicBtn" class="magic-icon" type="button" title="Power-ups" aria-label="Power-ups" aria-haspopup="true" hidden>✨</button>
         <button id="giveUpBtn" class="give-up-icon" type="button" title="Give up" aria-label="Give up" hidden>💀</button>
         <div id="magicPopover" class="magic-popover" role="menu" aria-label="Power-ups" hidden></div>
       </div>
+      <p id="powerHints" class="power-hints" hidden></p>
 
+      <div id="boards" class="boards"></div>
+      <div id="messageRow" class="message-row" aria-live="polite"></div>
       <div id="keyboard" class="keyboard" aria-label="On-screen keyboard"></div>
     </div>
 
