@@ -19,7 +19,18 @@ export const GOLD = {
   speedPerGuessLeft: 300, // × unused guesses — solve fast, earn more
   revealCost: 4000,       // a letter is a splurge (gold is precious)
   vowelCost: 200,         // a cheap, frequent nudge
+  // --- Loss penalties (C2): wins AND losses cost gold, so play stays legible. ---
+  invalidPenalty: 50,        // submit a non-word → lose gold (still doesn't burn a slot)
+  wastedLetterPenalty: 50,   // reuse a known-dead letter in an accepted guess (per letter, base)
+  wastedCapPerGuess: 200,    // cap so one all-dead guess can't nuke you in a single shot
 };
+
+// Repeating the SAME mistake costs progressively more. `reuseCount` is how many times
+// THIS dead letter was already wasted earlier this game (0 on the first reuse). Linear
+// curve: 1st reuse = base, 2nd = 2×base, 3rd = 3×base… Tunable (spec "Open tuning").
+export function escalatedPenalty(base, reuseCount) {
+  return base * (Math.max(0, reuseCount) + 1);
+}
 
 // Multiple discoveries in ONE guess pay a combo bonus: 2→1.5×, 3→2×, 4→2.5×, 5→3×.
 export function comboMultiplier(discoveries) {
@@ -38,6 +49,26 @@ export function awardGold(delta, reducedMotion) {
   if (!reducedMotion) spawnGoldCoins(Math.min(28, Math.max(6, Math.round(delta / 18))));
   animateCount(hud, before, after);
   hud.classList.remove("gold-bump"); void hud.offsetWidth; hud.classList.add("gold-bump");
+}
+
+// Drain gold — awardGold in reverse. The balance tweens DOWN, the HUD flashes a red
+// "loss" bump, and a descending de-tune chime plays instead of coin-rain. Honors the
+// gold-sum/clamp contract: edition.js setGold clamps at 0 today, so a drain at a broke
+// balance is a visible no-op (before === after) — bankruptcy (C4, separate area) lifts
+// that clamp; we deliberately don't touch it here. The red hacker-log line is emitted
+// by the CALLER (so its text matches the trigger), not here — goldDrain stays generic.
+// Signature mirrors awardGold(delta, reducedMotion); `amount` is the positive drain.
+export function goldDrain(amount, reducedMotion, playChime) {
+  if (!amount || amount <= 0) return;
+  const before = getGold();
+  addGold(-amount);
+  let hud = document.getElementById("goldHud");
+  if (!hud) { renderGoldHud(); hud = document.getElementById("goldHud"); }
+  if (!hud) return;
+  const after = getGold();
+  animateCount(hud, before, after);
+  hud.classList.remove("gold-bump-loss"); void hud.offsetWidth; hud.classList.add("gold-bump-loss");
+  if (!reducedMotion && typeof playChime === "function") playChime([[392, 0], [330, 0.08]]); // descending: a sad trombone, lite
 }
 
 // Tween the balance number old→new with an easeOutCubic so it visibly climbs.

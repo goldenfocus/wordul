@@ -4,8 +4,8 @@ import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
 import { applyEdition, getActiveEditionId, getGold, spendGold, companionReact, renderEditionPicker } from "/edition.js";
 import { speakLine } from "/voice.js";
-import { newGreensInLast, orderedDiscoveriesInLast } from "/celebrate.js";
-import { GOLD, comboMultiplier, awardGold, renderGoldHud, playPayoutSequence } from "/gold.js";
+import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
+import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence } from "/gold.js";
 import { createHacklog } from "/hacklog.js";
 
 // Apply the active edition at module load (before motion consts read WordulMotion).
@@ -485,6 +485,9 @@ const game = {
   // (from another player's snapshot) doesn't orphan the tiles the payout is glowing.
   replay: [],
   payingOut: false,
+  // Loss penalties (C2): per-GAME map of dead-letter (uppercase) → times already
+  // wasted this game. The first reuse costs the base penalty; each repeat escalates.
+  deadLetterReuse: new Map(),
 };
 // The hacker-log terminal: lazily mounted into #hacklog on first payout, reused
 // across guesses within a room, cleared per round. reducedMotion is read live.
@@ -880,6 +883,32 @@ function onServerMessage(msg) {
         const guessIndex = me.guesses.length - 1;
         const flipDoneMs = me.guesses[guessIndex].word.length * REVEAL_STAGGER_MS + REVEAL_FLIP_HALF_MS;
 
+        // Loss penalty (C2): reusing a known-dead letter (proven wrong by a PRIOR guess,
+        // duplicate-letter safe) drains gold per wasted letter, capped per guess. Repeat
+        // the SAME mistake and it escalates via game.deadLetterReuse. We read-then-increment
+        // the Map NOW (deterministic, once per accepted guess); the drain itself is deferred
+        // so it lands AFTER the win payout finishes — never racing the HUD tween.
+        const wasted = wastedDeadLettersInLast(me.guesses);
+        let penalty = 0;
+        const penaltyLines = [];
+        for (const letter of wasted.letters) {
+          const reuse = game.deadLetterReuse.get(letter) ?? 0;
+          const pen = escalatedPenalty(GOLD.wastedLetterPenalty, reuse);
+          penalty += pen;
+          penaltyLines.push(`wasted  ${letter}  −${pen}`);
+          game.deadLetterReuse.set(letter, reuse + 1);
+        }
+        penalty = Math.min(penalty, GOLD.wastedCapPerGuess);
+        // Drain + red log lines. Caller owns the line text; goldDrain stays generic.
+        if (penalty > 0) game.goldThisRound = (game.goldThisRound || 0) - penalty;
+        const runDrain = () => {
+          if (penalty <= 0) return;
+          const reducedMotion = getSettings().reducedMotion;
+          goldDrain(penalty, reducedMotion, playChime);
+          const log = getHacklog();
+          for (const line of penaltyLines) log?.logLine(line, { tone: "loss" });
+        };
+
         if (discoveries > 0) {
           const balanceBefore = getGold();
           // Record the structured replay entry up front (deterministic: balanceAfter =
@@ -910,9 +939,16 @@ function onServerMessage(msg) {
               reducedMotion,
             }).finally(() => {
               game.payingOut = false;
-              if (log) setTimeout(() => log.collapse(), 700);
+              // Drain AFTER the award sequence resolves so the two HUD tweens never race
+              // on the same #goldHud (animateCount has no cancel guard). A short beat lets
+              // the win land before the loss bites.
+              if (penalty > 0) setTimeout(runDrain, 350);
+              if (log) setTimeout(() => log.collapse(), penalty > 0 ? 1100 : 700);
             });
           }, flipDoneMs);
+        } else if (penalty > 0) {
+          // No discoveries this guess — no payout to wait on; drain once the row flips.
+          setTimeout(runDrain, flipDoneMs);
         }
         // Yang keeps its green party; other editions only get nudged on a dud guess.
         if (getActiveEditionId() === "yang" && ng >= 1) {
@@ -935,11 +971,22 @@ function onServerMessage(msg) {
     render();
   } else if (msg.type === "invalid_guess") {
     // Letters are still in game.pending — we never cleared them. Shake the row and
-    // toast prominently, but DON'T burn a guess slot.
+    // toast prominently, but DON'T burn a guess slot. The gold is the cost (C2).
     flashShake();
     const reason = msg.reason || "not a word";
     toast(`${reason} — doesn't count, try again`, { error: true, duration: 2500 });
     showCompanion("invalid");
+    // Penalty: a non-word submit drains gold (clamped at 0) + a red hacker-log line.
+    // game.pending still holds the rejected letters (we never cleared them above).
+    const rejected = (game.pending || "").toUpperCase();
+    const reducedMotion = getSettings().reducedMotion;
+    goldDrain(GOLD.invalidPenalty, reducedMotion, playChime);
+    game.goldThisRound = (game.goldThisRound || 0) - GOLD.invalidPenalty;
+    const log = getHacklog();
+    log?.logLine(
+      `rejected  ${rejected || reason}  −${GOLD.invalidPenalty}`,
+      { tone: "loss" },
+    );
   } else if (msg.type === "revealed_letter") {
     game.pendingReveal = false;
     // Charge only when this is genuinely new info (immune to duplicate responses).
@@ -1047,6 +1094,8 @@ function resetPowerHints(round) {
   // Clearer-wins: a fresh round starts an empty replay + a cleared hacker-log.
   game.replay = [];
   game.payingOut = false;
+  // Loss penalties (C2): escalation is per-game, so a fresh round forgets old mistakes.
+  game.deadLetterReuse = new Map();
   if (hacklog) {
     hacklog.clear();
     const el = $("#hacklog");

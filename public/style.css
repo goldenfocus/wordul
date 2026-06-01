@@ -77,6 +77,15 @@ body {
   30% { transform: scale(1.22); color: #fff; }
   100% { transform: scale(1); }
 }
+/* A red shake when gold DRAINS (a wasted guess / invalid word) — losses read too. */
+.gold-hud.gold-bump-loss { animation: gold-bump-loss 0.5s ease; }
+@keyframes gold-bump-loss {
+  0% { transform: translateX(0); }
+  20% { transform: translateX(-4px); color: var(--error); }
+  50% { transform: translateX(4px); color: var(--error); }
+  80% { transform: translateX(-2px); color: var(--error); }
+  100% { transform: translateX(0); }
+}
 
 /* Gold raining from the sky on a payout. */
 .gold-coin {

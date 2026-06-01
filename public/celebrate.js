@@ -72,3 +72,64 @@ export function orderedDiscoveriesInLast(guesses) {
   }
   return out;
 }
+
+// --- Loss-side knowledge: which letters the player has PROVEN are dead. ---
+// A letter is "dead" (the answer contains zero copies) only when it is gray
+// SOMEWHERE and is NEVER green or yellow at ANY position in ANY guess. The two-pass
+// rule is load-bearing: scoreGuess (src/color.ts) gives a duplicate letter one
+// colored + one gray tile, so a letter can be gray at one column and green/yellow at
+// another while the answer DOES contain it — flagging that as dead would wrongly
+// penalize reuse. Mirrors the dup-safe discipline of newGreensInLast. Pure + testable.
+// Returns a Set<string> of UPPERCASE dead letters.
+export function deadLettersFrom(guesses) {
+  if (!guesses || guesses.length === 0) return new Set();
+  // Pass A: every letter that is green OR yellow anywhere — the answer contains it.
+  const good = new Set();
+  for (const g of guesses) {
+    if (!g || !g.mask) continue;
+    const word = g.word || "";
+    for (let i = 0; i < g.mask.length; i++) {
+      if (g.mask[i] === "green" || g.mask[i] === "yellow") {
+        good.add((word[i] || "").toUpperCase());
+      }
+    }
+  }
+  // Pass B: a gray letter that never appears in `good` is truly dead.
+  const dead = new Set();
+  for (const g of guesses) {
+    if (!g || !g.mask) continue;
+    const word = g.word || "";
+    for (let i = 0; i < g.mask.length; i++) {
+      if (g.mask[i] === "gray") {
+        const c = (word[i] || "").toUpperCase();
+        if (c && !good.has(c)) dead.add(c);
+      }
+    }
+  }
+  return dead;
+}
+
+// Which already-proven-dead letters did the player WASTE by reusing them in the most
+// recent accepted guess? Knowledge is derived from PRIOR guesses only (guesses before
+// the last) — never let the current guess's own grays mark a letter dead and then
+// penalize that same guess for a first-time discovery. Returns UNIQUE dead letters
+// reused (deduped per-letter so the same dead letter typed twice counts once — matches
+// the per-letter escalation Map the caller keys on). Pure + testable.
+// Returns { letters: string[], count: number }.
+export function wastedDeadLettersInLast(guesses) {
+  if (!guesses || guesses.length < 2) return { letters: [], count: 0 };
+  const last = guesses[guesses.length - 1];
+  if (!last || !last.word) return { letters: [], count: 0 };
+  const dead = deadLettersFrom(guesses.slice(0, -1)); // knowledge BEFORE the last guess
+  const seen = new Set();
+  const letters = [];
+  const word = last.word || "";
+  for (let i = 0; i < word.length; i++) {
+    const c = (word[i] || "").toUpperCase();
+    if (dead.has(c) && !seen.has(c)) {
+      seen.add(c);
+      letters.push(c);
+    }
+  }
+  return { letters, count: letters.length };
+}
