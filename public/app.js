@@ -10,6 +10,7 @@ import { createHacklog } from "/hacklog.js";
 import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, surfaceGiveUp, checkBankruptcy } from "/powerups.js";
 import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, detectLayout } from "/keyboard.js";
 import { getSettings, saveSettings, applySettings, openSettings, openHub } from "/settings.js";
+import { MODES, isAvailableMode } from "/modes.js";
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
 
@@ -888,6 +889,7 @@ function connect() {
       username: getUsername(),
       wordLength: getPreferredLength(),
       edition: getActiveEditionId(), // seeds a fresh room with the creator's theme
+      mode: "race", // only valid selectable mode today
     });
     // Kick off heartbeat so the path stays warm.
     startHeartbeat();
@@ -1277,6 +1279,7 @@ function render() {
     lobby.hidden = false;
     endControls.hidden = true;
     syncLengthSelect(snap);
+    syncModePicker(snap);
     syncLobbyEdition();
     startBtn.hidden = false;
     $("#lobbyHint").textContent = snap.players.length < 2
@@ -1285,11 +1288,15 @@ function render() {
   } else if (snap.phase === "playing") {
     lobby.hidden = true;
     endControls.hidden = true;
+    const mc = $("#modeControl"); if (mc) mc.hidden = true;
   } else if (snap.phase === "finished") {
     lobby.hidden = true;
     endControls.hidden = false;
     rematchBtn.hidden = false;
+    const mc = $("#modeControl"); if (mc) mc.hidden = true;
   }
+
+  syncModeChip(snap);
 
   // Chat is social — keep it out of sight while you're playing solo, and only
   // surface it (inline on desktop, 💬 button on mobile) once someone else is in
@@ -1427,6 +1434,68 @@ function updateChatBadge() {
     topBadge.hidden = !mobileUnread;
     if (mobileUnread) topBadge.textContent = String(game.unreadChat);
   }
+}
+
+function syncModePicker(snap) {
+  const list = $("#modeList");
+  const control = $("#modeControl");
+  if (!list || !control) return;
+  control.hidden = false;
+  $("#modeHeading").textContent = t("mode.heading");
+
+  // Build rows once.
+  if (list.children.length === 0) {
+    for (const id of Object.keys(MODES)) {
+      const li = document.createElement("li");
+      li.className = "mode-row";
+      li.dataset.mode = id;
+      li.setAttribute("role", "radio");
+
+      const main = document.createElement("div");
+      main.className = "mode-row-main";
+      const label = document.createElement("span");
+      label.className = "mode-row-label";
+      label.textContent = t(`mode.${id}.label`);
+      const blurb = document.createElement("span");
+      blurb.className = "mode-row-blurb";
+      blurb.textContent = t(`mode.${id}.blurb`);
+      main.append(label, blurb);
+
+      const tag = document.createElement("span");
+      tag.className = "mode-row-tag";
+      li.append(main, tag);
+
+      if (isAvailableMode(id)) {
+        li.tabIndex = 0;
+        const choose = () => send({ type: "set_mode", mode: id });
+        li.addEventListener("click", choose);
+        li.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(); }
+        });
+      } else {
+        li.classList.add("locked");
+        li.setAttribute("aria-disabled", "true");
+        tag.textContent = `${t("mode.comingSoon")} 🔒`;
+      }
+      list.appendChild(li);
+    }
+  }
+
+  // Reflect current selection from the snapshot (server is source of truth).
+  for (const li of list.children) {
+    const selected = li.dataset.mode === snap.mode;
+    li.classList.toggle("selected", selected);
+    li.setAttribute("aria-checked", selected ? "true" : "false");
+  }
+}
+
+function syncModeChip(snap) {
+  const chip = $("#modeChip");
+  if (!chip) return;
+  chip.textContent = t(`mode.${snap.mode}.label`);
+  // Read-only chip shows whenever the interactive picker is hidden (playing /
+  // finished) — late-joiners mid-play still see the mode.
+  chip.hidden = snap.phase === "lobby";
 }
 
 function syncLengthSelect(snap) {
