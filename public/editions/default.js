@@ -15,7 +15,7 @@ export const edition = {
     body: "'Instrument Sans', system-ui, sans-serif",
     link: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600&display=swap",
   },
-  motion: { revealStaggerMs: 200, flipHalfMs: 280 },
+  motion: { revealStaggerMs: 110, flipHalfMs: 200 },
   sound: { voice: { rate: 1.0, pitch: 1.0, on: true } },
   companion: {
     name: "Wordul",

@@ -70,7 +70,7 @@ describe("createHacklog", () => {
     expect(el.classList.contains("collapsed")).toBe(true);
     const ticker = el.querySelector(".hacklog-ticker");
     expect(ticker.textContent).toContain("> last");
-    expect(ticker.textContent).toContain("[tap to expand]");
+    expect(ticker.textContent).toContain("▸");
     log.expand();
     expect(el.classList.contains("collapsed")).toBe(false);
   });

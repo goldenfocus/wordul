@@ -64,7 +64,7 @@ export function createHacklog(mountEl, opts = {}) {
   // Render the collapsed ticker from the most recent entry.
   function renderTicker() {
     const last = entries[entries.length - 1];
-    ticker.textContent = last ? `▸ ${last.text}  [tap to expand]` : "▸ [tap to expand]";
+    ticker.textContent = last ? `▸ ${last.text}` : "▸";
   }
 
   // Reflect collapsed/expanded state on the DOM.

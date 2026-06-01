@@ -554,8 +554,8 @@ function getMyFreshTile(colIndex) {
   }
   return null;
 }
-const REVEAL_STAGGER_MS = window.WordulMotion?.revealStaggerMs ?? 220;
-const REVEAL_FLIP_HALF_MS = window.WordulMotion?.flipHalfMs ?? 275; // matches the tile-reveal keyframe halfway point
+const REVEAL_STAGGER_MS = window.WordulMotion?.revealStaggerMs ?? 110;
+const REVEAL_FLIP_HALF_MS = window.WordulMotion?.flipHalfMs ?? 200; // matches the tile-reveal keyframe halfway point (0.4s flip)
 
 function showRoom(owner, slug) {
   leaveRoom(); // tear down any prior room's socket so room->room nav can't leave a zombie WS
@@ -1304,19 +1304,25 @@ function renderChat(snap) {
     log.textContent = "";
     game.lastChatLen = 0;
   }
+  const appended = chat.length - game.lastChatLen;
+  let notifyCount = 0;
   for (let i = game.lastChatLen; i < chat.length; i++) {
-    log.appendChild(renderChatRow(chat[i]));
+    const e = chat[i];
+    log.appendChild(renderChatRow(e));
+    // Only notify for meaningful entries: system join/quit lines, or a non-empty
+    // message from someone else. Blank entries and your own messages don't ping.
+    const hasText = (e.text || "").trim().length > 0;
+    if (e.kind === "system" ? hasText : (hasText && e.from !== getUsername())) notifyCount++;
   }
-  const newCount = chat.length - game.lastChatLen;
   game.lastChatLen = chat.length;
-  if (newCount > 0) {
+  if (appended > 0) {
     const panel = $("#chatPanel");
     const sheetOpen = panel?.classList.contains("sheet-open");
     const visible = isMobile() ? sheetOpen : !game.chatCollapsed;
     if (visible) {
       scrollChatToBottom();
-    } else {
-      game.unreadChat += newCount;
+    } else if (notifyCount > 0) {
+      game.unreadChat += notifyCount;
     }
     updateChatBadge();
   }
@@ -1685,6 +1691,18 @@ function triggerStartCelebration() {
   spawnConfetti(40);
 }
 
+// Solve celebration: a big "SOLVED!" pop + confetti so winning the word lands as an
+// event, not just a quiet toast. Reuses the GO! burst styling (green, centered).
+function triggerWinCelebration() {
+  if (getSettings().reducedMotion) return;
+  const burst = document.createElement("div");
+  burst.className = "go-burst win-burst";
+  burst.textContent = "SOLVED!";
+  document.body.appendChild(burst);
+  setTimeout(() => burst.remove(), 1300);
+  spawnConfetti(48);
+}
+
 const CONFETTI_COLORS = ["#538d4e", "#c9b458", "#6aaa64", "#ffd166", "#9d4edd", "#4cc9f0", "#ef476f"];
 function spawnConfetti(pieces) {
   for (let i = 0; i < pieces; i++) {
@@ -1703,10 +1721,22 @@ function spawnConfetti(pieces) {
 
 // A short sparkle chime via Web Audio. Honors the global mute toggle.
 let audioCtx = null;
+// iOS/Safari start an AudioContext "suspended" until a user gesture resumes it. Our
+// first chime is fired by a network message (a guess result), not a tap — so without
+// this the context stays suspended and mobile hears nothing. Unlock on the first touch.
+function unlockAudio() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  } catch { /* audio is a nice-to-have */ }
+}
+window.addEventListener("pointerdown", unlockAudio, { once: true });
+window.addEventListener("touchend", unlockAudio, { once: true });
 function playChime(notes) {
   if (localStorage.getItem("wordul.muted") === "1") return;
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
     const t0 = audioCtx.currentTime;
     notes.forEach(([freq, at], i) => {
       const osc = audioCtx.createOscillator();
@@ -1851,6 +1881,8 @@ function handleGameOver(snap) {
     if (winLog) for (const ev of winEvents) {
       winLog.logLine(`${ev.kind}${ev.letter ? " " + String(ev.letter).toUpperCase() : ""}  +${ev.delta}`, { tone: "gain" });
     }
+    triggerWinCelebration();
+    playChime([[523, 0], [659, 0.1], [784, 0.2], [1047, 0.32]]);
     showCompanion("win");
     // Same gentle pacing as before — wait for the final row's flip to finish.
     setTimeout(

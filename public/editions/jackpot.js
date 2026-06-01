@@ -16,7 +16,7 @@ export const edition = {
     body: "'Chakra Petch', system-ui, sans-serif",
     link: "https://fonts.googleapis.com/css2?family=Bungee&family=Chakra+Petch:wght@400;500;600;700&display=swap",
   },
-  motion: { revealStaggerMs: 160, flipHalfMs: 240 },
+  motion: { revealStaggerMs: 100, flipHalfMs: 200 },
   sound: { voice: { rate: 1.0, pitch: 1.0, on: true } },
   companion: {
     name: "The House",

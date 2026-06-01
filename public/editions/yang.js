@@ -15,7 +15,7 @@ export const edition = {
     body: "'Instrument Sans', system-ui, sans-serif",
     link: "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap",
   },
-  motion: { revealStaggerMs: 170, flipHalfMs: 250 },
+  motion: { revealStaggerMs: 105, flipHalfMs: 200 },
   sound: { voice: { rate: 1.0, pitch: 1.0, on: true } },
   companion: {
     name: "Yang",

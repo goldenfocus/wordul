@@ -15,7 +15,7 @@ export const edition = {
     body: "'JetBrains Mono', ui-monospace, monospace",
     link: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,900&family=JetBrains+Mono:wght@400;500;700&display=swap",
   },
-  motion: { revealStaggerMs: 220, flipHalfMs: 290 },
+  motion: { revealStaggerMs: 125, flipHalfMs: 200 },
   sound: { voice: { rate: 0.98, pitch: 0.98, on: true } },
   companion: {
     name: "The Editor",

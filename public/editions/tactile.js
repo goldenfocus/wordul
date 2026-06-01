@@ -15,7 +15,7 @@ export const edition = {
     body: "'Outfit', system-ui, sans-serif",
     link: "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Outfit:wght@400;500;600;700&display=swap",
   },
-  motion: { revealStaggerMs: 190, flipHalfMs: 270 },
+  motion: { revealStaggerMs: 110, flipHalfMs: 200 },
   sound: { voice: { rate: 1.0, pitch: 1.02, on: true } },
   companion: {
     name: "Coach",
