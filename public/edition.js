@@ -19,6 +19,7 @@ export function setGold(n) {
 // bankruptcy mechanic can push gold negative. Floors (no fractional gold) but never
 // clamps. getGold reads the raw value back (parseInt handles a leading "-").
 function setGoldSigned(n) {
+  if (!Number.isFinite(n)) return getGold(); // never persist NaN — a bad write would silently wipe the bank on next read
   const v = Math.floor(n);
   localStorage.setItem(LS.gold, String(v));
   return v;

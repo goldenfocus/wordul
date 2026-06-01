@@ -179,7 +179,7 @@ export function playPayoutSequence(opts = {}) {
         tone: "gain",
       });
     }
-    if (hasCombo) log?.addInstant(`✦ ${mult}× COMBO  +${bonus}`, { tone: "combo" });
+    if (hasCombo) log?.addInstant(`> ✦ ${mult}× COMBO  +${bonus}`, { tone: "combo" });
     onBalanceChange?.();
     return Promise.resolve();
   }

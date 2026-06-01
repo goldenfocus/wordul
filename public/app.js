@@ -468,6 +468,10 @@ const game = {
   // (from another player's snapshot) doesn't orphan the tiles the payout is glowing.
   replay: [],
   payingOut: false,
+  // Clearer-wins: ids of the deferred payout/drain timers, so leaving the room or
+  // starting a new round can cancel them before they fire off-screen (which would
+  // mutate the persistent gold balance unseen + run a bankruptcy check on a stale snapshot).
+  payoutTimers: [],
   // Loss penalties (C2): per-GAME map of dead-letter (uppercase) → times already
   // wasted this game. The first reuse costs the base penalty; each repeat escalates.
   deadLetterReuse: new Map(),
@@ -514,6 +518,23 @@ function recordReplayEntry(entry) {
   try {
     localStorage.setItem(replayKey(), JSON.stringify(game.replay));
   } catch { /* storage full / disabled — the in-memory replay still drives the end-screen */ }
+}
+// Schedule a deferred payout/drain step, tracking its id so leaveRoom()/resetRound()
+// can cancel it. If the room is gone by the time it fires, it no-ops (we don't touch
+// gold for a room we've left). See game.payoutTimers.
+function deferPayout(fn, ms) {
+  const id = setTimeout(() => {
+    game.payoutTimers = game.payoutTimers.filter((t) => t !== id);
+    if (!game.snapshot) return;
+    fn();
+  }, ms);
+  game.payoutTimers.push(id);
+  return id;
+}
+function clearPayoutTimers() {
+  for (const t of game.payoutTimers) clearTimeout(t);
+  game.payoutTimers = [];
+  game.payingOut = false;
 }
 // Resolve a tile in MY board's freshly-flipped row by column index, re-querying each
 // beat so a board repaint mid-payout never targets a detached node. MY board is the
@@ -908,7 +929,7 @@ function onServerMessage(msg) {
       game.pending = "";
       // A valid guess landed. If it didn't end the game, the companion reacts —
       // and in Yang's edition, new greens get a scaled celebration instead.
-      if (me.status === "playing") {
+      if (me.status === "playing" && !game.hasShownEndStats) {
         // Gold flows on progress for EVERY edition: new greens + yellows pay out, with
         // a combo multiplier for multiple hits in one shot. Clearer wins: instead of one
         // lump coin-burst, we SEQUENCE the payout — yellows first, then greens, each its
@@ -949,6 +970,7 @@ function onServerMessage(msg) {
         if (penalty > 0) game.goldThisRound = (game.goldThisRound || 0) - penalty;
         const runDrain = () => {
           if (penalty <= 0) return;
+          if (!game.snapshot || game.hasShownEndStats) return; // game ended / left room — don't drain off-screen
           const reducedMotion = getSettings().reducedMotion;
           goldDrain(penalty, reducedMotion, playChime);
           const log = getHacklog();
@@ -972,9 +994,12 @@ function onServerMessage(msg) {
           game.goldThisRound = (game.goldThisRound || 0) + total;
           const reducedMotion = getSettings().reducedMotion;
           const log = getHacklog();
+          // Set payingOut NOW (not inside the deferred timer): during the ~flip window
+          // another player's snapshot could repaint #boards and orphan my animating row.
+          // renderBoards preserves my board while payingOut is true.
+          game.payingOut = true;
           // Start the payout after the row finishes flipping, so coins land as colors do.
-          setTimeout(() => {
-            game.payingOut = true;
+          deferPayout(() => {
             playPayoutSequence({
               discoveries: discoveryList,
               mult,
@@ -989,13 +1014,13 @@ function onServerMessage(msg) {
               // Drain AFTER the award sequence resolves so the two HUD tweens never race
               // on the same #goldHud (animateCount has no cancel guard). A short beat lets
               // the win land before the loss bites.
-              if (penalty > 0) setTimeout(runDrain, 350);
-              if (log) setTimeout(() => log.collapse(), penalty > 0 ? 1100 : 700);
+              if (penalty > 0) deferPayout(runDrain, 350);
+              if (log) deferPayout(() => log.collapse(), penalty > 0 ? 1100 : 700);
             });
           }, flipDoneMs);
         } else if (penalty > 0) {
           // No discoveries this guess — no payout to wait on; drain once the row flips.
-          setTimeout(runDrain, flipDoneMs);
+          deferPayout(runDrain, flipDoneMs);
         }
         // Yang keeps its green party; other editions only get nudged on a dud guess.
         if (getActiveEditionId() === "yang" && ng >= 1) {
@@ -1023,7 +1048,11 @@ function onServerMessage(msg) {
     const reason = msg.reason || "not a word";
     toast(`${reason} — doesn't count, try again`, { error: true, duration: 2500 });
     showCompanion("invalid");
-    // Penalty: a non-word submit drains gold (clamped at 0) + a red hacker-log line.
+    // Only MY live turn is penalized: a late / duplicate / out-of-phase reject must not
+    // silently subtract gold or inch me toward the 💀 offer with no visible cause.
+    const meNow = game.snapshot?.players.find((p) => p.username === getUsername());
+    if (!meNow || meNow.status !== "playing" || game.hasShownEndStats) return;
+    // Penalty: a non-word submit drains gold + a red hacker-log line.
     // game.pending still holds the rejected letters (we never cleared them above).
     const rejected = (game.pending || "").toUpperCase();
     const reducedMotion = getSettings().reducedMotion;
@@ -1143,7 +1172,7 @@ function resetRound(round) {
   game.goldThisRound = 0; // per-round earnings, shown as your score on the end screen
   // Clearer-wins: a fresh round starts an empty replay + a cleared hacker-log.
   game.replay = [];
-  game.payingOut = false;
+  clearPayoutTimers(); // cancel any pending payout/drain from the prior round + reset payingOut
   // Loss penalties (C2): escalation is per-game, so a fresh round forgets old mistakes.
   game.deadLetterReuse = new Map();
   if (hacklog) {
@@ -1425,6 +1454,10 @@ function onPhysicalKey(e) {
   if (game.snapshot.phase !== "playing") return;
   const me = game.snapshot.players.find((p) => p.username === getUsername());
   if (!me || me.status !== "playing") return;
+  // A give-up / bankruptcy ends the game from MY side without a server status change
+  // (server still says "playing"). Once that's happened, input is closed — otherwise you
+  // could keep typing, re-trigger payouts, even "win" after a loss was recorded.
+  if (game.hasShownEndStats) return;
 
   if (isEnter) { submitGuess(); e.preventDefault(); }
   else if (e.key === "Backspace") { backspace(); e.preventDefault(); }
@@ -1446,6 +1479,7 @@ function backspace() {
 }
 function submitGuess() {
   resetIdle();
+  if (game.hasShownEndStats) return; // locally forfeited/bankrupt — input is closed (server may still say "playing")
   const len = game.snapshot?.wordLength ?? 5;
   if (game.pending.length !== len) {
     flashShake();
@@ -1687,11 +1721,24 @@ function handleGameOver(snap) {
     // Solve bonus + speed bonus (fewer guesses = richer) + the winning row's greens.
     const maxGuesses = snap.maxGuesses ?? 6;
     const finalGreens = newGreensInLast(me.guesses);
-    const winGold = GOLD.solve
-      + GOLD.speedPerGuessLeft * Math.max(0, maxGuesses - guessCount)
-      + finalGreens * GOLD.green;
+    const speedBonus = GOLD.speedPerGuessLeft * Math.max(0, maxGuesses - guessCount);
+    const winGold = GOLD.solve + speedBonus + finalGreens * GOLD.green;
     awardGold(winGold, getSettings().reducedMotion);
     game.goldThisRound = (game.goldThisRound || 0) + winGold;
+    // Clearer-wins: the solve is the climactic turn — capture it in the replay + hacker-log
+    // so "your run, line by line" ends ON the win and its gold, not one guess short. The gold
+    // was already awarded above; this only RECORDS it (shape matches the gated server viewer).
+    const winEvents = [];
+    for (const d of orderedDiscoveriesInLast(me.guesses)) {
+      if (d.kind === "green") winEvents.push({ kind: "green", index: d.index, letter: d.letter, delta: GOLD.green });
+    }
+    winEvents.push({ kind: "solve", delta: GOLD.solve });
+    if (speedBonus > 0) winEvents.push({ kind: "speed", delta: speedBonus });
+    recordReplayEntry({ guessIndex: guessCount - 1, events: winEvents, combo: null, balanceAfter: getGold() });
+    const winLog = getHacklog();
+    if (winLog) for (const ev of winEvents) {
+      winLog.logLine(`${ev.kind}${ev.letter ? " " + String(ev.letter).toUpperCase() : ""}  +${ev.delta}`, { tone: "gain" });
+    }
     showCompanion("win");
     // Same gentle pacing as before — wait for the final row's flip to finish.
     setTimeout(
@@ -1790,8 +1837,11 @@ function renderReplayInto(parent) {
       const line = document.createElement("div");
       line.className = `endgame-replay-line ${ev.delta >= 0 ? "gain" : "loss"}`;
       const sign = ev.delta >= 0 ? "+" : "−";
+      // Tile events carry a letter + index; the solve/speed bonuses don't — render them plainly.
+      const label = String(ev.letter || "").toUpperCase();
+      const pos = Number.isInteger(ev.index) ? ` pos ${ev.index + 1}` : "";
       line.textContent =
-        `${ev.kind} ${String(ev.letter || "").toUpperCase()} pos ${ev.index + 1}  ${sign}${Math.abs(ev.delta)}`;
+        `${ev.kind}${label ? " " + label : ""}${pos}  ${sign}${Math.abs(ev.delta)}`;
       box.appendChild(line);
     }
     if (turn.combo && turn.combo.discoveries >= 2) {
@@ -2214,6 +2264,7 @@ function toggleMute() {
 // Tear down any live room connection when leaving a room view.
 function leaveRoom() {
   stopHeartbeat();
+  clearPayoutTimers(); // cancel any pending payout/drain so it can't fire off-screen + mutate gold
   if (game.ws) {
     try { game.ws.onclose = null; game.ws.close(); } catch {}
     game.ws = null;

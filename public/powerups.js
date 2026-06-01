@@ -189,7 +189,6 @@ function openMagicPopover(ctx) {
   setTimeout(() => document.addEventListener("click", onDocClickToClose, true), 0);
 }
 
-let magicWired = false;
 // Render the ✨ icon: shown only when affordable; tap toggles the affordable-only
 // popover. Also keeps the persistent hints text in sync. Mirrors the old
 // renderPowerups contract (called from app.js render()).
@@ -213,8 +212,11 @@ export function renderPowerups(ctx, snap, me) {
     if (pop) closeMagicPopover();
   }
 
-  if (!magicWired) {
-    magicWired = true;
+  // Per-node guard (NOT a module flag): #magicBtn is re-cloned on every room mount
+  // (mount() does innerHTML="" + cloneNode), so a module-level boolean would leave the
+  // fresh button unwired on the 2nd+ room — the dataset flag rides the node itself.
+  if (btn.dataset.wired !== "1") {
+    btn.dataset.wired = "1";
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const p = document.getElementById("magicPopover");
@@ -256,7 +258,6 @@ export function surfaceGiveUp(ctx) {
   renderGiveUp(ctx, snap, me);
 }
 
-let giveUpWired = false;
 // Render the 💀 icon: visible only when it's my turn AND I'm stuck. Wires the tap once.
 function renderGiveUp(ctx, snap, me) {
   const { game } = ctx;
@@ -264,8 +265,9 @@ function renderGiveUp(ctx, snap, me) {
   if (!btn) return;
   const myTurn = !!(snap && snap.phase === "playing" && me && me.status === "playing");
   btn.hidden = !(myTurn && isStuck(game));
-  if (!giveUpWired) {
-    giveUpWired = true;
+  // Per-node guard (see #magicBtn note): the 💀 button is re-cloned on each room mount.
+  if (btn.dataset.wired !== "1") {
+    btn.dataset.wired = "1";
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       giveUp(ctx);
