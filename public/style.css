@@ -954,7 +954,8 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s, transform 0.05s;
 }
-.key:active { transform: scale(0.95); }
+.key:active,
+.key.pressed { transform: scale(0.95); filter: brightness(1.18); }
 .key.wide {
   flex: 1.6 1 0;
   max-width: 70px;

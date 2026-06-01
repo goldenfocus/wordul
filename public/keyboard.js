@@ -76,18 +76,59 @@ export function buildKeyboard(root, layoutId, handlers) {
   });
   if (root.dataset.kbWired !== "1") {
     root.dataset.kbWired = "1";
-    // Keys must NOT steal focus: a focused key button would swallow a physical Enter
-    // (the browser "activates" the focused button on Enter instead of letting
-    // onPhysicalKey submit the guess). preventing mousedown's default keeps focus off.
-    root.addEventListener("mousedown", (e) => {
-      if (e.target.closest("button.key")) e.preventDefault();
-    });
-    root.addEventListener("click", (e) => {
-      const t = e.target.closest("button.key");
+
+    function fire(t) {
       if (!t) return;
       if (t.dataset.action === "enter") handlers.onEnter();
       else if (t.dataset.action === "back") handlers.onBack();
       else if (t.dataset.key) handlers.onLetter(t.dataset.key);
+    }
+    const keyAt = (x, y) => {
+      const el = document.elementFromPoint(x, y);
+      return el && el.closest ? el.closest("button.key") : null;
+    };
+
+    // Touch path — mimic the iOS keyboard so it stops feeling twitchy: the key only
+    // commits on RELEASE, the key under your finger updates as you slide (slide to
+    // correct a mis-tap), and lifting off any key cancels instead of firing. A gap
+    // tap registers nothing. We handle touch ourselves and swallow the synthesized
+    // click so it can't double-fire; mouse + synthetic .click() still use the click
+    // path below (keeps desktop + tests working).
+    let activeKey = null;
+    let suppressClick = false;
+    const press = (k) => {
+      if (activeKey && activeKey !== k) activeKey.classList.remove("pressed");
+      activeKey = k;
+      if (k) k.classList.add("pressed");
+    };
+    root.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse") { e.preventDefault(); return; } // focus off; let click handle it
+      const k = e.target.closest && e.target.closest("button.key");
+      if (!k) return;
+      e.preventDefault();
+      press(k);
+    });
+    root.addEventListener("pointermove", (e) => {
+      if (!activeKey) return;
+      const k = keyAt(e.clientX, e.clientY);
+      press(k); // null when slid into a gap → release there cancels
+    });
+    function endTouch(e) {
+      if (e.pointerType === "mouse") return;
+      const target = activeKey;
+      if (activeKey) { activeKey.classList.remove("pressed"); activeKey = null; }
+      // Commit the key under the lift-off point (slide-to-correct); none → cancel.
+      const k = (e.type === "pointerup") ? (keyAt(e.clientX, e.clientY) || target) : null;
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 400);
+      fire(k);
+    }
+    root.addEventListener("pointerup", endTouch);
+    root.addEventListener("pointercancel", endTouch);
+
+    root.addEventListener("click", (e) => {
+      if (suppressClick) return; // touch already handled this
+      fire(e.target.closest("button.key"));
     });
   }
 }
