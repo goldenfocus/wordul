@@ -9,7 +9,8 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "voice:render": "node scripts/voice/render.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251101.0",
