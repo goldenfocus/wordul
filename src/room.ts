@@ -339,23 +339,29 @@ export class Room extends DurableObject<Env> {
     if (allGreen) {
       player.status = "won";
       if (!this.state.winner) this.state.winner = player.username;
+      // Announce the solve right away (others may still be racing) but WITHOUT the word:
+      // the per-viewer snapshot already gives the winner the answer; anyone still playing
+      // must not see it. The remaining players keep going for their own gold/score.
+      this.pushSystem(`${player.username} got it in ${player.guesses.length}!`);
     } else if (player.guesses.length >= this.state.maxGuesses) {
       player.status = "lost";
     }
-    if (this.isGameOver()) {
-      this.state.phase = "finished";
-      this.state.finishedAt = Date.now();
-      const winner = this.state.winner
-        ? this.state.players.find((p) => p.username === this.state.winner)
-        : null;
-      if (winner) {
-        this.pushSystem(`${winner.username} got it in ${winner.guesses.length}! The word was ${this.state.word}`);
-      } else {
-        this.pushSystem(`Nobody got it. The word was ${this.state.word}`);
-      }
-      await this.finishGame();
-    }
+    await this.maybeFinish();
     await this.persistAndBroadcast();
+  }
+
+  // Finish the round once every connected player is done — NOT the instant someone wins.
+  // The winner was already announced; here we just reveal the word to everyone and record.
+  private async maybeFinish(): Promise<void> {
+    if (!this.isGameOver()) return;
+    this.state.phase = "finished";
+    this.state.finishedAt = Date.now();
+    this.pushSystem(
+      this.state.winner
+        ? `The word was ${this.state.word}`
+        : `Nobody got it. The word was ${this.state.word}`,
+    );
+    await this.finishGame();
   }
 
   // A player gives up (💀 / bankruptcy). Mark them lost so others see them OUT, and so
@@ -367,21 +373,8 @@ export class Room extends DurableObject<Env> {
     const player = this.state.players.find((p) => p.username === username);
     if (!player || player.status !== "playing") return;
     player.status = "lost";
-    if (this.isGameOver()) {
-      this.state.phase = "finished";
-      this.state.finishedAt = Date.now();
-      const winner = this.state.winner
-        ? this.state.players.find((p) => p.username === this.state.winner)
-        : null;
-      if (winner) {
-        this.pushSystem(`${winner.username} got it in ${winner.guesses.length}! The word was ${this.state.word}`);
-      } else {
-        this.pushSystem(`Nobody got it. The word was ${this.state.word}`);
-      }
-      await this.finishGame();
-    } else {
-      this.pushSystem(`${username} gave up`);
-    }
+    if (!this.isGameOver()) this.pushSystem(`${username} gave up`);
+    await this.maybeFinish();
     await this.persistAndBroadcast();
   }
 
@@ -498,8 +491,8 @@ export class Room extends DurableObject<Env> {
   }
 
   private isGameOver(): boolean {
-    // Race ends as soon as someone wins OR all connected players have exhausted/lost.
-    if (this.state.winner) return true;
+    // The race no longer ends the instant someone wins — remaining players keep going
+    // for their own gold/score. It's over once every connected player is done (won/lost).
     const active = this.state.players.filter((p) => p.connected);
     if (active.length === 0) return false;
     return active.every((p) => p.status !== "playing");

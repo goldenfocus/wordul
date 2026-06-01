@@ -1082,13 +1082,15 @@ function onServerMessage(msg) {
         resetIdle();
       }
     }
-    // Two ways to end the game from my perspective:
-    //   (a) phase transitions to finished (someone won, or everyone is done)
+    // Three ways the game ends from my perspective (the room may keep running for others):
+    //   (a) phase transitions to finished (everyone is done)
     //   (b) I personally ran out of guesses while the room continues
-    // Either fires the lose sequence (handleGameOver branches on won/lost).
+    //   (c) I personally SOLVED it while the room continues — others race on for their gold
+    // Each fires my end sequence (handleGameOver branches on won/lost).
     const phaseEnded = prev && prev.phase !== "finished" && msg.room.phase === "finished";
     const personallyLost = prevMe?.status === "playing" && me?.status === "lost";
-    if ((phaseEnded || personallyLost) && !game.hasShownEndStats) {
+    const personallyWon = prevMe?.status === "playing" && me?.status === "won";
+    if ((phaseEnded || personallyLost || personallyWon) && !game.hasShownEndStats) {
       handleGameOver(msg.room);
     }
     render();
