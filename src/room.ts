@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { WORDS_BY_SIZE, isSupportedSize } from "./wordsbysize.ts";
 import { scoreGuess, countVowels, revealUngreened } from "./color.ts";
+import { computeNextGuess } from "./solver.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { buildGameRecords, summarizeRoomGame } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
@@ -22,6 +23,10 @@ const MAX_PLAYERS = 8;
 const MAX_CHAT = 40;
 const MAX_CHAT_LEN = 200;
 const CHAT_THROTTLE_MS = 800;
+
+// Slice 0 — "the robot room". Any room whose slug is this always has a worduler in it.
+const ROBOT_SLUG = "robots";
+const BOT_NAME = "clanker";
 
 // Normalize a client-supplied edition id to the charset edition ids use (lowercase
 // kebab). Empty/garbage collapses to "default". Not a whitelist — the client falls
@@ -257,6 +262,7 @@ export class Room extends DurableObject<Env> {
     if (username === this.state.owner) {
       void this.registerRoom();
     }
+    this.ensureBot();
     await this.persistAndBroadcast();
   }
 
@@ -359,6 +365,7 @@ export class Room extends DurableObject<Env> {
 
   private async onStart(ws: WebSocket): Promise<void> {
     if (this.state.phase === "playing") return;
+    this.ensureBot();
     if (this.state.players.length < 1) return;
     const pool = WORDS_BY_SIZE[this.state.wordLength];
     if (!pool || pool.answers.length === 0) {
@@ -378,6 +385,7 @@ export class Room extends DurableObject<Env> {
     }
     const who = this.userFor(ws) ?? "someone";
     this.pushSystem(`${who} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
+    if (this.state.players.some((p) => p.isBot && p.status === "playing")) this.scheduleBotTick();
     await this.persistAndBroadcast();
   }
 
@@ -404,7 +412,14 @@ export class Room extends DurableObject<Env> {
       return;
     }
 
-    const mask = scoreGuess(word, this.state.word);
+    await this.applyGuess(player, word);
+    await this.persistAndBroadcast();
+  }
+
+  // Shared guess core — both human onGuess (after validation) and the bot alarm call this,
+  // so there is exactly ONE scoring/win path. Assumes `word` is a validated uppercase guess.
+  private async applyGuess(player: PlayerState, word: string): Promise<void> {
+    const mask = scoreGuess(word, this.state.word!);
     player.guesses.push({ word, mask });
     const allGreen = mask.every((c) => c === "green");
     if (allGreen) {
@@ -418,7 +433,48 @@ export class Room extends DurableObject<Env> {
       player.status = "lost";
     }
     await this.maybeFinish();
+  }
+
+  // --- Slice 0: the robot room ------------------------------------------------------
+  // One themed room (slug "robots") always has a worduler. No memory, no Agent DO yet —
+  // it reasons only from its own guesses + the colors it got back, never the answer.
+
+  private isRobotRoom(): boolean {
+    return this.state.slug === ROBOT_SLUG;
+  }
+
+  private ensureBot(): void {
+    if (!this.isRobotRoom()) return;
+    if (this.state.players.some((p) => p.isBot)) return;
+    if (this.state.players.length >= MAX_PLAYERS) return;
+    this.state.players.push({ username: BOT_NAME, connected: true, guesses: [], status: "playing", isBot: true });
+    this.pushSystem(`🤖 ${BOT_NAME} powered on — knows the basics, holds no grudges.`);
+  }
+
+  private scheduleBotTick(): void {
+    // Human-paced and beatable ON PURPOSE. A slow "reading" beat before the opener,
+    // then a real think between rows. clanker is in no hurry — he thinks he's just a
+    // person playing a word game, and people are slow.
+    const bot = this.state.players.find((p) => p.isBot);
+    const opening = !bot || bot.guesses.length === 0;
+    const base = opening ? 6000 : 4000;
+    const delay = base + Math.floor(Math.random() * 6000); // opener 6–12s, then 4–10s
+    void this.ctx.storage.setAlarm(Date.now() + delay);
+  }
+
+  // DO alarm: the robot's heartbeat. Wakes, plays ONE guess through the same path a human
+  // guess takes, then reschedules until it has won or run out of rows. Hibernation-safe.
+  async alarm(): Promise<void> {
+    if (this.state.phase !== "playing" || !this.state.word) return;
+    const bot = this.state.players.find((p) => p.isBot && p.status === "playing");
+    if (!bot) return;
+    // Dad's brain drives our body: the solver sees ONLY a BotView (length + its own
+    // earned masks) — never this.state.word. The cheat-isolation wall stays intact.
+    const word = computeNextGuess({ wordLength: this.state.wordLength, ownGuesses: bot.guesses });
+    if (word) await this.applyGuess(bot, word);
     await this.persistAndBroadcast();
+    const stillGoing = this.state.players.some((p) => p.isBot && p.status === "playing");
+    if (stillGoing && this.state.phase === "playing") this.scheduleBotTick();
   }
 
   // Finish the round once every connected player is done — NOT the instant someone wins.

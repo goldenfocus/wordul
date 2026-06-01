@@ -29,6 +29,7 @@ export type PlayerState = {
   connected: boolean;
   guesses: GuessRow[];
   status: "playing" | "won" | "lost";
+  isBot?: boolean;         // a worduler — born in Wordul, plays from public masks only
 };
 
 export type RoomPhase = "lobby" | "playing" | "finished";
