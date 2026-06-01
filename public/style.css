@@ -937,6 +937,18 @@ body {
 .setting-name { font-size: 15px; font-weight: 600; }
 .setting-desc { color: var(--muted); font-size: 12px; margin-top: 2px; line-height: 1.35; }
 .setting-row.danger .setting-name { color: var(--error); }
+.setting-row.stack { flex-direction: column; align-items: stretch; gap: 10px; }
+.edition-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.edition-chip {
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  padding: 8px 14px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--bg-card, var(--bg));
+  color: var(--fg); font-family: var(--font-body); font-size: 13px; font-weight: 600;
+  transition: border-color .15s ease, background .15s ease, color .15s ease, transform .08s ease;
+}
+.edition-chip:hover { border-color: var(--accent); }
+.edition-chip:active { transform: scale(.97); }
+.edition-chip.is-active { border-color: var(--accent); background: var(--accent); color: var(--bg); }
 
 /* iOS-style toggle switch */
 .switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }

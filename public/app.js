@@ -2,7 +2,7 @@
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
-import { applyEdition, getActiveEditionId, getGold, earnGold, companionReact } from "/edition.js";
+import { applyEdition, getActiveEditionId, getGold, earnGold, companionReact, renderEditionPicker } from "/edition.js";
 import { speakLine } from "/voice.js";
 
 // Apply the active edition at module load (before motion consts read WordulMotion).
@@ -1762,6 +1762,17 @@ function openSettings() {
   wire(hm, "hardMode");
   wire(cb, "colorBlind");
   wire(rm, "reducedMotion");
+
+  // Theme/edition picker. Picking applies the edition live; re-apply settings so
+  // colorblind layers on top, and refresh the board to pick up new tile colors.
+  const picker = $("#editionPicker");
+  if (picker) {
+    renderEditionPicker(picker, () => {
+      applySettings(getSettings());
+      if (game.snapshot) render();
+      toast("Theme applied", { duration: 1000 });
+    });
+  }
 
   const reset = $("#resetStatsBtn");
   if (reset) {
