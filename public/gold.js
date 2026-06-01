@@ -12,12 +12,12 @@ import { getGold, addGold } from "/edition.js";
 
 // --- Gold economy: earn on progress, with combo multipliers, raining from the sky. ---
 export const GOLD = {
-  green: 25,             // each newly-revealed green
-  yellow: 8,             // each newly-revealed yellow
-  solve: 100,            // flat solve bonus
-  speedPerGuessLeft: 60, // × unused guesses — solve fast, earn more
-  revealCost: 1000,      // a letter is a splurge (gold is precious)
-  vowelCost: 150,        // a cheap, frequent nudge
+  green: 100,             // each newly-revealed green
+  yellow: 50,             // each newly-revealed yellow
+  solve: 500,             // flat solve bonus
+  speedPerGuessLeft: 300, // × unused guesses — solve fast, earn more
+  revealCost: 4000,       // a letter is a splurge (gold is precious)
+  vowelCost: 200,         // a cheap, frequent nudge
 };
 
 // Multiple discoveries in ONE guess pay a combo bonus: 2→1.5×, 3→2×, 4→2.5×, 5→3×.
