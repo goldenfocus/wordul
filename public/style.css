@@ -1384,6 +1384,57 @@ html[data-edition="jackpot"] .key.green { background: linear-gradient(#2bf07a, #
 html[data-edition="jackpot"] .key.yellow { background: linear-gradient(#ffe27a, #d9ad2f); color: #2a1d00; }
 html[data-edition="jackpot"] .key.gray { background: linear-gradient(#2a2438, #1a1726); }
 
+/* ===== Arcade edition — green-phosphor CRT, edition-scoped ===== */
+/* Faint scanlines + a vignette over the whole cabinet. */
+html[data-edition="arcade"] body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 60;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 2px, transparent 2px 4px),
+    radial-gradient(120% 90% at 50% 40%, transparent 60%, rgba(0,0,0,.4));
+  mix-blend-mode: multiply; opacity: .5;
+}
+html[data-edition="arcade"] .brand,
+html[data-edition="arcade"] .tagline { text-shadow: 0 0 12px rgba(57,255,151,.55); }
+html[data-edition="arcade"] .tile.green { box-shadow: 0 0 16px rgba(57,255,151,.45); }
+html[data-edition="arcade"] .tile.yellow { box-shadow: 0 0 14px rgba(202,165,58,.4); }
+html[data-edition="arcade"] .tile.filled { border-color: var(--accent); }
+html[data-edition="arcade"] .key {
+  border-radius: 7px; border-bottom: 2px solid #060a0e;
+  text-shadow: 0 0 8px rgba(57,255,151,.25);
+}
+html[data-edition="arcade"] .key.green { box-shadow: 0 0 12px rgba(57,255,151,.4); }
+
+/* ===== Editorial edition — newsprint, edition-scoped ===== */
+/* Crisp, near-square tiles and hairline rules; no glow. */
+html[data-edition="editorial"] .tile { border-radius: 2px; border-width: 1px; }
+html[data-edition="editorial"] .key { border-radius: 2px; border: 1px solid var(--border); }
+html[data-edition="editorial"] .lobby-bar { border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+html[data-edition="editorial"] .brand { letter-spacing: -.01em; }
+/* A masthead hairline under the wordmark for that printed-page feel. */
+html[data-edition="editorial"] .room-name { font-family: var(--font-display); font-weight: 900; }
+
+/* ===== Tactile edition — soft warm glass, edition-scoped ===== */
+html[data-edition="tactile"] body {
+  background-image:
+    radial-gradient(900px 600px at 12% -8%, rgba(255,154,82,.10), transparent 55%),
+    radial-gradient(800px 500px at 100% 6%, rgba(95,174,90,.10), transparent 55%);
+}
+html[data-edition="tactile"] .tile { border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 4px 10px rgba(0,0,0,.25); }
+html[data-edition="tactile"] .tile.green,
+html[data-edition="tactile"] .tile.yellow { border-color: transparent; }
+/* Glassy panels for the chrome, without touching layout. */
+html[data-edition="tactile"] .lobby-bar,
+html[data-edition="tactile"] .scoreboard {
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.10);
+  border-radius: 18px; backdrop-filter: blur(12px);
+}
+/* Chunky, pressable keycaps. */
+html[data-edition="tactile"] .key {
+  border-radius: 13px;
+  box-shadow: 0 3px 0 rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08);
+}
+html[data-edition="tactile"] .key:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,.35); }
+
 /* --- Room tabs (Play / Games / Players) --- */
 .room-tabs {
   display: flex;
