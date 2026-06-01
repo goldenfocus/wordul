@@ -14,6 +14,15 @@ export function setGold(n) {
   localStorage.setItem(LS.gold, String(v));
   return v;
 }
+// Signed writer: persists the balance WITHOUT the zero-clamp. The public balance
+// (setGold/addGold/spendGold) still clamps at 0; this exists only so the C4
+// bankruptcy mechanic can push gold negative. Floors (no fractional gold) but never
+// clamps. getGold reads the raw value back (parseInt handles a leading "-").
+function setGoldSigned(n) {
+  const v = Math.floor(n);
+  localStorage.setItem(LS.gold, String(v));
+  return v;
+}
 export function spendGold(cost) {
   const g = getGold();
   if (g < cost) return false;
@@ -22,6 +31,13 @@ export function spendGold(cost) {
 }
 export function addGold(delta) {
   return setGold(getGold() + delta);
+}
+// Drain gold WITHOUT clamping at 0 — the C4 bankruptcy primitive. Unlike spendGold
+// (affordability-gated) and addGold/setGold (clamped non-negative), this lets the
+// balance dip below zero so Hard Mode can run you into bankruptcy. `amount` is the
+// positive drain; returns the new (possibly negative) balance.
+export function drainGold(amount) {
+  return setGoldSigned(getGold() - amount);
 }
 
 let activeId = "default";

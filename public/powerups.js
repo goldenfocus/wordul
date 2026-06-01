@@ -1,17 +1,25 @@
 // Wordul — power-ups module.
-// Owns the reveal-a-letter / count-the-vowels power-ups and the ✨ magic icon that
-// surfaces them. The two server messages (`reveal_letter` / `vowel_count`) are
-// UNCHANGED — this module is purely the client gateway. EZ mode is retired: the
-// power-ups are always available, but the ✨ icon stays HIDDEN until you can afford
-// the cheapest still-buyable one, and the popover lists ONLY currently-affordable
-// power-ups as icons (no price — you learn the cost by watching the balance dip).
+// Owns the reveal-a-letter / count-the-vowels power-ups, the ✨ magic icon that
+// surfaces them, and the 💀 give-up / bankruptcy affordance (C4). The two server
+// messages (`reveal_letter` / `vowel_count`) are UNCHANGED — this module is purely the
+// client gateway. EZ mode is retired: the power-ups are always available, but the ✨
+// icon stays HIDDEN until you can afford the cheapest still-buyable one, and the
+// popover lists ONLY currently-affordable power-ups as icons (no price — you learn the
+// cost by watching the balance dip).
+//
+// C4 — gold can go NEGATIVE: power-up spends + penalties route through edition.js
+// drainGold (no zero-clamp). In HARD MODE, sinking past BANKRUPTCY_THRESHOLD ends the
+// game by bankruptcy. The 💀 icon surfaces when stuck (idle / too many errors) and
+// taps to give up = the same explosion in ANY mode. Both reuse the app-owned
+// triggerLoseSequence(snap, me) (passed via ctx), setting game.finishReason.
 //
 // Like gold.js, this module avoids importing app.js (which is the <script
 // type="module"> entry — importing it would cycle). The wiring instead receives a
 // `ctx` of app-owned callbacks: { game, send, render, toast, renderGoldHud,
-// getSettings, getGold, spendGold }. Pure selectors (affordablePowerups /
-// cheapestAvailableCost) are exported standalone for unit tests.
-import { GOLD } from "/gold.js";
+// getSettings, getGold, drainGold, getUsername, forfeit }. forfeit(reason)
+// records the loss + runs the lose explosion (fire-once). Pure selectors
+// (affordablePowerups / cheapestAvailableCost / isStuck) are exported for unit tests.
+import { GOLD, isBankrupt } from "/gold.js";
 
 // The catalogue. `icon` is what the popover shows; `cost` comes from gold.js; the
 // `available` predicate decides whether the power-up still has anything to offer this
@@ -66,6 +74,9 @@ export function resetPowerHints(game, round) {
   game.vowels = null;
   game.pendingReveal = false;
   game.pendingVowel = false;
+  // C4: a fresh round resets the 💀 stuck affordance (idle flag + per-round error count).
+  game.stuck = false;
+  game.errorCount = 0;
 }
 
 // Persist the accumulated hints (revealed positions + known vowel count) so learned
@@ -85,18 +96,20 @@ function renderPowerHints(game) {
 // --- Server-message handling ---
 
 // Apply a reveal/vowel reply: charge gold, record the hint, announce it. Returns true
-// if the message was a power-up reply (so the caller can early-return). Behaviour is
-// identical to the old inline branches — same charge, same toast, same render.
+// if the message was a power-up reply (so the caller can early-return). C4: the charge
+// goes through drainGold (no zero-clamp) so a buy can push the balance negative; after
+// charging we check Hard-Mode bankruptcy (a reveal at the brink can tip you under).
 export function handlePowerupMessage(ctx, msg) {
-  const { game, render, toast, renderGoldHud, spendGold } = ctx;
+  const { game, render, toast, renderGoldHud, drainGold } = ctx;
   if (msg.type === "revealed_letter") {
     game.pendingReveal = false;
     // Charge only when this is genuinely new info (immune to duplicate responses).
     if (!game.revealed.some((r) => r.index === msg.index)) {
       game.revealed.push({ index: msg.index, letter: msg.letter });
-      spendGold(GOLD.revealCost);
+      drainGold(GOLD.revealCost);
       toast(`Position ${msg.index + 1} is ${msg.letter}`, { duration: 2600 });
       renderGoldHud();
+      checkBankruptcy(ctx);
     }
     if (game.snapshot) render();
     return true;
@@ -105,9 +118,10 @@ export function handlePowerupMessage(ctx, msg) {
     game.pendingVowel = false;
     if (game.vowels == null) {
       game.vowels = msg.count;
-      spendGold(GOLD.vowelCost);
+      drainGold(GOLD.vowelCost);
       toast(`${msg.count} vowel${msg.count === 1 ? "" : "s"} in the word`, { duration: 2600 });
       renderGoldHud();
+      checkBankruptcy(ctx);
     }
     if (game.snapshot) render();
     return true;
@@ -208,4 +222,79 @@ export function renderPowerups(ctx, snap, me) {
       openMagicPopover(ctx);
     });
   }
+
+  // Keep the 💀 give-up affordance in sync on every render too.
+  renderGiveUp(ctx, snap, me);
+}
+
+// --- 💀 give-up + bankruptcy (C4) ---
+
+// How many invalid / not-enough-letter errors before the 💀 give-up affordance appears.
+// Tunable (spec "Open tuning"). The existing idle timer ALSO surfaces it (via app.js).
+export const STUCK_ERROR_THRESHOLD = 3;
+
+// True when the player is "stuck" enough to be offered a 💀 give-up: either the idle
+// timer flagged it (game.stuck) or they've racked up enough errors this round.
+export function isStuck(game) {
+  return !!game.stuck || (game.errorCount ?? 0) >= STUCK_ERROR_THRESHOLD;
+}
+
+// Bump the per-round error counter (invalid submit / not-enough-letters / hard-mode
+// violation) and surface 💀 once the threshold trips. Called from app.js's error paths.
+export function bumpErrorCount(ctx) {
+  const { game } = ctx;
+  game.errorCount = (game.errorCount ?? 0) + 1;
+  if (isStuck(game)) surfaceGiveUp(ctx);
+}
+
+// Flag the player as stuck (from the idle timer fire) and reveal 💀. Idempotent.
+export function surfaceGiveUp(ctx) {
+  const { game } = ctx;
+  game.stuck = true;
+  const snap = game.snapshot;
+  const me = snap?.players?.find?.((p) => p.username === ctx.getUsername?.());
+  renderGiveUp(ctx, snap, me);
+}
+
+let giveUpWired = false;
+// Render the 💀 icon: visible only when it's my turn AND I'm stuck. Wires the tap once.
+function renderGiveUp(ctx, snap, me) {
+  const { game } = ctx;
+  const btn = document.getElementById("giveUpBtn");
+  if (!btn) return;
+  const myTurn = !!(snap && snap.phase === "playing" && me && me.status === "playing");
+  btn.hidden = !(myTurn && isStuck(game));
+  if (!giveUpWired) {
+    giveUpWired = true;
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      giveUp(ctx);
+    });
+  }
+}
+
+// Give up immediately, in ANY mode → the same lose explosion as running out of guesses.
+// Delegates to the app-owned ctx.forfeit(reason), which records the loss
+// (recordResult(false)), guards fire-once (hasShownEndStats), and runs
+// triggerLoseSequence. Guarded here too so a stray tap after the end is a no-op.
+export function giveUp(ctx) {
+  const { game } = ctx;
+  const snap = game.snapshot;
+  if (!snap || snap.phase !== "playing" || game.hasShownEndStats) return;
+  const me = snap.players.find((p) => p.username === ctx.getUsername?.());
+  if (!me || me.status !== "playing") return;
+  ctx.forfeit("gave_up");
+}
+
+// Hard-Mode bankruptcy check — fires after any drain. Ends the game once gold sinks past
+// the threshold. Non-hard-mode never dies (gold just goes negative). Guarded fire-once
+// via game.hasShownEndStats so a balance already in the red can't re-trigger.
+export function checkBankruptcy(ctx) {
+  const { game, getGold, getSettings } = ctx;
+  const snap = game.snapshot;
+  if (!snap || snap.phase !== "playing" || game.hasShownEndStats) return;
+  if (!isBankrupt(getGold(), getSettings().hardMode)) return;
+  const me = snap.players.find((p) => p.username === ctx.getUsername?.());
+  if (!me || me.status !== "playing") return;
+  ctx.forfeit("bankrupt");
 }

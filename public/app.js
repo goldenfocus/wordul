@@ -2,12 +2,12 @@
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
-import { applyEdition, getActiveEditionId, getGold, spendGold, companionReact, renderEditionPicker } from "/edition.js";
+import { applyEdition, getActiveEditionId, getGold, drainGold, companionReact, renderEditionPicker } from "/edition.js";
 import { speakLine } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
 import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence } from "/gold.js";
 import { createHacklog } from "/hacklog.js";
-import { renderPowerups, resetPowerHints, handlePowerupMessage } from "/powerups.js";
+import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, surfaceGiveUp, checkBankruptcy } from "/powerups.js";
 
 // Apply the active edition at module load (before motion consts read WordulMotion).
 applyEdition(getActiveEditionId());
@@ -487,6 +487,11 @@ const game = {
   // Loss penalties (C2): per-GAME map of dead-letter (uppercase) → times already
   // wasted this game. The first reuse costs the base penalty; each repeat escalates.
   deadLetterReuse: new Map(),
+  // C4 — give-up / bankruptcy state. finishReason is how the game ended from MY view;
+  // stuck/errorCount surface the 💀 give-up affordance (reset per round by resetPowerHints).
+  finishReason: null, // 'solved' | 'lost' | 'bankrupt' | 'gave_up' | null
+  stuck: false,
+  errorCount: 0,
 };
 // Dependency bundle handed to the power-ups module (it must not import app.js — the
 // <script type="module"> entry — or the graph would cycle). All app-owned helpers it
@@ -499,7 +504,9 @@ const powerupsCtx = {
   renderGoldHud,
   getSettings,
   getGold,
-  spendGold,
+  drainGold,                                       // C4: power-up spends can dip gold negative
+  getUsername,                                     // resolve "me" inside the module
+  forfeit: (reason) => forfeit(reason),            // C4: give-up / bankruptcy — record loss + explode
 };
 // The hacker-log terminal: lazily mounted into #hacklog on first payout, reused
 // across guesses within a room, cleared per round. reducedMotion is read live.
@@ -671,6 +678,7 @@ function armIdle(delay = IDLE_FIRST_MS) {
   idleTimer = setTimeout(() => {
     if (!isMyTurn()) { clearIdle(); return; } // re-check at fire time
     showCompanion("idle");
+    surfaceGiveUp(powerupsCtx); // C4: idle long enough → offer the 💀 give-up escape hatch
     armIdle(IDLE_REPEAT_MS);
   }, delay);
 }
@@ -919,6 +927,7 @@ function onServerMessage(msg) {
           goldDrain(penalty, reducedMotion, playChime);
           const log = getHacklog();
           for (const line of penaltyLines) log?.logLine(line, { tone: "loss" });
+          checkBankruptcy(powerupsCtx); // C4: a wasted-letter drain may bankrupt Hard Mode
         };
 
         if (discoveries > 0) {
@@ -999,6 +1008,10 @@ function onServerMessage(msg) {
       `rejected  ${rejected || reason}  −${GOLD.invalidPenalty}`,
       { tone: "loss" },
     );
+    // C4: a rejected submit is an error (surfaces 💀 after enough) and a drain (may
+    // tip Hard Mode into bankruptcy).
+    bumpErrorCount(powerupsCtx);
+    checkBankruptcy(powerupsCtx);
   } else if (msg.type === "revealed_letter" || msg.type === "vowels") {
     handlePowerupMessage(powerupsCtx, msg);
   } else if (msg.type === "error") {
@@ -1082,7 +1095,8 @@ function render() {
 // / clearer-wins per-round state (owned here). Both halves reset together on the same
 // new-round snapshot hook.
 function resetRound(round) {
-  resetPowerHints(game, round); // ezRound, revealed, vowels, pending* (power-up state)
+  resetPowerHints(game, round); // ezRound, revealed, vowels, pending*, stuck, errorCount
+  game.finishReason = null; // C4: how this round ended, from my view — fresh each round
   game.goldThisRound = 0; // per-round earnings, shown as your score on the end screen
   // Clearer-wins: a fresh round starts an empty replay + a cleared hacker-log.
   game.replay = [];
@@ -1482,6 +1496,7 @@ function submitGuess() {
   if (game.pending.length !== len) {
     flashShake();
     toast("Not enough letters", { error: true, duration: 1400 });
+    bumpErrorCount(powerupsCtx); // C4: fumbling the length counts toward the 💀 give-up offer
     return;
   }
   const s = getSettings();
@@ -1491,6 +1506,7 @@ function submitGuess() {
     if (violation) {
       flashShake();
       toast(violation, { error: true, duration: 2200 });
+      bumpErrorCount(powerupsCtx); // C4: a hard-mode violation counts toward the 💀 offer too
       return;
     }
   }
@@ -1660,9 +1676,45 @@ const RACE_LOSE_JOKES = [
   "{who} is now in your contacts as \"better at Wordle\".",
 ];
 
+// C4: self-inflicted ends get their own roast. Tapping 💀 to give up…
+const GAVE_UP_JOKES = [
+  "You tapped the skull. The skull respects your honesty.",
+  "Strategic retreat! …is one way to put it.",
+  "Quitting: technically a decision. Bold of you.",
+  "You folded. The word never even broke a sweat.",
+  "Surrender accepted. Your dignity has been refunded in full.",
+  "Some words aren't worth fighting. This one definitely was. Oops.",
+];
+// …and bankrupting yourself in Hard Mode.
+const BANKRUPT_JOKES = [
+  "Bankrupt. You spent gold like it grew on tiles.",
+  "◆ in the red. Hard Mode sends its regards (and an invoice).",
+  "You bought your way to a loss. Truly the premium experience.",
+  "Negative gold, negative result. At least it's consistent.",
+  "The bank called. They'd like their gold back. All of it.",
+  "Hard Mode finally has teeth, and it just ate your wallet.",
+];
+
 function pickJoke(arr, winnerName) {
   const j = arr[Math.floor(Math.random() * arr.length)];
   return winnerName ? j.replace("{who}", winnerName) : j;
+}
+
+// C4: forfeit — give-up or bankruptcy ends the game from MY side WITHOUT a server
+// status change. Mirrors handleGameOver's bookkeeping (record the loss, guard
+// fire-once, stop the idle timer) so a forfeit counts exactly like running out of
+// guesses, then runs the lose explosion. `reason` is 'gave_up' | 'bankrupt'.
+function forfeit(reason) {
+  const snap = game.snapshot;
+  if (!snap || game.hasShownEndStats) return;
+  const me = snap.players.find((p) => p.username === getUsername());
+  if (!me) return;
+  clearIdle();
+  game.finishReason = reason;
+  recordResult(false, me.guesses.length); // a forfeit is a loss for local stats
+  game.hasShownEndStats = true;
+  showCompanion("loss", { answer: snap.word });
+  triggerLoseSequence(snap, me);
 }
 
 function handleGameOver(snap) {
@@ -1673,6 +1725,9 @@ function handleGameOver(snap) {
   const guessCount = me.guesses.length;
   recordResult(won, guessCount);
   game.hasShownEndStats = true;
+  // C4: record how the game ended (give-up / bankruptcy already set theirs before
+  // reaching here via forfeit, which short-circuits this path).
+  game.finishReason = won ? "solved" : "lost";
 
   if (won) {
     // Solve bonus + speed bonus (fewer guesses = richer) + the winning row's greens.
@@ -1701,9 +1756,13 @@ function triggerLoseSequence(snap, me) {
   game.exploding = true;
   const winner = snap.winner;
   const beatenBySomeone = winner && winner !== getUsername();
-  const joke = beatenBySomeone
-    ? pickJoke(RACE_LOSE_JOKES, winner)
-    : pickJoke(SOLO_LOSE_JOKES);
+  // C4: self-inflicted ends (gave up / went bankrupt) own the roast even in a race —
+  // you ended your own game, so the joke is about you, not the winner.
+  let joke;
+  if (game.finishReason === "gave_up") joke = pickJoke(GAVE_UP_JOKES);
+  else if (game.finishReason === "bankrupt") joke = pickJoke(BANKRUPT_JOKES);
+  else if (beatenBySomeone) joke = pickJoke(RACE_LOSE_JOKES, winner);
+  else joke = pickJoke(SOLO_LOSE_JOKES);
 
   // 1. Screen flash.
   const flash = document.createElement("div");

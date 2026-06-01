@@ -910,7 +910,7 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 /* ✨ Power-ups: one subtle magic icon, hidden until you can afford the cheapest
    power-up. Tapping opens a popover of currently-affordable power-ups — icons only,
    no price (you learn the cost by watching the balance dip). */
-.magic-bar { position: relative; display: flex; justify-content: center; width: 100%; max-width: 520px; margin: 0 auto; padding: 0 8px 6px; }
+.magic-bar { position: relative; display: flex; justify-content: center; gap: 10px; width: 100%; max-width: 520px; margin: 0 auto; padding: 0 8px 6px; }
 .magic-icon {
   width: 44px; height: 44px; border-radius: 50%;
   border: 1px solid var(--border); background: var(--bg-card, var(--key-bg));
@@ -920,6 +920,17 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 }
 .magic-icon:hover { border-color: var(--accent); }
 .magic-icon:active { transform: scale(0.92); }
+/* 💀 give-up: surfaces only when stuck (idle / too many errors). Tap = give up =
+   the same lose explosion in any mode. Reuses the magic-icon footprint; red tint. */
+.give-up-icon {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1px solid var(--error, #ff3838); background: var(--bg-card, var(--key-bg));
+  font-size: 20px; line-height: 1; cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s, transform 0.08s, box-shadow 0.15s;
+}
+.give-up-icon:hover { box-shadow: 0 0 0 3px rgba(255,56,56,0.18); }
+.give-up-icon:active { transform: scale(0.92); }
 .magic-popover {
   position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
   display: flex; gap: 8px; padding: 8px;

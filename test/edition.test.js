@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from "vitest";
-import { getGold, setGold, addGold, spendGold } from "/edition.js";
+import { getGold, setGold, addGold, spendGold, drainGold } from "/edition.js";
 
 beforeEach(() => localStorage.clear());
 
@@ -13,8 +13,28 @@ describe("wallet", () => {
     setGold(15); expect(spendGold(20)).toBe(false); expect(getGold()).toBe(15);
     expect(spendGold(10)).toBe(true); expect(getGold()).toBe(5);
   });
+  it("addGold/setGold still clamp at 0 (the public balance never goes negative)", () => {
+    setGold(10); expect(addGold(-50)).toBe(0); expect(getGold()).toBe(0);
+    expect(setGold(-99)).toBe(0);
+  });
   it("resets corrupt balance to 0", () => {
     localStorage.setItem("wordul.gold", "not-a-number"); expect(getGold()).toBe(0);
+  });
+});
+
+describe("drainGold (C4 — gold can go negative)", () => {
+  it("drains below zero (no clamp) and getGold reads the negative value back", () => {
+    setGold(100);
+    expect(drainGold(150)).toBe(-50);
+    expect(getGold()).toBe(-50);
+  });
+  it("keeps sinking on repeated drains (bankruptcy is reachable)", () => {
+    setGold(0);
+    drainGold(200); expect(getGold()).toBe(-200);
+    drainGold(200); expect(getGold()).toBe(-400);
+  });
+  it("a positive drain at a positive balance just subtracts", () => {
+    setGold(500); expect(drainGold(200)).toBe(300); expect(getGold()).toBe(300);
   });
 });
 

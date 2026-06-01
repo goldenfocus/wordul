@@ -9,7 +9,7 @@
 // back into app.js — app.js is the <script type="module"> entry, so importing it
 // here would cycle. The caller in app.js does `game.goldThisRound += delta` itself
 // right after awarding so per-round earnings stay app-owned.
-import { getGold, addGold } from "/edition.js";
+import { getGold, addGold, drainGold } from "/edition.js";
 
 // --- Gold economy: earn on progress, with combo multipliers, raining from the sky. ---
 export const GOLD = {
@@ -25,11 +25,24 @@ export const GOLD = {
   wastedCapPerGuess: 200,    // cap so one all-dead guess can't nuke you in a single shot
 };
 
+// C4 bankruptcy: gold may go negative; in HARD MODE ONLY, sinking past this floor ends
+// the game by bankruptcy (Hard Mode "finally has teeth"). Rescaled to the round numbers
+// above — a single legit reveal (4000) only fires bankruptcy when you were already deep
+// in the red, never from one buy at a healthy balance. Tunable (spec "Open tuning").
+export const BANKRUPTCY_THRESHOLD = -300;
+
 // Repeating the SAME mistake costs progressively more. `reuseCount` is how many times
 // THIS dead letter was already wasted earlier this game (0 on the first reuse). Linear
 // curve: 1st reuse = base, 2nd = 2×base, 3rd = 3×base… Tunable (spec "Open tuning").
 export function escalatedPenalty(base, reuseCount) {
   return base * (Math.max(0, reuseCount) + 1);
+}
+
+// Pure predicate (unit-tested): is this balance bankrupt? Bankruptcy is HARD-MODE-ONLY —
+// in normal play gold can sink arbitrarily negative with no death. The CALLER guards
+// fire-once (so a balance already past the floor doesn't re-trigger every render).
+export function isBankrupt(gold, hardMode) {
+  return !!hardMode && gold <= BANKRUPTCY_THRESHOLD;
 }
 
 // Multiple discoveries in ONE guess pay a combo bonus: 2→1.5×, 3→2×, 4→2.5×, 5→3×.
@@ -52,16 +65,16 @@ export function awardGold(delta, reducedMotion) {
 }
 
 // Drain gold — awardGold in reverse. The balance tweens DOWN, the HUD flashes a red
-// "loss" bump, and a descending de-tune chime plays instead of coin-rain. Honors the
-// gold-sum/clamp contract: edition.js setGold clamps at 0 today, so a drain at a broke
-// balance is a visible no-op (before === after) — bankruptcy (C4, separate area) lifts
-// that clamp; we deliberately don't touch it here. The red hacker-log line is emitted
-// by the CALLER (so its text matches the trigger), not here — goldDrain stays generic.
-// Signature mirrors awardGold(delta, reducedMotion); `amount` is the positive drain.
+// "loss" bump, and a descending de-tune chime plays instead of coin-rain. Routes
+// through edition.js drainGold (the C4 signed primitive) so the balance CAN dip below
+// zero — a penalty at a broke balance now bites for real, and Hard Mode bankruptcy
+// becomes reachable. The red hacker-log line is emitted by the CALLER (so its text
+// matches the trigger), not here — goldDrain stays generic. Signature mirrors
+// awardGold(delta, reducedMotion); `amount` is the positive drain.
 export function goldDrain(amount, reducedMotion, playChime) {
   if (!amount || amount <= 0) return;
   const before = getGold();
-  addGold(-amount);
+  drainGold(amount);
   let hud = document.getElementById("goldHud");
   if (!hud) { renderGoldHud(); hud = document.getElementById("goldHud"); }
   if (!hud) return;
