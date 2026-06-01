@@ -96,6 +96,34 @@ body {
   100% { transform: translate(var(--gc-x, 0), 96vh) rotate(260deg); opacity: 0; }
 }
 
+/* Clearer wins: a gold ring pulse on the tile being paid out, and a "+N" floater
+   that rises off it. One beat at a time so a win reads instead of blurring past. */
+.tile.gold-glow {
+  animation: gold-glow 0.45s ease;
+  z-index: 2;
+}
+@keyframes gold-glow {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent); }
+  40% { box-shadow: 0 0 14px 4px color-mix(in srgb, var(--accent) 80%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+.gold-floater {
+  position: fixed;
+  z-index: 9998;
+  transform: translate(-50%, -50%);
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 18px;
+  pointer-events: none;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 70%, transparent);
+  animation: gold-float 0.7s ease-out forwards;
+}
+@keyframes gold-float {
+  0% { transform: translate(-50%, -50%) scale(0.7); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(-50%, -180%) scale(1.05); opacity: 0; }
+}
+
 /* The hacker-log — a transient green-on-dark terminal that types out the payout
    line-by-line near the board, then collapses to a 1-line ticker. */
 .hacklog {
@@ -1100,9 +1128,27 @@ body.reduced-motion .tile.reveal { opacity: 1 !important; transform: none !impor
 body.reduced-motion .tile.explode { display: none !important; }
 body.reduced-motion .shard { display: none !important; }
 body.reduced-motion .lose-flash { display: none !important; }
+body.reduced-motion .tile.gold-glow { animation: none !important; box-shadow: none !important; }
+body.reduced-motion .gold-floater { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .tile.reveal, .tile.explode, .shard, .lose-flash, .lose-shake { animation-duration: 0.01ms !important; }
+  .tile.gold-glow { animation: none !important; }
+  .gold-floater { display: none !important; }
 }
+
+/* End-screen replay: your run, line by line. */
+.endgame-replay {
+  margin: 8px auto 0;
+  max-width: 320px;
+  text-align: left;
+  font-family: ui-monospace, SF Mono, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  opacity: 0.92;
+}
+.endgame-replay-line.gain { color: var(--green); }
+.endgame-replay-line.loss { color: var(--error); }
+.endgame-replay-line.combo { color: var(--accent); font-weight: 800; }
 
 /* --- Username / profile link on home --- */
 .profile-link { margin: -4px 0 4px; }

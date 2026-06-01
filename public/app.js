@@ -4,8 +4,9 @@ import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
 import { applyEdition, getActiveEditionId, getGold, spendGold, companionReact, renderEditionPicker } from "/edition.js";
 import { speakLine } from "/voice.js";
-import { newGreensInLast, newYellowsInLast } from "/celebrate.js";
-import { GOLD, comboMultiplier, awardGold, renderGoldHud } from "/gold.js";
+import { newGreensInLast, orderedDiscoveriesInLast } from "/celebrate.js";
+import { GOLD, comboMultiplier, awardGold, renderGoldHud, playPayoutSequence } from "/gold.js";
+import { createHacklog } from "/hacklog.js";
 
 // Apply the active edition at module load (before motion consts read WordulMotion).
 applyEdition(getActiveEditionId());
@@ -15,6 +16,7 @@ const LS = {
   stats: "wr.stats",
   settings: "wr.settings",
   preferredLength: "wr.length",
+  replay: "wr.replay", // structured per-guess payout log, keyed per game (slug:round)
 };
 
 const SUPPORTED_LENGTHS = [4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -479,7 +481,52 @@ const game = {
   vowels: null,
   pendingReveal: false,
   pendingVowel: false,
+  // Clearer-wins: structured replay capture + a guard so a mid-payout board repaint
+  // (from another player's snapshot) doesn't orphan the tiles the payout is glowing.
+  replay: [],
+  payingOut: false,
 };
+// The hacker-log terminal: lazily mounted into #hacklog on first payout, reused
+// across guesses within a room, cleared per round. reducedMotion is read live.
+let hacklog = null;
+function getHacklog() {
+  const el = $("#hacklog");
+  if (!el) return null;
+  if (!hacklog) hacklog = createHacklog(el, { reducedMotion: getSettings().reducedMotion });
+  el.hidden = false; // reveal on every payout (resetPowerHints re-hides between rounds)
+  return hacklog;
+}
+// The localStorage key is per-game (slug + round) so distinct games never clobber
+// each other's replay. game.ezRound tracks the live round number.
+function replayKey() {
+  return `${LS.replay}:${game.slug || "?"}:${game.ezRound}`;
+}
+// Push one structured per-guess entry into game.replay + persist. This is the exact
+// shape the (gated) server-side replay viewer will store — capture it now, no rework.
+function recordReplayEntry(entry) {
+  game.replay.push(entry);
+  try {
+    localStorage.setItem(replayKey(), JSON.stringify(game.replay));
+  } catch { /* storage full / disabled — the in-memory replay still drives the end-screen */ }
+}
+// Resolve a tile in MY board's freshly-flipped row by column index, re-querying each
+// beat so a board repaint mid-payout never targets a detached node. MY board is the
+// first .player-board (renderBoards orders me first, no .spectator).
+function getMyFreshTile(colIndex) {
+  const myBoard = document.querySelector("#boards .player-board:not(.spectator)");
+  if (!myBoard) return null;
+  const rows = myBoard.querySelectorAll(".grid .grid-row");
+  // The fresh row is the last one carrying a played guess (it has .tile.reveal or a
+  // colored tile). Walk from the bottom to find the most-recently-filled row.
+  for (let r = rows.length - 1; r >= 0; r--) {
+    const tiles = rows[r].querySelectorAll(".tile");
+    const filled = tiles[0] && (tiles[0].classList.contains("reveal") ||
+      tiles[0].classList.contains("green") || tiles[0].classList.contains("yellow") ||
+      tiles[0].classList.contains("gray"));
+    if (filled) return tiles[colIndex] || null;
+  }
+  return null;
+}
 const REVEAL_STAGGER_MS = window.WordulMotion?.revealStaggerMs ?? 220;
 const REVEAL_FLIP_HALF_MS = window.WordulMotion?.flipHalfMs ?? 275; // matches the tile-reveal keyframe halfway point
 
@@ -498,6 +545,11 @@ function showRoom(owner, slug) {
   game.lastGuessCounts = new Map();
   game.autoStart = false;
   game.shareImage = null;
+  game.replay = [];
+  game.payingOut = false;
+  // tpl-room mounts a FRESH #hacklog node, so drop any stale terminal bound to the
+  // previous room's (now-detached) element — it's re-created lazily on first payout.
+  hacklog = null;
   mount("tpl-room");
   renderRoomHeader();
   const hasNativeShare = typeof navigator.share === "function";
@@ -809,25 +861,63 @@ function onServerMessage(msg) {
       // and in Yang's edition, new greens get a scaled celebration instead.
       if (me.status === "playing") {
         // Gold flows on progress for EVERY edition: new greens + yellows pay out, with
-        // a combo multiplier for multiple hits in one shot — synced to the tile flip so
-        // the coins rain exactly as the colors land.
-        const ng = newGreensInLast(me.guesses);
-        const ny = newYellowsInLast(me.guesses);
-        const discoveries = ng + ny;
+        // a combo multiplier for multiple hits in one shot. Clearer wins: instead of one
+        // lump coin-burst, we SEQUENCE the payout — yellows first, then greens, each its
+        // own beat (glow + "+N" floater + HUD tick + ascending chime + a hacker-log line),
+        // then a "✦ N× COMBO" finale lands the multiplier last. The TOTAL is identical to
+        // the old lump Math.round((ng*green + ny*yellow)*mult); only the timing is staged.
+        const discoveryList = orderedDiscoveriesInLast(me.guesses).map((d) => ({
+          ...d,
+          value: d.kind === "green" ? GOLD.green : GOLD.yellow,
+        }));
+        const ng = discoveryList.filter((d) => d.kind === "green").length;
+        const ny = discoveryList.filter((d) => d.kind === "yellow").length;
+        const discoveries = discoveryList.length;
         const mult = comboMultiplier(discoveries);
-        const earned = Math.round((ng * GOLD.green + ny * GOLD.yellow) * mult);
-        const flipDoneMs = me.guesses[me.guesses.length - 1].word.length * REVEAL_STAGGER_MS + REVEAL_FLIP_HALF_MS;
-        if (earned > 0) {
+        const base = discoveryList.reduce((s, d) => s + d.value, 0);
+        const total = Math.round(base * mult); // ← exactly the old `earned`
+        const bonus = total - base;
+        const guessIndex = me.guesses.length - 1;
+        const flipDoneMs = me.guesses[guessIndex].word.length * REVEAL_STAGGER_MS + REVEAL_FLIP_HALF_MS;
+
+        if (discoveries > 0) {
+          const balanceBefore = getGold();
+          // Record the structured replay entry up front (deterministic: balanceAfter =
+          // before + total, since the sequence awards exactly `total`). Persisted now so
+          // a refresh/end-screen can render "your run, line by line" even mid-payout.
+          recordReplayEntry({
+            guessIndex,
+            events: discoveryList.map((d) => ({
+              kind: d.kind, index: d.index, letter: d.letter, delta: d.value,
+            })),
+            combo: { discoveries, mult, bonus },
+            balanceAfter: balanceBefore + total,
+          });
+          game.goldThisRound = (game.goldThisRound || 0) + total;
+          const reducedMotion = getSettings().reducedMotion;
+          const log = getHacklog();
+          // Start the payout after the row finishes flipping, so coins land as colors do.
           setTimeout(() => {
-            awardGold(earned, getSettings().reducedMotion);
-            game.goldThisRound = (game.goldThisRound || 0) + earned;
-            if (discoveries >= 2) celebrateCombo(discoveries, mult);
+            game.payingOut = true;
+            playPayoutSequence({
+              discoveries: discoveryList,
+              mult,
+              hud: $("#goldHud"),
+              getTile: getMyFreshTile,
+              log,
+              playChime,
+              celebrateCombo,
+              reducedMotion,
+            }).finally(() => {
+              game.payingOut = false;
+              if (log) setTimeout(() => log.collapse(), 700);
+            });
           }, flipDoneMs);
         }
         // Yang keeps its green party; other editions only get nudged on a dud guess.
         if (getActiveEditionId() === "yang" && ng >= 1) {
           setTimeout(() => celebrateGreens(ng), flipDoneMs);
-        } else if (earned === 0) {
+        } else if (discoveries === 0) {
           showCompanion("wrong");
         }
         resetIdle();
@@ -954,6 +1044,14 @@ function resetPowerHints(round) {
   game.pendingReveal = false;
   game.pendingVowel = false;
   game.goldThisRound = 0; // per-round earnings, shown as your score on the end screen
+  // Clearer-wins: a fresh round starts an empty replay + a cleared hacker-log.
+  game.replay = [];
+  game.payingOut = false;
+  if (hacklog) {
+    hacklog.clear();
+    const el = $("#hacklog");
+    if (el) el.hidden = true;
+  }
 }
 
 function renderPowerHints() {
@@ -1136,10 +1234,11 @@ function renderBoards(snap, me) {
     ...(me ? [me] : []),
     ...snap.players.filter((p) => p.username !== getUsername()),
   ];
-  // While my board's tiles are mid-explosion, preserve the existing DOM so the
-  // animations don't get nuked by a snapshot from another player's guess. Update
-  // everyone else's boards as normal by removing only their nodes.
-  if (game.exploding) {
+  // While my board's tiles are mid-explosion OR mid-payout (glow/floater anchored to
+  // them), preserve the existing DOM so the animations don't get nuked by a snapshot
+  // from another player's guess. Update everyone else's boards as normal.
+  const preserveMine = game.exploding || game.payingOut;
+  if (preserveMine) {
     for (const board of root.querySelectorAll(".player-board")) {
       if (board.dataset.player !== getUsername()) board.remove();
     }
@@ -1147,7 +1246,7 @@ function renderBoards(snap, me) {
     root.textContent = "";
   }
   for (const p of ordered) {
-    if (game.exploding && p.username === getUsername()) continue; // keep existing exploding board
+    if (preserveMine && p.username === getUsername()) continue; // keep existing animating board
     const board = document.createElement("div");
     board.className = "player-board" + (p.username === getUsername() ? "" : " spectator");
     board.dataset.player = p.username;
@@ -1674,6 +1773,32 @@ function triggerLoseSequence(snap, me) {
 
 // --- Stats modal ---
 
+// "Your run, line by line." Render the captured replay (game.replay) into the
+// end-screen as a small monospace log — the same structured events the payout typed,
+// now a scannable summary. Skips silently when there's nothing to show.
+function renderReplayInto(parent) {
+  if (!game.replay || game.replay.length === 0) return;
+  const box = document.createElement("div");
+  box.className = "endgame-replay";
+  for (const turn of game.replay) {
+    for (const ev of turn.events || []) {
+      const line = document.createElement("div");
+      line.className = `endgame-replay-line ${ev.delta >= 0 ? "gain" : "loss"}`;
+      const sign = ev.delta >= 0 ? "+" : "−";
+      line.textContent =
+        `${ev.kind} ${String(ev.letter || "").toUpperCase()} pos ${ev.index + 1}  ${sign}${Math.abs(ev.delta)}`;
+      box.appendChild(line);
+    }
+    if (turn.combo && turn.combo.discoveries >= 2) {
+      const c = document.createElement("div");
+      c.className = "endgame-replay-line combo";
+      c.textContent = `✦ ${turn.combo.mult}× COMBO  +${turn.combo.bonus}`;
+      box.appendChild(c);
+    }
+  }
+  parent.appendChild(box);
+}
+
 function openStats(opts = {}) {
   const modal = $("#statsModal");
   modal.hidden = false;
@@ -1723,6 +1848,8 @@ function openStats(opts = {}) {
     goldLine.className = "endgame-gold";
     goldLine.textContent = `◆ +${game.goldThisRound || 0} this game · ◆ ${getGold()} total`;
     eg.appendChild(goldLine);
+    // Your run, line by line — the captured replay (client-side now; server viewer gated).
+    renderReplayInto(eg);
   }
   if (opts.justFinished && opts.snap) {
     const snap = opts.snap;
