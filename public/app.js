@@ -887,6 +887,7 @@ function connect() {
       type: "hello",
       username: getUsername(),
       wordLength: getPreferredLength(),
+      edition: getActiveEditionId(), // seeds a fresh room with the creator's theme
     });
     // Kick off heartbeat so the path stays warm.
     startHeartbeat();
@@ -951,6 +952,13 @@ function onServerMessage(msg) {
   if (msg.type === "snapshot") {
     const prev = game.snapshot;
     game.snapshot = msg.room;
+    // The room owns the theme: adopt it whenever it differs from what's applied. This is
+    // how invitees inherit the host's theme and how a live change reaches everyone. applyEdition
+    // also persists it locally, so your last room's vibe sticks into your next solo game.
+    if (msg.room.edition && msg.room.edition !== getActiveEditionId()) {
+      applyEdition(msg.room.edition);
+      applySettings(getSettings()); // re-layer colorblind/contrast on the new palette
+    }
     // EZ-mode hints belong to a single round — wipe them on any new round (start,
     // rematch, or reconnecting into a different round).
     if (msg.room.phase === "playing" && msg.room.round !== game.ezRound) {
@@ -2487,6 +2495,11 @@ function showSettings() {
   openSettings({
     onChange: () => { if (game.snapshot) render(); },
     renderEditionPicker,
+    // Theme is bound to the room: picking sends set_edition so the server rethemes
+    // everyone. send() is a no-op with no open socket, so solo play just keeps the
+    // local theme applyEdition already set. Locked mid-game (server enforces too).
+    onEditionPick: (id) => send({ type: "set_edition", edition: id }),
+    editionLocked: game.snapshot?.phase === "playing",
     toast: (t, o) => toast(t, o),
     resetStats: () => saveStats({ ...DEFAULT_STATS, distribution: { ...DEFAULT_STATS.distribution } }),
     // Mount the keyboard layout picker into the Advanced section. Owning the

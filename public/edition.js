@@ -94,7 +94,7 @@ function injectFontLink(id, href) {
   document.head.appendChild(link);
 }
 
-export function renderEditionPicker(rootEl, onPick) {
+export function renderEditionPicker(rootEl, onPick, { disabled = false } = {}) {
   rootEl.innerHTML = "";
   const current = getActiveEditionId();
   for (const ed of EDITIONS) {
@@ -102,12 +102,21 @@ export function renderEditionPicker(rootEl, onPick) {
     btn.type = "button";
     btn.className = "edition-chip" + (ed.id === current ? " is-active" : "");
     btn.textContent = ed.name;
-    btn.addEventListener("click", () => {
-      applyEdition(ed.id);
-      rootEl.querySelectorAll(".edition-chip").forEach((b) => b.classList.remove("is-active"));
-      btn.classList.add("is-active");
-      onPick?.(ed.id);
-    });
+    btn.disabled = disabled; // locked mid-game — the room theme can't shift under a live board
+    if (!disabled) {
+      btn.addEventListener("click", () => {
+        applyEdition(ed.id);
+        rootEl.querySelectorAll(".edition-chip").forEach((b) => b.classList.remove("is-active"));
+        btn.classList.add("is-active");
+        onPick?.(ed.id);
+      });
+    }
     rootEl.appendChild(btn);
+  }
+  if (disabled) {
+    const note = document.createElement("p");
+    note.className = "picker-note";
+    note.textContent = "Theme is locked during the game.";
+    rootEl.appendChild(note);
   }
 }

@@ -21,6 +21,14 @@ const MAX_CHAT = 40;
 const MAX_CHAT_LEN = 200;
 const CHAT_THROTTLE_MS = 800;
 
+// Normalize a client-supplied edition id to the charset edition ids use (lowercase
+// kebab). Empty/garbage collapses to "default". Not a whitelist — the client falls
+// back to the default theme for any id it doesn't recognize.
+function sanitizeEdition(raw: string): string {
+  const id = (raw ?? "").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 32);
+  return id || "default";
+}
+
 function guessesFor(length: number): number {
   // length+1 preserves the Wordle 5/6 feel for short words (4→5, 5→6, 6→7, 7→8),
   // then plateaus at 8. Longer words convey more info per guess, so we don't
@@ -52,6 +60,7 @@ export class Room extends DurableObject<Env> {
       maxGuesses: guessesFor(DEFAULT_LENGTH),
       scoreboard: [],
       history: [],
+      edition: "default",
     };
     // Async restore — DO ctor can't await, so we kick it off and gate writes via blockConcurrencyWhile.
     ctx.blockConcurrencyWhile(async () => {
@@ -62,6 +71,7 @@ export class Room extends DurableObject<Env> {
         if (!Array.isArray(restored.history)) restored.history = [];
         if (!restored.wordLength) restored.wordLength = DEFAULT_LENGTH;
         if (!restored.maxGuesses) restored.maxGuesses = guessesFor(restored.wordLength);
+        if (!restored.edition) restored.edition = "default"; // pre-theme rooms
         this.state = restored;
       }
     });
@@ -143,7 +153,7 @@ export class Room extends DurableObject<Env> {
   private async handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
       case "hello":
-        return this.onHello(ws, msg.username, msg.wordLength);
+        return this.onHello(ws, msg.username, msg.wordLength, msg.edition);
       case "start":
         return this.onStart(ws);
       case "guess":
@@ -154,6 +164,8 @@ export class Room extends DurableObject<Env> {
         return this.onChat(ws, msg.text);
       case "set_length":
         return this.onSetLength(ws, msg.wordLength);
+      case "set_edition":
+        return this.onSetEdition(ws, msg.edition);
       case "rename":
         return this.onRename(ws, msg.name);
       case "reveal_letter":
@@ -170,7 +182,7 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  private async onHello(ws: WebSocket, usernameRaw: string, wordLength?: number): Promise<void> {
+  private async onHello(ws: WebSocket, usernameRaw: string, wordLength?: number, edition?: string): Promise<void> {
     // Trust model is intentional: identity is passwordless by product decision (a casual
     // word game — "kindness model", see spec 2026-05-31-username-identity). The client-
     // supplied username is taken at face value; control is shared, owner is bookkeeping only.
@@ -204,6 +216,16 @@ export class Room extends DurableObject<Env> {
       ) {
         this.state.wordLength = wordLength;
         this.state.maxGuesses = guessesFor(wordLength);
+      }
+      // Likewise the room's theme is seeded from its owner's current edition, only in a
+      // pristine lobby. After that, anyone changes it live via set_edition (shared control).
+      if (
+        username === this.state.owner &&
+        edition != null &&
+        this.state.phase === "lobby" &&
+        this.state.round === 0
+      ) {
+        this.state.edition = sanitizeEdition(edition);
       }
       this.pushSystem(`${username} joined`);
     }
@@ -283,6 +305,23 @@ export class Room extends DurableObject<Env> {
     this.state.maxGuesses = guessesFor(length);
     const who = this.userFor(ws) ?? "someone";
     this.pushSystem(`${who} set word length to ${length}`);
+    await this.persistAndBroadcast();
+  }
+
+  // Theme is shared room state: anyone in the room can change it, and the new theme
+  // broadcasts to everyone. Blocked mid-game so the look never shifts under a live board.
+  // The id is only sanitized, not whitelisted — an unknown id renders the default theme
+  // client-side (getEdition falls back), matching the game's passwordless "kindness model".
+  private async onSetEdition(ws: WebSocket, editionRaw: string): Promise<void> {
+    if (this.state.phase === "playing") {
+      this.send(ws, { type: "error", message: "can't change theme mid-game" });
+      return;
+    }
+    const edition = sanitizeEdition(editionRaw);
+    if (edition === this.state.edition) return;
+    this.state.edition = edition;
+    const who = this.userFor(ws) ?? "someone";
+    this.pushSystem(`${who} set the theme to ${edition}`);
     await this.persistAndBroadcast();
   }
 

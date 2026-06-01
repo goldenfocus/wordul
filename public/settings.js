@@ -70,7 +70,7 @@ function wireSectionToggles(modal) {
 //  - renderEditionPicker(el, onPick) the edition.js theme picker (re-imported by the caller).
 //  - resetStats()         wipes local stats (lives in app.js).
 //  - toast(text, opts)    optional feedback channel (app.js owns the toast UI).
-export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker, resetStats, toast } = {}) {
+export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker, onEditionPick, editionLocked, resetStats, toast } = {}) {
   const modal = document.getElementById("settingsModal");
   if (!modal) return;
   const s = getSettings();
@@ -98,15 +98,17 @@ export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker,
   wire(cb, "colorBlind");
   wire(rm, "reducedMotion");
 
-  // Theme/edition picker. Picking applies the edition live; the caller's onChange
-  // re-applies settings (so colorblind layers on top) and refreshes the board.
+  // Theme/edition picker. The theme is bound to the room, so a pick re-applies settings
+  // locally AND notifies the caller (onEditionPick → set_edition for everyone). Locked
+  // mid-game: the picker renders disabled so the look can't shift under a live board.
   const picker = document.getElementById("editionPicker");
   if (picker && renderEditionPicker) {
-    renderEditionPicker(picker, () => {
+    renderEditionPicker(picker, (id) => {
       applySettings(getSettings());
       onChange?.();
-      toast?.("Theme applied", { duration: 1000 });
-    });
+      onEditionPick?.(id);
+      toast?.("Theme applied — everyone in the room sees it", { duration: 1200 });
+    }, { disabled: !!editionLocked });
   }
 
   // Keyboard layout picker lives under "Advanced". The orchestrator owns the

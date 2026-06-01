@@ -53,15 +53,17 @@ export type RoomSnapshot = {
   maxGuesses: number;      // rows per board, derived from wordLength
   scoreboard: RoomScore[];
   history: RoomGame[];     // finished games in this room, newest last (capped)
+  edition: string;         // theme/edition id bound to the room — everyone in it sees this theme
 };
 
 export type ClientMessage =
-  | { type: "hello"; username: string; wordLength?: number }
+  | { type: "hello"; username: string; wordLength?: number; edition?: string }
   | { type: "start" }
   | { type: "guess"; word: string }
   | { type: "rematch" }
   | { type: "chat"; text: string }
   | { type: "set_length"; wordLength: number }
+  | { type: "set_edition"; edition: string }
   | { type: "rename"; name: string }
   | { type: "reveal_letter"; known?: number[] }
   | { type: "vowel_count" }
