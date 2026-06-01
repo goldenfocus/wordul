@@ -1,19 +1,21 @@
 #!/usr/bin/env node
-// Render Yang's companion lines to cloned-voice clips with golden-voice (gv).
+// Render Yang's companion lines to cloned-voice clips with golden-voice.
 //
 // PREREQUISITES (local, macOS, offline):
-//   1. golden-voice installed and a "yang" voice profile recorded (`gv record me`)
-//   2. the resident engine running: `bash tts-daemon.sh start`
-//   3. ffmpeg on PATH (golden-voice installs it)
+//   1. golden-voice installed:  bash ~/golden-cloud/blocks/golden-voice/install.sh
+//   2. a voice recorded:        gv record       (saves under ~/.claude/local-tts/voices/me/)
+//   3. (recommended) daemon up: bash ~/.claude/local-tts/tts-daemon.sh start
+//      — model loads once (~20s) instead of per-line, so 88 lines render fast.
 //
 // USAGE:  npm run voice:render
 //
-// gv's export output location/format is the one external unknown. This script
-// assumes `gv export <key> "<text>"` writes <key>.<ext> into GV_EXPORT_DIR.
-// VERIFY ON FIRST RUN: run `gv export probe "hello there"` once and confirm where
-// the file lands; if it differs, set GV_EXPORT_DIR to that directory and re-run.
+// We drive golden-voice's `gv-export.sh <name> <text>` directly (the `gv` command
+// itself is a fish function, not on PATH). gv-export synthesizes in your cloned
+// voice, loudness-normalizes to -16 LUFS, and writes
+//   ~/.claude/local-tts/library/<name>/<name>.{wav,opus,mp3}
+// We copy the mp3 (already mono + normalized — web-ready) into public/voice/yang/.
 import { execFileSync } from "node:child_process";
-import { readdirSync, existsSync, mkdirSync, writeFileSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -23,8 +25,16 @@ import { edition } from "../../public/editions/yang.js";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(HERE, "../../public/voice/yang");
 const MANIFEST = join(OUT_DIR, "manifest.json");
-const GV_EXPORT_DIR = process.env.GV_EXPORT_DIR
-  || join(homedir(), "golden-cloud/blocks/golden-voice/exports");
+
+const TTS_DIR = join(homedir(), ".claude/local-tts");
+const GV_EXPORT = join(TTS_DIR, "bin/gv-export.sh");
+const LIBRARY = join(TTS_DIR, "library");
+
+if (!existsSync(GV_EXPORT)) {
+  console.error(`✗ golden-voice not installed (missing ${GV_EXPORT}).`);
+  console.error(`  Run: bash ~/golden-cloud/blocks/golden-voice/install.sh`);
+  process.exit(1);
+}
 
 mkdirSync(OUT_DIR, { recursive: true });
 
@@ -35,16 +45,6 @@ const lines = [...new Set(Object.values(edition.companion.lines).flat())]
 
 const manifest = existsSync(MANIFEST) ? JSON.parse(readFileSync(MANIFEST, "utf8")) : {};
 
-function findGvOutput(key) {
-  // newest file in GV_EXPORT_DIR whose name starts with the key
-  if (!existsSync(GV_EXPORT_DIR)) return null;
-  const matches = readdirSync(GV_EXPORT_DIR)
-    .filter((f) => f.startsWith(key + "."))
-    .map((f) => ({ f, t: statSync(join(GV_EXPORT_DIR, f)).mtimeMs }))
-    .sort((a, b) => b.t - a.t);
-  return matches.length ? join(GV_EXPORT_DIR, matches[0].f) : null;
-}
-
 let made = 0, skipped = 0;
 for (const text of lines) {
   const key = lineKey(text);
@@ -52,15 +52,14 @@ for (const text of lines) {
   if (existsSync(outMp3)) { manifest[key] = `${key}.mp3`; skipped++; continue; }
 
   console.log(`▶ ${text}`);
-  execFileSync("gv", ["export", key, text], { stdio: "inherit" });
-  const raw = findGvOutput(key);
-  if (!raw) {
-    console.error(`✗ Could not find gv output for "${key}" in ${GV_EXPORT_DIR}.`);
-    console.error(`  Run \`gv export probe "hi"\` to see where gv writes, then set GV_EXPORT_DIR.`);
+  execFileSync("bash", [GV_EXPORT, key, text], { stdio: "inherit" });
+
+  const src = join(LIBRARY, key, `${key}.mp3`);
+  if (!existsSync(src)) {
+    console.error(`✗ gv-export produced no mp3 at ${src} for "${text}".`);
     process.exit(1);
   }
-  // Normalize to small mono mp3 (universal browser support, ~tiny for speech).
-  execFileSync("ffmpeg", ["-y", "-i", raw, "-ac", "1", "-b:a", "32k", outMp3], { stdio: "inherit" });
+  copyFileSync(src, outMp3);
   manifest[key] = `${key}.mp3`;
   made++;
 }

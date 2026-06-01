@@ -10,6 +10,10 @@ import { createHacklog } from "/hacklog.js";
 import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, surfaceGiveUp, checkBankruptcy } from "/powerups.js";
 import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, detectLayout } from "/keyboard.js";
 import { getSettings, saveSettings, applySettings, openSettings, openHub } from "/settings.js";
+import { t, initLang } from "/i18n.js";
+import { wordIntel } from "/data/word-intel.js";
+
+initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
 
 // Apply the active edition at module load (before motion consts read WordulMotion).
 applyEdition(getActiveEditionId());
@@ -1999,7 +2003,7 @@ function renderReplayInto(parent) {
   const details = document.createElement("details");
   details.className = "endgame-replay-details";
   const summary = document.createElement("summary");
-  summary.textContent = "Gold breakdown";
+  summary.textContent = t("endscreen.goldBreakdown");
   details.appendChild(summary);
   const box = document.createElement("div");
   box.className = "endgame-replay";
@@ -2026,10 +2030,11 @@ function renderReplayInto(parent) {
   parent.appendChild(details);
 }
 
-// "The word — and a reason to remember it." Shows the answer big, fetches a one-line
-// definition (free dictionaryapi.dev, no key) so every game teaches you something, and
-// offers a one-tap web search to go deeper. Graceful: if the lookup fails, the word +
-// search button still stand on their own.
+// "The word — and a reason to remember it." Shows the answer big plus a reason to
+// remember it: a definition, a surprising fact, and a quote from a great mind. Pulls
+// from the pre-generated word-intel set first (instant, offline, with fact + quote);
+// for words not yet in that set it falls back to the live dictionary definition. A
+// one-tap web search always offers a way to go deeper.
 function renderWordCard(parent, word) {
   if (!word) return;
   const w = String(word).toLowerCase();
@@ -2038,7 +2043,7 @@ function renderWordCard(parent, word) {
 
   const label = document.createElement("div");
   label.className = "ewc-label";
-  label.textContent = "THE WORD";
+  label.textContent = t("endscreen.theWord");
   card.appendChild(label);
 
   const big = document.createElement("div");
@@ -2048,7 +2053,6 @@ function renderWordCard(parent, word) {
 
   const def = document.createElement("div");
   def.className = "ewc-def";
-  def.textContent = "Looking it up…";
   card.appendChild(def);
 
   const look = document.createElement("a");
@@ -2056,12 +2060,38 @@ function renderWordCard(parent, word) {
   look.href = `https://www.google.com/search?q=${encodeURIComponent(w + " meaning")}`;
   look.target = "_blank";
   look.rel = "noopener";
-  look.textContent = "Look it up ↗";
+  look.textContent = t("endscreen.lookup");
+
+  const intel = wordIntel(word);
+  if (intel) {
+    // Rich path: pre-generated definition + fact + quote. No network needed.
+    def.textContent = intel.def;
+    if (intel.fact) {
+      const fact = document.createElement("div");
+      fact.className = "ewc-fact";
+      fact.textContent = intel.fact;
+      card.appendChild(fact);
+    }
+    if (intel.quote) {
+      const q = document.createElement("blockquote");
+      q.className = "ewc-quote";
+      q.textContent = `“${intel.quote}”`;
+      if (intel.author) {
+        const cite = document.createElement("cite");
+        cite.textContent = `— ${intel.author}`;
+        q.appendChild(cite);
+      }
+      card.appendChild(q);
+    }
+    card.appendChild(look);
+    parent.appendChild(card);
+    return;
+  }
+
+  // Fallback: live dictionary definition (no key, CORS-friendly). Never blocks the modal.
+  def.textContent = t("endscreen.looking");
   card.appendChild(look);
-
   parent.appendChild(card);
-
-  // Async definition — never blocks the modal. dictionaryapi.dev is CORS-friendly.
   fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(w)}`)
     .then((r) => (r.ok ? r.json() : null))
     .then((data) => {
@@ -2070,12 +2100,12 @@ function renderWordCard(parent, word) {
       if (d) {
         def.textContent = pos ? `(${pos}) ${d}` : d;
       } else {
-        def.textContent = "No dictionary entry — tap “Look it up” to explore.";
+        def.textContent = t("endscreen.noEntry");
         def.classList.add("muted");
       }
     })
     .catch(() => {
-      def.textContent = "Definition unavailable offline — tap “Look it up”.";
+      def.textContent = t("endscreen.offline");
       def.classList.add("muted");
     });
 }
@@ -2144,11 +2174,11 @@ function openStats(opts = {}) {
       status.classList.add("roast");
       status.textContent = `💀 ${opts.joke}`;
     } else if (opts.won && winner && winner === getUsername()) {
-      status.textContent = `🎉 You got it in ${opts.lastGuessCount}!`;
+      status.textContent = t("endscreen.youWon", { n: opts.lastGuessCount });
     } else if (winner) {
-      status.textContent = `${winner} got it first.`;
+      status.textContent = t("endscreen.someoneWon", { who: winner });
     } else {
-      status.textContent = "Nobody got it this time.";
+      status.textContent = t("endscreen.nobodyWon");
     }
     eg.appendChild(status);
     // The learning beat: the word, a definition, and a one-tap way to go deeper.
