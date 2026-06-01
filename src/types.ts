@@ -2,6 +2,7 @@ import type { Color } from "./color.ts";
 import type { UserStats } from "./stats.ts";
 import type { GameRecord, RoomGame } from "./records.ts";
 import type { RoomScore } from "./scoreboard.ts";
+import type { RoomMode } from "./modes.ts";
 
 export type OwnedRoom = { slug: string; name: string; lastPlayedAt: number };
 
@@ -51,18 +52,20 @@ export type RoomSnapshot = {
   chat: ChatEntry[];
   wordLength: number;      // letters per guess (4-12)
   maxGuesses: number;      // rows per board, derived from wordLength
+  mode: RoomMode;          // room game format; "race" today, more later
   scoreboard: RoomScore[];
   history: RoomGame[];     // finished games in this room, newest last (capped)
   edition: string;         // theme/edition id bound to the room — everyone in it sees this theme
 };
 
 export type ClientMessage =
-  | { type: "hello"; username: string; wordLength?: number; edition?: string }
+  | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string }
   | { type: "start" }
   | { type: "guess"; word: string }
   | { type: "rematch" }
   | { type: "chat"; text: string }
   | { type: "set_length"; wordLength: number }
+  | { type: "set_mode"; mode: RoomMode }
   | { type: "set_edition"; edition: string }
   | { type: "rename"; name: string }
   | { type: "reveal_letter"; known?: number[] }
