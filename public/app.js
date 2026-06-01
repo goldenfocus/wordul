@@ -166,10 +166,12 @@ function showHome() {
   input.value = getUsername();
   buildHomeLengthSelect();
 
-  // Two intents share one create→navigate→showRoom path; only autoStart differs.
-  $("#startPlayingBtn").addEventListener("click", () => enterNewRoom({ autoStart: true }));
+  // Both intents land in the lobby (never auto-start) so you can set your theme +
+  // word length before the board goes live — the edition picker locks once playing.
+  // Invite differs only by handing over the share link in the same click gesture.
+  $("#startPlayingBtn").addEventListener("click", () => enterNewRoom({ autoStart: false }));
   $("#inviteFriendBtn").addEventListener("click", () => enterNewRoom({ autoStart: false }));
-  // Enter in the username field is the spontaneous path → Start playing.
+  // Enter in the username field is the spontaneous path → into the lobby.
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") $("#startPlayingBtn").click();
   });
