@@ -21,8 +21,11 @@ The design keeps those future pieces slot-in-able but builds none of them now.
 ## Why this is feasible today
 
 The companion system already exists. `companionReact(event, ctx)` in `public/edition.js`
-fires on `invalid | wrong | win | loss | idle` and returns `{ text, speak }`. There is a
-literal extension point at `public/app.js:561`:
+supports `invalid | wrong | win | loss | idle` and returns `{ text, speak }`. **Today only
+`win` is actually wired** in `app.js` (the banks for the other four events are authored but
+never triggered); Subsystem A **completes the wiring** for `invalid | wrong | loss | idle`.
+This affects all editions, not just `yang` — the default edition's authored lines will now
+fire too (spoken via browser voice). There is a literal extension point at `public/app.js:561`:
 
 ```js
 if (speak && window.speechSynthesis) {
@@ -43,8 +46,8 @@ stage; build and ship separately.
 Subsystem A: Cloned-voice companion        Subsystem B: Live human voice chat
 ─────────────────────────────────         ──────────────────────────────────
 build-time (Mac, offline)                  runtime only (browser + Room DO)
-gv export -> public/voice/yang/*.opus      getUserMedia -> RTCPeerConnection mesh
-manifest.json (sha1(text) -> file)         signaling relayed via Room WebSocket
+gv export -> public/voice/yang/*.mp3       getUserMedia -> RTCPeerConnection mesh
+manifest.json (lineKey(text) -> file)      signaling relayed via Room WebSocket
                        \                   /
                         runtime audio output (browser <audio>)
 ```
@@ -60,10 +63,13 @@ Rejected: Cloudflare Realtime SFU (overkill), mesh-with-STUN-only (silent NAT fa
 ### Build-time pipeline (runs on Yan's Mac, fully offline)
 
 - New `scripts/voice/render.mjs`.
-- Reads the `yang` edition's `companion.lines` (all events, all lines).
-- For each line, computes `sha1(text)`; if `public/voice/yang/<sha1>.opus` is missing, runs
-  `gv export <sha1> "<text>"` (golden-voice) and writes the clip there.
-- Writes `public/voice/yang/manifest.json` = `{ "<sha1(text)>": "<sha1>.opus" }`.
+- Reads the `yang` edition's `companion.lines` (all events, all lines). **Skips any line
+  containing a `{token}`** (e.g. `{answer}`) — its word is dynamic at runtime and can't be
+  pre-rendered; those lines fall back to `speechSynthesis`.
+- For each remaining line, computes `lineKey(text)`; if `public/voice/yang/<lineKey>.mp3` is
+  missing, runs `gv export <lineKey> "<text>"` (golden-voice), then normalizes the output to a
+  small mono **mp3** (universal browser support incl. iOS Safari; tiny for speech).
+- Writes `public/voice/yang/manifest.json` = `{ "<lineKey(text)>": "<lineKey>.mp3" }`.
 - **Idempotent** — re-running only renders new/changed lines.
 - Clips + manifest are **committed to git** (served as static assets via the existing
   `ASSETS` binding). No runtime infra, no API keys, free.
@@ -73,14 +79,25 @@ Rejected: Cloudflare Realtime SFU (overkill), mesh-with-STUN-only (silent NAT fa
 ### Runtime playback (browser)
 
 - New `public/voice.js`:
-  - `speakLine(editionId, text)` → fetch (cached) the edition's manifest, look up
-    `sha1(text)`; if found and not muted, play via a single reused `<audio>` element;
-    else fall back to `speechSynthesis`. Missing manifest/clip → text-only path, **never
-    silent**.
-  - Returns a handle so the existing mute toggle and future live controls (pause/stop/2×)
-    can hook in.
-- `public/app.js:561` swaps the inline `speechSynthesis` call for `speakLine(...)`,
-  preserving the existing mute (`wordul.muted`) check.
+  - `speakLine(editionId, rawLine, spokenText)` → fetch (cached) the edition's manifest,
+    look up `lineKey(rawLine)` (the **raw template**, pre-substitution); if found and not
+    muted, play via an `<audio>` element. Otherwise speak `spokenText` (the substituted
+    text) via `speechSynthesis`. This split is what makes `{answer}` lines work: no clip
+    exists for them, so the browser voice says the real word. Missing manifest/clip → speech
+    fallback, **never silent**.
+  - Exposes a module-level `stopSpeaking()` (used by mute/stop). Per-clip pause/2×/ff
+    controls are **deferred** until live controls get a UI (with the Yang-commentator work).
+  - To support the raw-vs-spoken split, `companionReact` returns `{ text, raw, speak }` —
+    `raw` is the unsubstituted template (for clip lookup), `text` is what's shown/spoken.
+    It also neutralizes any leftover `{answer}` token so a naked token never reaches the user.
+- `public/app.js`'s `showCompanion` swaps the inline `speechSynthesis` call for
+  `speakLine(getActiveEditionId(), raw, text)`, preserving the existing mute
+  (`wordul.muted`) check (re-checked inside `speakLine`).
+
+**Manifest key = stable hash:** `lineKey(text)` is a small dependency-free FNV-1a hash (8
+hex), chosen over SHA-1 because it is synchronous and identical in Node (`render.mjs`), the
+browser, and jsdom tests — no `crypto.subtle` async or library needed for what is just a
+filename key.
 
 ### The `yang` edition
 
