@@ -1277,6 +1277,7 @@ function render() {
     lobby.hidden = false;
     endControls.hidden = true;
     syncLengthSelect(snap);
+    syncLobbyEdition();
     startBtn.hidden = false;
     $("#lobbyHint").textContent = snap.players.length < 2
       ? `Waiting for friends · start solo anytime`
@@ -1450,6 +1451,21 @@ function syncLengthSelect(snap) {
     });
   }
   if (parseInt(sel.value, 10) !== snap.wordLength) sel.value = String(snap.wordLength);
+}
+
+// Theme picker in the lobby — set the room's vibe before you start or invite. Picking
+// sends set_edition so it themes everyone (same path as the Settings picker). The active
+// chip tracks the room's edition because the snapshot handler applies it before we render.
+function syncLobbyEdition() {
+  const wrap = $("#editionControl");
+  const mount = $("#lobbyEditionPicker");
+  if (!wrap || !mount) return;
+  wrap.hidden = false;
+  renderEditionPicker(mount, (id) => {
+    applySettings(getSettings()); // re-layer colorblind/contrast on the new palette
+    send({ type: "set_edition", edition: id });
+    if (game.snapshot) render();
+  });
 }
 
 // Per-room cumulative scoreboard (wins/played across rounds), sorted by wins desc.

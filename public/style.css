@@ -1185,6 +1185,18 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 .edition-chip:hover { border-color: var(--accent); }
 .edition-chip:active { transform: scale(.97); }
 .edition-chip.is-active { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+.edition-chip:disabled { opacity: .5; cursor: not-allowed; }
+.edition-chip:disabled:hover { border-color: var(--border); }
+.picker-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+
+/* Lobby theme control — sits in the lobby bar next to word length. Compact chips so
+   the row stays tidy; wraps under the bar on narrow screens. */
+.edition-control { display: inline-flex; align-items: center; gap: 8px; }
+.edition-control .label {
+  font-size: 11px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.edition-control .edition-chip { padding: 5px 11px; font-size: 12px; }
 
 /* Settings chevron sections (C6) — collapsed/"calm" on open; expand on tap. */
 .settings-section { border-bottom: 1px solid var(--border); }
