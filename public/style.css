@@ -198,6 +198,54 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 }
 .icon-btn:hover { background: rgba(255,255,255,0.06); }
 
+/* Immersive in-game header (C5): the avatar IS the hub. A circular button showing
+   the username's initial; one tap opens the consolidated menu. */
+.avatar-btn {
+  width: 34px; height: 34px; flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--fg);
+  font-weight: 800; font-size: 15px; line-height: 1;
+  cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  text-transform: uppercase;
+  transition: border-color 0.15s, transform 0.05s;
+}
+.avatar-btn:hover { border-color: var(--fg); }
+.avatar-btn:active { transform: scale(0.93); }
+
+/* The immersive header lives between the brand and the avatar: username + gold only. */
+.room-header { display: inline-flex; align-items: center; gap: 8px; }
+.header-name {
+  font-size: 13px; font-weight: 700; color: var(--muted);
+  white-space: nowrap; max-width: 30vw; overflow: hidden; text-overflow: ellipsis;
+}
+.header-name[hidden] { display: none; }
+
+/* The avatar hub popover — one menu consolidating settings / theme / mute / stats
+   (+ share / rename / scoreboard in a room). Replaces the scattered topbar icons. */
+.hub-menu {
+  min-width: 180px;
+  display: flex; flex-direction: column;
+  background: var(--bg-card, var(--key-bg));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  padding: 6px;
+  z-index: 50;
+}
+.hub-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 10px;
+  background: transparent; border: 0; border-radius: 8px;
+  color: var(--fg); font-size: 14px; font-weight: 600;
+  cursor: pointer; text-align: left;
+}
+.hub-item:hover { background: rgba(255,255,255,0.06); }
+.hub-item:active { transform: scale(0.98); }
+.hub-icon { font-size: 16px; line-height: 1; width: 20px; text-align: center; }
+
 #app {
   flex: 1;
   display: flex;
@@ -1130,6 +1178,39 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 .edition-chip:hover { border-color: var(--accent); }
 .edition-chip:active { transform: scale(.97); }
 .edition-chip.is-active { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+
+/* Settings chevron sections (C6) — collapsed/"calm" on open; expand on tap. */
+.settings-section { border-bottom: 1px solid var(--border); }
+.settings-section:last-child { border-bottom: 0; }
+.settings-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 14px 0;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--fg); font-size: 15px; font-weight: 600; text-align: left;
+}
+.settings-section-title { letter-spacing: 0.01em; }
+.settings-chevron {
+  color: var(--muted); font-size: 18px; line-height: 1;
+  transition: transform 0.2s ease;
+}
+.settings-section-head[aria-expanded="true"] .settings-chevron { transform: rotate(90deg); }
+.settings-section-body { display: none; padding-bottom: 6px; }
+.settings-section-head[aria-expanded="true"] + .settings-section-body { display: block; }
+/* Inside a section the rows lose their own divider — the section owns the divider. */
+.settings-section-body .setting-row { border-bottom: 0; padding-top: 8px; }
+.settings-section-body .setting-row:first-child { padding-top: 0; }
+body.reduced-motion .settings-chevron { transition: none; }
+
+/* Immersive UI hide-chrome (C5): while a guess is in progress, the room name /
+   ✎ rename / Share ↗ / scoreboard collapse away — all reachable via the avatar
+   hub. Lobby + finished states show everything. A hub "peek" (.hub-reveal) forces
+   the scoreboard back even mid-play. */
+body.playing .room-name,
+body.playing .rename-btn,
+body.playing .room-owner,
+body.playing .invite-btn,
+body.playing .copy-ok,
+body.playing #scoreboard:not(.hub-reveal) { display: none; }
 
 /* iOS-style toggle switch */
 .switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }

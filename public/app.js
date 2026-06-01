@@ -9,6 +9,7 @@ import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGo
 import { createHacklog } from "/hacklog.js";
 import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, surfaceGiveUp, checkBankruptcy } from "/powerups.js";
 import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, detectLayout } from "/keyboard.js";
+import { getSettings, saveSettings, applySettings, openSettings, openHub } from "/settings.js";
 
 // Apply the active edition at module load (before motion consts read WordulMotion).
 applyEdition(getActiveEditionId());
@@ -16,7 +17,6 @@ applyEdition(getActiveEditionId());
 const LS = {
   username: "wr.username",
   stats: "wr.stats",
-  settings: "wr.settings",
   preferredLength: "wr.length",
   replay: "wr.replay", // structured per-guess payout log, keyed per game (slug:round)
 };
@@ -33,29 +33,8 @@ function setPreferredLength(n) {
 }
 
 // --- settings ---
-const DEFAULT_SETTINGS = {
-  hardMode: false,
-  colorBlind: false,
-  reducedMotion: false,
-  // "auto" = detect from browser/OS locale (fr-* → AZERTY) until the player picks
-  // explicitly in settings; an explicit pick is persisted and always wins.
-  keyboardLayout: "auto",
-};
-function getSettings() {
-  try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(LS.settings) || "{}") };
-  } catch {
-    return { ...DEFAULT_SETTINGS };
-  }
-}
-function saveSettings(s) {
-  localStorage.setItem(LS.settings, JSON.stringify(s));
-  applySettings(s);
-}
-function applySettings(s) {
-  document.body.classList.toggle("cb", !!s.colorBlind);
-  document.body.classList.toggle("reduced-motion", !!s.reducedMotion);
-}
+// Settings storage (get/save/apply), the settings modal, and the avatar hub now
+// live in /settings.js (imported above). app.js stays the orchestrator.
 
 // --- identity ---
 // A username (no password) is the player's identity everywhere. Normalized to
@@ -72,11 +51,13 @@ function setUsername(u) {
   localStorage.setItem(LS.username, clean);
   // Cookie cache so the server can recognise returning players if needed.
   document.cookie = `wr_user=${clean}; path=/; max-age=31536000; samesite=lax`;
+  syncAvatar(); // keep the hub avatar glyph in sync with the chosen name
   return clean;
 }
 function clearUsername() {
   localStorage.removeItem(LS.username);
   document.cookie = "wr_user=; path=/; max-age=0";
+  syncAvatar();
 }
 
 // One-time device-stats import guard. The backend exposes no /import endpoint
@@ -634,16 +615,58 @@ function renderRoomHeader() {
     ownerEl.onclick = (e) => { e.preventDefault(); navigate(`/@${game.owner}`); };
   }
   const renameBtn = $("#renameBtn");
-  if (renameBtn) {
-    renameBtn.onclick = () => {
-      const next = prompt("Rename this room:", game.name || game.slug);
-      if (next == null) return;
-      const clean = next.replace(/[\x00-\x1f\x7f<>]/g, "").trim().slice(0, 40);
-      if (!clean) return;
-      send({ type: "rename", name: clean });
-    };
-  }
+  if (renameBtn) renameBtn.onclick = renameRoom;
+  renderHeaderIdentity();
   renderGoldHud();
+}
+
+// The immersive in-game header (C5) shows username + gold beside the avatar. The
+// username sits in #roomHeader; renderGoldHud appends #goldHud after it. Only shown
+// in a room (cleared on home/profile via clearHeaderIdentity).
+function renderHeaderIdentity() {
+  const header = $("#roomHeader");
+  if (!header) return;
+  let nameEl = $("#headerName");
+  if (!nameEl) {
+    nameEl = document.createElement("span");
+    nameEl.id = "headerName";
+    nameEl.className = "header-name";
+    header.prepend(nameEl);
+  }
+  const u = getUsername();
+  nameEl.textContent = u ? `@${u}` : "";
+  nameEl.hidden = !u;
+}
+
+// Strip the in-room identity (username + gold) from the topbar header when we leave
+// a room, so home/profile show just the avatar.
+function clearHeaderIdentity() {
+  const header = $("#roomHeader");
+  if (header) header.textContent = "";
+}
+
+// Rename the current room. Shared (anyone present can rename) and reachable from
+// both the ✎ button (lobby/finished) and the avatar hub (during play).
+function renameRoom() {
+  const next = prompt("Rename this room:", game.name || game.slug);
+  if (next == null) return;
+  const clean = next.replace(/[\x00-\x1f\x7f<>]/g, "").trim().slice(0, 40);
+  if (!clean) return;
+  send({ type: "rename", name: clean });
+}
+
+// Reveal + scroll to the scoreboard. It's hidden mid-play; the hub un-hides it
+// (clearing the playing-state gate) and scrolls it into view so it isn't orphaned.
+function scrollToScoreboard() {
+  const sb = $("#scoreboard");
+  if (!sb) return;
+  if (game.snapshot && (game.snapshot.scoreboard || []).length === 0) {
+    toast("No scores yet — finish a round!", { duration: 1600 });
+    return;
+  }
+  sb.classList.add("hub-reveal"); // overrides the body.playing hide for this peek
+  sb.hidden = false;
+  sb.scrollIntoView({ behavior: getSettings().reducedMotion ? "auto" : "smooth", block: "center" });
 }
 
 // --- Edition: gold HUD + companion personality ---
@@ -1079,6 +1102,11 @@ function render() {
   if (chatTopBtn) chatTopBtn.hidden = !hasCompany;
   if (!hasCompany) closeChatSheet();
 
+  // Immersive UI (C5): mid-play, the in-game header collapses to just avatar +
+  // username + gold. Room name, ✎ rename, Share ↗, and the scoreboard hide while
+  // you're guessing (all reachable via the avatar hub) and return in lobby/finished.
+  setChromeVisibility(snap.phase);
+
   renderBoards(snap, me);
   renderKeyboard($("#keyboard"), me);
   renderChat(snap);
@@ -1090,6 +1118,18 @@ function render() {
   const kb = $("#keyboard");
   const canType = snap.phase === "playing" && me && me.status === "playing";
   if (kb) kb.hidden = !canType;
+}
+
+// Immersive UI hide-chrome gate (C5). A single `body.playing` class drives the CSS
+// that hides the room name / ✎ rename / Share ↗ / scoreboard while a guess is in
+// progress; lobby + finished restore the full chrome. Everything hidden here is
+// reachable via the avatar hub, so nothing is orphaned.
+function setChromeVisibility(phase) {
+  const playing = phase === "playing";
+  document.body.classList.toggle("playing", playing);
+  // A hub "peek" at the scoreboard adds .hub-reveal to force it visible mid-play;
+  // drop that the moment we leave the playing phase so normal gating resumes.
+  if (!playing) $("#scoreboard")?.classList.remove("hub-reveal");
 }
 
 // --- Per-round reset ---
@@ -2099,100 +2139,76 @@ function roundRect(ctx, x, y, w, h, r) {
 // --- top-level UI wiring ---
 document.addEventListener("DOMContentLoaded", () => {
   applySettings(getSettings());
-  $("#statsBtn").addEventListener("click", () => openStats());
-  $("#settingsBtn").addEventListener("click", openSettings);
-  // Mute toggle — companion voice + chimes already honor wordul.muted; this is the switch.
-  const muteBtn = $("#muteBtn");
-  if (muteBtn) {
-    const syncMute = () => {
-      const muted = localStorage.getItem("wordul.muted") === "1";
-      muteBtn.textContent = muted ? "🔇" : "🔊";
-      muteBtn.setAttribute("aria-pressed", String(muted));
-    };
-    syncMute();
-    muteBtn.addEventListener("click", () => {
-      const muted = localStorage.getItem("wordul.muted") === "1";
-      localStorage.setItem("wordul.muted", muted ? "0" : "1");
-      syncMute();
-      toast(muted ? "Sound on" : "Muted", { duration: 1000 });
-    });
+  // The avatar IS the hub: one tap opens settings / theme / mute / stats (and, in a
+  // room, the mid-play-hidden share / rename / scoreboard). Replaces the old scattered
+  // ⚙ / 📊 / 🔊 icons. The avatar glyph is the username's initial (no edition avatar field).
+  const avatarBtn = $("#avatarBtn");
+  if (avatarBtn) {
+    syncAvatar();
+    avatarBtn.addEventListener("click", () => showHub(avatarBtn));
   }
   // Global physical-keyboard handler — drives type-to-start on home/lobby and typing in-game.
   document.addEventListener("keydown", onPhysicalKey);
   route();
 });
 
-function openSettings() {
-  const modal = $("#settingsModal");
-  if (!modal) return;
-  const s = getSettings();
-  const hm = $("#setHardMode");
-  const cb = $("#setColorBlind");
-  const rm = $("#setReducedMotion");
-  if (hm) hm.checked = s.hardMode;
-  if (cb) cb.checked = s.colorBlind;
-  if (rm) rm.checked = s.reducedMotion;
+// Paint the avatar glyph from the username's first letter (a generic ◆ before the
+// player picks a name). Called on load + whenever the username changes.
+function syncAvatar() {
+  const avatarBtn = $("#avatarBtn");
+  if (!avatarBtn) return;
+  const u = getUsername();
+  avatarBtn.textContent = u ? u[0].toUpperCase() : "◆";
+}
 
-  // Wire toggles every open (idempotent — replace old listeners by cloning).
-  const wire = (el, key) => {
-    if (!el) return;
-    const fresh = el.cloneNode(true);
-    el.replaceWith(fresh);
-    fresh.checked = s[key];
-    fresh.addEventListener("change", () => {
-      const next = { ...getSettings(), [key]: fresh.checked };
-      saveSettings(next);
-      if (game.snapshot) render(); // apply EZ/colorblind/etc. to the live board now
-    });
-  };
-  wire(hm, "hardMode");
-  wire(cb, "colorBlind");
-  wire(rm, "reducedMotion");
-
-  // Theme/edition picker. Picking applies the edition live; re-apply settings so
-  // colorblind layers on top, and refresh the board to pick up new tile colors.
-  const picker = $("#editionPicker");
-  if (picker) {
-    renderEditionPicker(picker, () => {
-      applySettings(getSettings());
-      if (game.snapshot) render();
-      toast("Theme applied", { duration: 1000 });
-    });
-  }
-
-  const layoutPicker = $("#layoutPicker");
-  if (layoutPicker) {
-    renderLayoutPicker(layoutPicker, {
+// Open the settings modal, wiring the orchestrator-owned bits (live re-render,
+// theme picker, the keyboard layout picker mount, reset-stats) into settings.js.
+// settings.js owns the modal chrome (chevron sections, toggle persistence, close);
+// app.js only supplies callbacks for state it owns (game.snapshot, render, stats).
+function showSettings() {
+  openSettings({
+    onChange: () => { if (game.snapshot) render(); },
+    renderEditionPicker,
+    toast: (t, o) => toast(t, o),
+    resetStats: () => saveStats({ ...DEFAULT_STATS, distribution: { ...DEFAULT_STATS.distribution } }),
+    // Mount the keyboard layout picker into the Advanced section. Owning the
+    // save → rebuild → re-render here keeps settings.js free of a keyboard import
+    // (keyboard.js imports settings.js, not the reverse — no cycle).
+    mountLayoutPicker: (el) => renderLayoutPicker(el, {
       current: resolvedLayoutId(),
       onPick: (id) => {
         saveSettings({ ...getSettings(), keyboardLayout: id });
         buildKeyboard($("#keyboard"), id, keyboardHandlers);
         if (game.snapshot) render();
       },
-    });
-  }
-
-  const reset = $("#resetStatsBtn");
-  if (reset) {
-    reset.onclick = () => {
-      if (!confirm("Wipe all your stats? This can't be undone.")) return;
-      saveStats({ ...DEFAULT_STATS, distribution: { ...DEFAULT_STATS.distribution } });
-      toast("Stats reset", { duration: 1200 });
-    };
-  }
-
-  modal.hidden = false;
-  modal.removeAttribute("hidden");
-  modal.addEventListener("click", onSettingsModalClick);
+    }),
+  });
 }
-function onSettingsModalClick(e) {
-  if (e.target.matches("[data-close-settings]")) closeSettings();
+
+// The avatar hub: one popover that replaces the scattered ⚙/📊/🔊 icons and keeps
+// the mid-play-hidden chrome (share / rename / scoreboard) reachable. settings.js
+// builds + positions the menu; app.js wires every action since they touch app state.
+function showHub(anchor) {
+  const inRoom = !!game.snapshot;
+  openHub({
+    anchor,
+    inRoom,
+    isMuted: localStorage.getItem("wordul.muted") === "1",
+    onSettings: showSettings,
+    onTheme: showSettings, // theme lives inside Settings (Appearance section)
+    onStats: () => openStats(),
+    onMute: toggleMute,
+    onShare: inRoom ? () => shareRoomInvite() : null,
+    onRename: inRoom ? () => renameRoom() : null,
+    onScoreboard: inRoom ? () => scrollToScoreboard() : null,
+  });
 }
-function closeSettings() {
-  const modal = $("#settingsModal");
-  modal.hidden = true;
-  modal.setAttribute("hidden", "");
-  modal.removeEventListener("click", onSettingsModalClick);
+
+// Flip the mute flag (companion voice + chimes already honor wordul.muted).
+function toggleMute() {
+  const muted = localStorage.getItem("wordul.muted") === "1";
+  localStorage.setItem("wordul.muted", muted ? "0" : "1");
+  toast(muted ? "Sound on" : "Muted", { duration: 1000 });
 }
 
 // Tear down any live room connection when leaving a room view.
@@ -2202,6 +2218,8 @@ function leaveRoom() {
     try { game.ws.onclose = null; game.ws.close(); } catch {}
     game.ws = null;
   }
+  clearHeaderIdentity(); // drop the in-room username + gold from the topbar header
+  document.body.classList.remove("playing"); // restore full chrome outside a room
 }
 
 function showProfile(username) {

@@ -62,13 +62,16 @@
 <body>
 <header class="topbar">
   <div class="brand">Wordul<span class="brand-dot">.</span></div>
+  <!-- Immersive in-game header (C5): avatar + username + gold only. The avatar IS
+       the hub — one tap opens settings / theme / mute / stats (+ share / rename /
+       scoreboard in a room), replacing the old scattered ⚙ / 📊 / 🔊 icons. The
+       gold HUD is appended here by renderGoldHud (it targets .room-header first). -->
   <div class="topbar-actions">
     <button id="chatTopBtn" class="icon-btn topbar-chat-btn" title="Chat" aria-label="Chat" hidden>
       💬<span id="chatTopBadge" class="topbar-chat-badge" hidden>0</span>
     </button>
-    <button id="muteBtn" class="icon-btn" title="Mute sound" aria-label="Mute sound" aria-pressed="false">🔊</button>
-    <button id="statsBtn" class="icon-btn" title="Stats" aria-label="Stats">📊</button>
-    <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">⚙</button>
+    <div class="room-header" id="roomHeader"></div>
+    <button id="avatarBtn" class="avatar-btn" type="button" title="Menu" aria-label="Menu" aria-haspopup="true">◆</button>
   </div>
 </header>
 
@@ -215,62 +218,95 @@
     <button class="modal-close" data-close-settings aria-label="Close">✕</button>
     <h2 class="modal-title">SETTINGS</h2>
 
-    <div class="setting-row stack">
-      <div class="setting-text">
-        <div class="setting-name">Theme</div>
-        <div class="setting-desc">Pick a look — and a companion who talks while you play</div>
-      </div>
-      <div id="editionPicker" class="edition-picker"></div>
-    </div>
+    <!-- Collapsible chevron sections (C6) — all collapsed on open ("calm"). Less
+         colour and noise; keyboard layout tucked under "Advanced". -->
 
-    <div class="setting-row stack">
-      <div class="setting-text">
-        <div class="setting-name">Keyboard</div>
-        <div class="setting-desc">QWERTY or AZERTY layout</div>
+    <section class="settings-section">
+      <button type="button" class="settings-section-head" aria-expanded="false">
+        <span class="settings-section-title">Appearance</span>
+        <span class="settings-chevron" aria-hidden="true">›</span>
+      </button>
+      <div class="settings-section-body">
+        <div class="setting-row stack">
+          <div class="setting-text">
+            <div class="setting-name">Theme</div>
+            <div class="setting-desc">Pick a look — and a companion who talks while you play</div>
+          </div>
+          <div id="editionPicker" class="edition-picker"></div>
+        </div>
+        <label class="setting-row" for="setColorBlind">
+          <div class="setting-text">
+            <div class="setting-name">Color Blind Mode</div>
+            <div class="setting-desc">High-contrast colors (blue / orange)</div>
+          </div>
+          <span class="switch">
+            <input type="checkbox" id="setColorBlind" />
+            <span class="switch-slider" aria-hidden="true"></span>
+          </span>
+        </label>
       </div>
-      <div id="layoutPicker" class="edition-picker"></div>
-    </div>
+    </section>
 
-    <label class="setting-row" for="setHardMode">
-      <div class="setting-text">
-        <div class="setting-name">Hard Mode</div>
-        <div class="setting-desc">Any revealed hints must be used in subsequent guesses</div>
+    <section class="settings-section">
+      <button type="button" class="settings-section-head" aria-expanded="false">
+        <span class="settings-section-title">Gameplay</span>
+        <span class="settings-chevron" aria-hidden="true">›</span>
+      </button>
+      <div class="settings-section-body">
+        <label class="setting-row" for="setHardMode">
+          <div class="setting-text">
+            <div class="setting-name">Hard Mode</div>
+            <div class="setting-desc">Any revealed hints must be used in subsequent guesses</div>
+          </div>
+          <span class="switch">
+            <input type="checkbox" id="setHardMode" />
+            <span class="switch-slider" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="setting-row" for="setReducedMotion">
+          <div class="setting-text">
+            <div class="setting-name">Reduced Motion</div>
+            <div class="setting-desc">Skip the flip + explosion animations</div>
+          </div>
+          <span class="switch">
+            <input type="checkbox" id="setReducedMotion" />
+            <span class="switch-slider" aria-hidden="true"></span>
+          </span>
+        </label>
       </div>
-      <span class="switch">
-        <input type="checkbox" id="setHardMode" />
-        <span class="switch-slider" aria-hidden="true"></span>
-      </span>
-    </label>
+    </section>
 
-    <label class="setting-row" for="setColorBlind">
-      <div class="setting-text">
-        <div class="setting-name">Color Blind Mode</div>
-        <div class="setting-desc">High-contrast colors (blue / orange)</div>
+    <section class="settings-section">
+      <button type="button" class="settings-section-head" aria-expanded="false">
+        <span class="settings-section-title">Advanced</span>
+        <span class="settings-chevron" aria-hidden="true">›</span>
+      </button>
+      <div class="settings-section-body">
+        <div class="setting-row stack">
+          <div class="setting-text">
+            <div class="setting-name">Keyboard</div>
+            <div class="setting-desc">Auto-detects QWERTY / AZERTY — pick one to pin it</div>
+          </div>
+          <div id="layoutPicker" class="edition-picker"></div>
+        </div>
       </div>
-      <span class="switch">
-        <input type="checkbox" id="setColorBlind" />
-        <span class="switch-slider" aria-hidden="true"></span>
-      </span>
-    </label>
+    </section>
 
-    <label class="setting-row" for="setReducedMotion">
-      <div class="setting-text">
-        <div class="setting-name">Reduced Motion</div>
-        <div class="setting-desc">Skip the flip + explosion animations</div>
+    <section class="settings-section">
+      <button type="button" class="settings-section-head" aria-expanded="false">
+        <span class="settings-section-title">Data</span>
+        <span class="settings-chevron" aria-hidden="true">›</span>
+      </button>
+      <div class="settings-section-body">
+        <div class="setting-row danger">
+          <div class="setting-text">
+            <div class="setting-name">Reset Stats</div>
+            <div class="setting-desc">Clears Played / Streak / Distribution</div>
+          </div>
+          <button id="resetStatsBtn" class="btn ghost small">Reset</button>
+        </div>
       </div>
-      <span class="switch">
-        <input type="checkbox" id="setReducedMotion" />
-        <span class="switch-slider" aria-hidden="true"></span>
-      </span>
-    </label>
-
-    <div class="setting-row danger">
-      <div class="setting-text">
-        <div class="setting-name">Reset Stats</div>
-        <div class="setting-desc">Clears Played / Streak / Distribution</div>
-      </div>
-      <button id="resetStatsBtn" class="btn ghost small">Reset</button>
-    </div>
+    </section>
   </div>
 </div>
 
