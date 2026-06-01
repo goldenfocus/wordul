@@ -151,6 +151,16 @@ body {
 .greeting-name { color: var(--green); }
 .home-intro { display: flex; flex-direction: column; gap: 16px; width: 100%; }
 .home-cta { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.start-hint {
+  margin: -2px 0 2px; text-align: center; color: var(--muted);
+  font-size: 13px; line-height: 1.4; min-height: 1.4em;
+}
+.green-spark { animation: green-spark 0.7s ease-out; }
+@keyframes green-spark {
+  0% { filter: drop-shadow(0 0 0 var(--green)); }
+  35% { filter: drop-shadow(0 0 14px var(--green)); }
+  100% { filter: drop-shadow(0 0 0 var(--green)); }
+}
 .home-length {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   margin-top: 2px;

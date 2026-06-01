@@ -12,6 +12,7 @@ export default defineConfig({
       { find: /^\/edition\.js$/, replacement: new URL("./public/edition.js", import.meta.url).pathname },
       { find: /^\/voice-key\.js$/, replacement: new URL("./public/voice-key.js", import.meta.url).pathname },
       { find: /^\/voice\.js$/, replacement: new URL("./public/voice.js", import.meta.url).pathname },
+      { find: /^\/celebrate\.js$/, replacement: new URL("./public/celebrate.js", import.meta.url).pathname },
     ],
   },
 });

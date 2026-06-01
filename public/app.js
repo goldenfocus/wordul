@@ -4,6 +4,7 @@ import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
 import { applyEdition, getActiveEditionId, getGold, earnGold, companionReact, renderEditionPicker } from "/edition.js";
 import { speakLine } from "/voice.js";
+import { newGreensInLast } from "/celebrate.js";
 
 // Apply the active edition at module load (before motion consts read WordulMotion).
 applyEdition(getActiveEditionId());
@@ -138,9 +139,31 @@ function mount(tplId) {
 
 // --- screens ---
 
+// Cheeky rotating lines under the Start button — a third nudge type-to-start.
+const START_PHRASES = [
+  "The keyboard is already listening. Just start typing.",
+  "No need to click. Type your first guess and go.",
+  "Psst, your keyboard works right now. Try a word.",
+  "Five letters, six tries, infinite bragging rights.",
+  "Just type. We are listening for that first letter.",
+  "Go on, type a word. The board is ready when you are.",
+  "Your fingers know what to do. Start typing.",
+  "Skip the click. Just spell something and watch it light up.",
+  "A fresh word is waiting. Your move, smarty.",
+  "Green is the goal. Yellow is a flirt. Gray is honest feedback.",
+  "One word a day keeps the boredom away.",
+  "Type now, gloat later.",
+  "Trust your gut, then type the word that proves it.",
+  "Warning, mild brilliance may occur.",
+  "Start typing. The keyboard has been waiting all morning.",
+  "Big brain energy starts with one little word.",
+];
+
 function showHome() {
   history.replaceState(null, "", "/");
   mount("tpl-home");
+  const hint = $("#startHint");
+  if (hint) hint.textContent = START_PHRASES[Math.floor(Math.random() * START_PHRASES.length)];
   // No chat available outside a room.
   const topBtn = $("#chatTopBtn");
   if (topBtn) topBtn.hidden = true;
@@ -775,8 +798,18 @@ function onServerMessage(msg) {
     // Server accepted our guess → clear pending letters.
     if (me && prevMe && me.guesses.length > prevMe.guesses.length) {
       game.pending = "";
-      // A valid guess landed. If it didn't end the game, the companion reacts.
-      if (me.status === "playing") { showCompanion("wrong"); resetIdle(); }
+      // A valid guess landed. If it didn't end the game, the companion reacts —
+      // and in Yang's edition, new greens get a scaled celebration instead.
+      if (me.status === "playing") {
+        const newGreens = getActiveEditionId() === "yang" ? newGreensInLast(me.guesses) : 0;
+        if (newGreens >= 1) {
+          const flipDoneMs = (me.guesses[me.guesses.length - 1].word.length) * REVEAL_STAGGER_MS + REVEAL_FLIP_HALF_MS;
+          setTimeout(() => celebrateGreens(newGreens), flipDoneMs);
+        } else {
+          showCompanion("wrong");
+        }
+        resetIdle();
+      }
     }
     // Two ways to end the game from my perspective:
     //   (a) phase transitions to finished (someone won, or everyone is done)
@@ -1138,20 +1171,38 @@ function buildKeyboard() {
     else if (t.dataset.action === "back") backspace();
     else if (t.dataset.key) typeLetter(t.dataset.key);
   });
-  document.addEventListener("keydown", onPhysicalKey);
 }
 
 function onPhysicalKey(e) {
-  // Don't hijack typing in any input fields
-  if (e.target instanceof HTMLInputElement) return;
+  // Don't hijack typing in any input fields, with modifiers, or while a modal is open.
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
-  if (!game.snapshot || game.snapshot.phase !== "playing") return;
+  if (document.querySelector(".modal:not([hidden])")) return;
+
+  const isLetter = /^[a-zA-Z]$/.test(e.key);
+  const isEnter = e.key === "Enter";
+
+  // Type-to-start: on the home screen or in a lobby, a letter or Enter kicks off the
+  // game — so players who instinctively start typing don't have to hunt for the button.
+  if (!game.snapshot || game.snapshot.phase === "lobby") {
+    if (!isLetter && !isEnter) return;
+    const startPlaying = $("#startPlayingBtn");
+    if (!game.snapshot && startPlaying && startPlaying.offsetParent !== null) {
+      startPlaying.click(); e.preventDefault(); return;
+    }
+    if (game.snapshot?.phase === "lobby") {
+      send({ type: "start" }); e.preventDefault();
+    }
+    return;
+  }
+
+  if (game.snapshot.phase !== "playing") return;
   const me = game.snapshot.players.find((p) => p.username === getUsername());
   if (!me || me.status !== "playing") return;
 
-  if (e.key === "Enter") { submitGuess(); e.preventDefault(); }
+  if (isEnter) { submitGuess(); e.preventDefault(); }
   else if (e.key === "Backspace") { backspace(); e.preventDefault(); }
-  else if (/^[a-zA-Z]$/.test(e.key)) { typeLetter(e.key.toUpperCase()); e.preventDefault(); }
+  else if (isLetter) { typeLetter(e.key.toUpperCase()); e.preventDefault(); }
 }
 
 function typeLetter(l) {
@@ -1257,12 +1308,15 @@ function triggerStartCelebration() {
   document.body.appendChild(burst);
   setTimeout(() => burst.remove(), 1100);
 
-  const colors = ["#538d4e", "#c9b458", "#6aaa64", "#ffd166", "#9d4edd", "#4cc9f0", "#ef476f"];
-  const pieces = 40;
+  spawnConfetti(40);
+}
+
+const CONFETTI_COLORS = ["#538d4e", "#c9b458", "#6aaa64", "#ffd166", "#9d4edd", "#4cc9f0", "#ef476f"];
+function spawnConfetti(pieces) {
   for (let i = 0; i < pieces; i++) {
     const c = document.createElement("div");
     c.className = "cheer-confetti";
-    c.style.background = colors[i % colors.length];
+    c.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
     c.style.left = `${Math.random() * 100}vw`;
     c.style.setProperty("--cf-x", `${(Math.random() - 0.5) * 140}px`);
     c.style.setProperty("--cf-rot", `${(Math.random() - 0.5) * 900}deg`);
@@ -1270,6 +1324,47 @@ function triggerStartCelebration() {
     c.style.setProperty("--cf-dur", `${1200 + Math.random() * 900}ms`);
     document.body.appendChild(c);
     setTimeout(() => c.remove(), 2400);
+  }
+}
+
+// A short sparkle chime via Web Audio. Honors the global mute toggle.
+let audioCtx = null;
+function playChime(notes) {
+  if (localStorage.getItem("wordul.muted") === "1") return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const t0 = audioCtx.currentTime;
+    notes.forEach(([freq, at], i) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t0 + at);
+      gain.gain.exponentialRampToValueAtTime(0.18, t0 + at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.22);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t0 + at); osc.stop(t0 + at + 0.24);
+    });
+  } catch { /* ignore — audio is a nice-to-have */ }
+}
+
+// Yang's scaled green celebration. 1 new green → spark + soft chime; 2+ → confetti
+// + an ascending chime + a hyped voice line. Visual bits respect reduced motion.
+function celebrateGreens(count) {
+  const reduced = getSettings().reducedMotion;
+  const boards = $("#boards");
+  if (count >= 2) {
+    playChime([[523, 0], [659, 0.09], [784, 0.18]]);
+    if (!reduced) spawnConfetti(28);
+    showCompanion("rush");
+  } else {
+    playChime([[660, 0], [880, 0.08]]);
+    if (boards && !reduced) {
+      boards.classList.remove("green-spark");
+      void boards.offsetWidth; // restart the animation
+      boards.classList.add("green-spark");
+      setTimeout(() => boards.classList.remove("green-spark"), 700);
+    }
   }
 }
 
@@ -1734,6 +1829,8 @@ document.addEventListener("DOMContentLoaded", () => {
   applySettings(getSettings());
   $("#statsBtn").addEventListener("click", () => openStats());
   $("#settingsBtn").addEventListener("click", openSettings);
+  // Global physical-keyboard handler — drives type-to-start on home/lobby and typing in-game.
+  document.addEventListener("keydown", onPhysicalKey);
   route();
 });
 
