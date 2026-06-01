@@ -15,6 +15,7 @@ export default defineConfig({
       { find: /^\/celebrate\.js$/, replacement: new URL("./public/celebrate.js", import.meta.url).pathname },
       { find: /^\/gold\.js$/, replacement: new URL("./public/gold.js", import.meta.url).pathname },
       { find: /^\/hacklog\.js$/, replacement: new URL("./public/hacklog.js", import.meta.url).pathname },
+      { find: /^\/keyboard\.js$/, replacement: new URL("./public/keyboard.js", import.meta.url).pathname },
     ],
   },
 });

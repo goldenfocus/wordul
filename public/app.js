@@ -8,6 +8,7 @@ import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } fr
 import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence } from "/gold.js";
 import { createHacklog } from "/hacklog.js";
 import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, surfaceGiveUp, checkBankruptcy } from "/powerups.js";
+import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, detectLayout } from "/keyboard.js";
 
 // Apply the active edition at module load (before motion consts read WordulMotion).
 applyEdition(getActiveEditionId());
@@ -36,7 +37,9 @@ const DEFAULT_SETTINGS = {
   hardMode: false,
   colorBlind: false,
   reducedMotion: false,
-  keyboardLayout: "qwerty",
+  // "auto" = detect from browser/OS locale (fr-* → AZERTY) until the player picks
+  // explicitly in settings; an explicit pick is persisted and always wins.
+  keyboardLayout: "auto",
 };
 function getSettings() {
   try {
@@ -585,7 +588,7 @@ function showRoom(owner, slug) {
     send({ type: "rematch" });
   });
   wireChat();
-  buildKeyboard();
+  buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
   connect();
 }
 
@@ -1077,7 +1080,7 @@ function render() {
   if (!hasCompany) closeChatSheet();
 
   renderBoards(snap, me);
-  renderKeyboard(me);
+  renderKeyboard($("#keyboard"), me);
   renderChat(snap);
   renderScoreboard(snap);
   renderPowerups(powerupsCtx, snap, me);
@@ -1343,107 +1346,18 @@ function scheduleReveal(tile, color, colIdx) {
   }, at);
 }
 
-function renderKeyboard(me) {
-  // Build keyboard letter color map from MY guesses only.
-  const map = {};
-  const priority = { gray: 1, yellow: 2, green: 3 };
-  if (me) {
-    for (const g of me.guesses) {
-      for (let i = 0; i < g.word.length; i++) {
-        const k = g.word[i];
-        const c = g.mask[i];
-        if (!map[k] || priority[c] > priority[map[k]]) map[k] = c;
-      }
-    }
-  }
-  for (const key of $$(".key")) {
-    key.classList.remove("green", "yellow", "gray");
-    const v = key.dataset.key;
-    if (v && map[v]) key.classList.add(map[v]);
-  }
+// --- Keyboard input ---
+
+// Resolve the player's keyboard layout: an explicit saved pick always wins; an
+// unset / "auto" setting falls through to locale auto-detect (fr-* → AZERTY).
+// The first explicit pick in the layout picker pins it forever.
+function resolvedLayoutId() {
+  const s = getSettings().keyboardLayout;
+  return s && s !== "auto" ? activeLayoutId(s) : detectLayout(navigator.language);
 }
 
-// --- Keyboard build & input ---
-
-const KEYBOARD_LAYOUTS = {
-  qwerty: ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"],
-  azerty: ["AZERTYUIOP", "QSDFGHJKLM", "WXCVBN"],
-};
-const KEYBOARD_LAYOUT_LABELS = { qwerty: "QWERTY", azerty: "AZERTY" };
-
-function activeLayoutId() {
-  const id = getSettings().keyboardLayout;
-  return KEYBOARD_LAYOUTS[id] ? id : "qwerty";
-}
-
-let keyboardWired = false;
-function buildKeyboard() {
-  const layoutId = activeLayoutId();
-  const rows = KEYBOARD_LAYOUTS[layoutId];
-  const root = $("#keyboard");
-  root.innerHTML = "";
-  rows.forEach((letters, idx) => {
-    const row = document.createElement("div");
-    row.className = "kb-row";
-    for (const l of letters) {
-      const k = document.createElement("button");
-      k.className = "key";
-      k.textContent = l;
-      k.dataset.key = l;
-      row.appendChild(k);
-    }
-    // Match a real computer keyboard: ⌫ sits top-right (end of row 1), Enter
-    // mid-right (end of row 2). The bottom row is letters only.
-    if (idx === 0) {
-      const back = document.createElement("button");
-      back.className = "key wide";
-      back.textContent = "⌫";
-      back.dataset.action = "back";
-      row.appendChild(back);
-    } else if (idx === 1) {
-      const enter = document.createElement("button");
-      enter.className = "key wide";
-      enter.textContent = "Enter";
-      enter.dataset.action = "enter";
-      row.appendChild(enter);
-    }
-    root.appendChild(row);
-  });
-  // Attach the delegated click handler exactly once. innerHTML clears children on
-  // every rebuild (e.g. a layout switch) but leaves this root listener intact.
-  if (!keyboardWired) {
-    keyboardWired = true;
-    root.addEventListener("click", (e) => {
-      const t = e.target.closest("button.key");
-      if (!t) return;
-      if (t.dataset.action === "enter") submitGuess();
-      else if (t.dataset.action === "back") backspace();
-      else if (t.dataset.key) typeLetter(t.dataset.key);
-    });
-  }
-}
-
-// Settings: pick QWERTY / AZERTY. Rebuilds the on-screen keyboard live. Physical
-// typing is unaffected — onPhysicalKey types by character, so layout is purely
-// the visual + click order.
-function renderLayoutPicker(rootEl) {
-  rootEl.innerHTML = "";
-  const current = activeLayoutId();
-  for (const id of Object.keys(KEYBOARD_LAYOUTS)) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "edition-chip" + (id === current ? " is-active" : "");
-    btn.textContent = KEYBOARD_LAYOUT_LABELS[id] ?? id.toUpperCase();
-    btn.addEventListener("click", () => {
-      saveSettings({ ...getSettings(), keyboardLayout: id });
-      rootEl.querySelectorAll(".edition-chip").forEach((b) => b.classList.remove("is-active"));
-      btn.classList.add("is-active");
-      buildKeyboard();
-      if (game.snapshot) render();
-    });
-    rootEl.appendChild(btn);
-  }
-}
+// Handlers injected into the on-screen keyboard's delegated click listener.
+const keyboardHandlers = { onEnter: submitGuess, onBack: backspace, onLetter: typeLetter };
 
 function onPhysicalKey(e) {
   // Don't hijack typing in any input fields, with modifiers, or while a modal is open.
@@ -2247,7 +2161,16 @@ function openSettings() {
   }
 
   const layoutPicker = $("#layoutPicker");
-  if (layoutPicker) renderLayoutPicker(layoutPicker);
+  if (layoutPicker) {
+    renderLayoutPicker(layoutPicker, {
+      current: resolvedLayoutId(),
+      onPick: (id) => {
+        saveSettings({ ...getSettings(), keyboardLayout: id });
+        buildKeyboard($("#keyboard"), id, keyboardHandlers);
+        if (game.snapshot) render();
+      },
+    });
+  }
 
   const reset = $("#resetStatsBtn");
   if (reset) {

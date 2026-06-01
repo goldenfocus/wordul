@@ -884,11 +884,22 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
   padding: 8px;
   user-select: none;
 }
-.kb-row { display: flex; gap: 6px; justify-content: center; }
+/* Equal-fraction grid: every column in a row is an identical 1fr track, so the
+   keys within a row are pixel-identical — I and O measure the same (no flexbox
+   subpixel drift). Keys cap at 46px and shrink with the track on narrow screens;
+   wide keys (⌫ / Enter) span two tracks for their larger footprint. */
+.kb-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 6px;
+  justify-content: center;
+}
 .kb-row.middle { padding: 0 5%; }
 .key {
-  flex: 1;
   max-width: 46px;
+  justify-self: center;
+  width: 100%;
   min-height: 58px;
   background: var(--key-bg);
   color: var(--fg);
@@ -901,7 +912,7 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
   transition: background 0.15s, opacity 0.15s, transform 0.05s;
 }
 .key:active { transform: scale(0.95); }
-.key.wide { flex: 1.6; font-size: 13px; max-width: 80px; }
+.key.wide { grid-column: span 2; max-width: 80px; font-size: 13px; }
 .key.green { background: var(--green); color: white; }
 .key.yellow { background: var(--yellow); color: white; }
 /* Dead (absent) letters fade back so the live board pops. Colored keys stay vivid. */
