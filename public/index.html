@@ -126,6 +126,7 @@
     <div class="lobby-bar">
       <div class="room-info">
         <span class="room-name" id="roomName"></span>
+        <span id="modeChip" class="mode-chip" hidden></span>
         <button id="renameBtn" class="icon-btn rename-btn" type="button" title="Rename room" aria-label="Rename room">✎</button>
         <a id="roomOwner" class="room-owner link" href="#">@owner</a>
         <button id="inviteBtn" class="btn small ghost invite-btn">
@@ -135,6 +136,10 @@
         <span id="copyOk" class="copy-ok" hidden>Copied!</span>
       </div>
       <div id="lobbyControls" class="lobby-controls" hidden>
+        <div id="modeControl" class="mode-control" hidden>
+          <span class="label" id="modeHeading">Choose a mode</span>
+          <ul id="modeList" class="mode-list" role="radiogroup" aria-label="Game mode"></ul>
+        </div>
         <div id="lengthControl" class="length-control" hidden>
           <span class="label">Letters</span>
           <select id="lengthSelect" class="length-select" aria-label="Word length"></select>
