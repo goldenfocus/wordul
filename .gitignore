@@ -34,3 +34,7 @@ yarn-error.log*
 
 # Playwright MCP test artifacts
 .playwright-mcp/
+
+# stray local artifacts (not part of the app)
+.claire/
+wrangler.v2.jsonc

@@ -722,17 +722,6 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
   display: block;
   margin-bottom: 6px;
 }
-.endgame.joke .reveal {
-  color: var(--muted);
-  font-weight: 500;
-  font-size: 13px;
-}
-.endgame.joke .reveal .word {
-  color: var(--green);
-  font-family: ui-monospace, monospace;
-  letter-spacing: 0.18em;
-  margin-left: 4px;
-}
 
 /* Chat */
 .chat-panel {
@@ -1148,13 +1137,6 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
   font-weight: 700;
   color: var(--fg);
 }
-.endgame .word {
-  display: inline-block;
-  margin-left: 6px;
-  letter-spacing: 0.18em;
-  font-family: ui-monospace, monospace;
-  color: var(--green);
-}
 .modal-actions {
   display: flex; gap: 12px; align-items: stretch;
   margin-top: 16px;
@@ -1291,6 +1273,50 @@ body.reduced-motion .gold-floater { display: none !important; }
 .endgame-replay-line.gain { color: var(--green); }
 .endgame-replay-line.loss { color: var(--error); }
 .endgame-replay-line.combo { color: var(--accent); font-weight: 800; }
+
+/* Collapsed gold breakdown — available, not in your face. */
+.endgame-replay-details { margin: 6px auto 0; max-width: 320px; }
+.endgame-replay-details > summary {
+  cursor: pointer; list-style: none; text-align: center;
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  padding: 4px 0; letter-spacing: 0.04em;
+}
+.endgame-replay-details > summary::-webkit-details-marker { display: none; }
+.endgame-replay-details[open] > summary { color: var(--fg); }
+
+/* The word card — the "make me smarter" beat on every end screen. */
+.endgame-word-card {
+  margin: 18px auto 0;
+  max-width: 340px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
+}
+.ewc-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
+  color: var(--muted); text-transform: uppercase;
+}
+.ewc-word {
+  margin-top: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 28px; font-weight: 800; letter-spacing: 0.18em;
+  color: var(--green);
+}
+.ewc-def {
+  margin-top: 10px;
+  font-size: 13px; font-weight: 500; line-height: 1.5;
+  color: var(--fg); font-style: italic;
+}
+.ewc-def.muted { color: var(--muted); font-style: normal; }
+.ewc-look {
+  display: inline-block; margin-top: 14px;
+  padding: 9px 18px; border-radius: 999px;
+  background: var(--green); color: #fff;
+  font-size: 13px; font-weight: 700; text-decoration: none;
+}
+.endgame-status { display: block; margin-top: 6px; }
 
 /* --- Username / profile link on home --- */
 .profile-link { margin: -4px 0 4px; }

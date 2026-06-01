@@ -535,6 +535,7 @@ function clearPayoutTimers() {
   for (const t of game.payoutTimers) clearTimeout(t);
   game.payoutTimers = [];
   game.payingOut = false;
+  clearGiveUpTimer(); // a new round / leaving resets the 3-min 💀 unlock
 }
 // Resolve a tile in MY board's freshly-flipped row by column index, re-querying each
 // beat so a board repaint mid-payout never targets a detached node. MY board is the
@@ -727,11 +728,25 @@ function armIdle(delay = IDLE_FIRST_MS) {
   idleTimer = setTimeout(() => {
     if (!isMyTurn()) { clearIdle(); return; } // re-check at fire time
     showCompanion("idle");
-    surfaceGiveUp(powerupsCtx); // C4: idle long enough → offer the 💀 give-up escape hatch
     armIdle(IDLE_REPEAT_MS);
   }, delay);
 }
 function resetIdle() { armIdle(IDLE_FIRST_MS); }
+
+// C4: the 💀 give-up escape hatch is intentionally NOT eager — quitting should only be
+// an option once you've genuinely been grinding. It surfaces after 3 minutes in a round
+// (this timer) OR after too many mistakes (errorCount threshold in powerups.js). The idle
+// nudge only shows the companion now; it no longer reveals give-up.
+let giveUpTimer = null;
+const GIVE_UP_AFTER_MS = 180000; // 3 min into the round before 💀 appears
+function clearGiveUpTimer() { if (giveUpTimer) { clearTimeout(giveUpTimer); giveUpTimer = null; } }
+function armGiveUpTimer() {
+  clearGiveUpTimer();
+  if (!isMyTurn()) return;
+  giveUpTimer = setTimeout(() => {
+    if (isMyTurn()) surfaceGiveUp(powerupsCtx);
+  }, GIVE_UP_AFTER_MS);
+}
 
 // SPA navigation: pushState + re-dispatch the router.
 function navigate(path) {
@@ -923,6 +938,7 @@ function onServerMessage(msg) {
     if (prev && prev.phase !== "playing" && msg.room.phase === "playing") {
       triggerStartCelebration();
       resetIdle();
+      armGiveUpTimer(); // 💀 give-up only unlocks 3 min into the round
     }
     const me = msg.room.players.find((p) => p.username === getUsername());
     const prevMe = prev?.players.find((p) => p.username === getUsername());
@@ -996,12 +1012,14 @@ function onServerMessage(msg) {
           game.goldThisRound = (game.goldThisRound || 0) + total;
           const reducedMotion = getSettings().reducedMotion;
           const log = getHacklog();
-          // Set payingOut NOW (not inside the deferred timer): during the ~flip window
-          // another player's snapshot could repaint #boards and orphan my animating row.
-          // renderBoards preserves my board while payingOut is true.
-          game.payingOut = true;
           // Start the payout after the row finishes flipping, so coins land as colors do.
+          // payingOut is flipped on INSIDE the deferred callback (not now): setting it
+          // before this snapshot's render() would make renderBoards preserve my OLD board
+          // and skip drawing the freshly-flipped colored row — so colors wouldn't appear
+          // until the whole payout finished. By the time the payout starts the colors are
+          // already revealed, and the guard still protects the coin-floater animations.
           deferPayout(() => {
+            game.payingOut = true;
             playPayoutSequence({
               discoveries: discoveryList,
               mult,
@@ -1840,6 +1858,7 @@ function forfeit(reason) {
   const me = snap.players.find((p) => p.username === getUsername());
   if (!me) return;
   clearIdle();
+  clearGiveUpTimer();
   game.finishReason = reason;
   recordResult(false, me.guesses.length); // a forfeit is a loss for local stats
   game.hasShownEndStats = true;
@@ -1851,6 +1870,7 @@ function handleGameOver(snap) {
   const me = snap.players.find((p) => p.username === getUsername());
   if (!me) return;
   clearIdle();
+  clearGiveUpTimer();
   const won = me.status === "won";
   const guessCount = me.guesses.length;
   recordResult(won, guessCount);
@@ -1974,6 +1994,13 @@ function triggerLoseSequence(snap, me) {
 // now a scannable summary. Skips silently when there's nothing to show.
 function renderReplayInto(parent) {
   if (!game.replay || game.replay.length === 0) return;
+  // Tuck the per-beat breakdown behind a collapsed disclosure — it's there for the
+  // curious, but the win moment shouldn't open onto a wall of "+100 / +50" lines.
+  const details = document.createElement("details");
+  details.className = "endgame-replay-details";
+  const summary = document.createElement("summary");
+  summary.textContent = "Gold breakdown";
+  details.appendChild(summary);
   const box = document.createElement("div");
   box.className = "endgame-replay";
   for (const turn of game.replay) {
@@ -1995,7 +2022,62 @@ function renderReplayInto(parent) {
       box.appendChild(c);
     }
   }
-  parent.appendChild(box);
+  details.appendChild(box);
+  parent.appendChild(details);
+}
+
+// "The word — and a reason to remember it." Shows the answer big, fetches a one-line
+// definition (free dictionaryapi.dev, no key) so every game teaches you something, and
+// offers a one-tap web search to go deeper. Graceful: if the lookup fails, the word +
+// search button still stand on their own.
+function renderWordCard(parent, word) {
+  if (!word) return;
+  const w = String(word).toLowerCase();
+  const card = document.createElement("div");
+  card.className = "endgame-word-card";
+
+  const label = document.createElement("div");
+  label.className = "ewc-label";
+  label.textContent = "THE WORD";
+  card.appendChild(label);
+
+  const big = document.createElement("div");
+  big.className = "ewc-word";
+  big.textContent = word.toUpperCase();
+  card.appendChild(big);
+
+  const def = document.createElement("div");
+  def.className = "ewc-def";
+  def.textContent = "Looking it up…";
+  card.appendChild(def);
+
+  const look = document.createElement("a");
+  look.className = "ewc-look";
+  look.href = `https://www.google.com/search?q=${encodeURIComponent(w + " meaning")}`;
+  look.target = "_blank";
+  look.rel = "noopener";
+  look.textContent = "Look it up ↗";
+  card.appendChild(look);
+
+  parent.appendChild(card);
+
+  // Async definition — never blocks the modal. dictionaryapi.dev is CORS-friendly.
+  fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(w)}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => {
+      const d = Array.isArray(data) && data[0]?.meanings?.[0]?.definitions?.[0]?.definition;
+      const pos = Array.isArray(data) && data[0]?.meanings?.[0]?.partOfSpeech;
+      if (d) {
+        def.textContent = pos ? `(${pos}) ${d}` : d;
+      } else {
+        def.textContent = "No dictionary entry — tap “Look it up” to explore.";
+        def.classList.add("muted");
+      }
+    })
+    .catch(() => {
+      def.textContent = "Definition unavailable offline — tap “Look it up”.";
+      def.classList.add("muted");
+    });
 }
 
 function openStats(opts = {}) {
@@ -2053,44 +2135,24 @@ function openStats(opts = {}) {
   if (opts.justFinished && opts.snap) {
     const snap = opts.snap;
     const winner = snap.winner; // winner username (string) or null
+    // One short status line — the word itself (+ definition + lookup) lives in the
+    // word card below, so we never repeat "the word was X" here.
+    const status = document.createElement("span");
+    status.className = "endgame-status";
     if (opts.joke) {
-      // Loss path: roast joke prominent, then a quieter "The word was X" reveal.
       eg.classList.add("joke");
-      const roast = document.createElement("span");
-      roast.className = "roast";
-      roast.textContent = `💀 ${opts.joke}`;
-      eg.appendChild(roast);
-      if (snap.word) {
-        const reveal = document.createElement("span");
-        reveal.className = "reveal";
-        reveal.appendChild(document.createTextNode("The word was"));
-        const w = document.createElement("span");
-        w.className = "word";
-        w.textContent = snap.word;
-        reveal.appendChild(w);
-        eg.appendChild(reveal);
-      }
+      status.classList.add("roast");
+      status.textContent = `💀 ${opts.joke}`;
     } else if (opts.won && winner && winner === getUsername()) {
-      eg.appendChild(document.createTextNode(`🎉 You got it in ${opts.lastGuessCount}!`));
+      status.textContent = `🎉 You got it in ${opts.lastGuessCount}!`;
     } else if (winner) {
-      eg.appendChild(document.createTextNode(`${winner} got it. The word was`));
-      if (snap.word) {
-        eg.appendChild(document.createTextNode(" "));
-        const w = document.createElement("span");
-        w.className = "word";
-        w.textContent = snap.word;
-        eg.appendChild(w);
-      }
+      status.textContent = `${winner} got it first.`;
     } else {
-      eg.appendChild(document.createTextNode("Nobody got it. The word was"));
-      if (snap.word) {
-        eg.appendChild(document.createTextNode(" "));
-        const w = document.createElement("span");
-        w.className = "word";
-        w.textContent = snap.word;
-        eg.appendChild(w);
-      }
+      status.textContent = "Nobody got it this time.";
     }
+    eg.appendChild(status);
+    // The learning beat: the word, a definition, and a one-tap way to go deeper.
+    renderWordCard(eg, snap.word);
     eg.hidden = false;
   } else {
     eg.hidden = true;

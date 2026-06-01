@@ -179,7 +179,7 @@ export function playPayoutSequence(opts = {}) {
         tone: "gain",
       });
     }
-    if (hasCombo) log?.addInstant(`> ✦ ${mult}× COMBO  +${bonus}`, { tone: "combo" });
+    if (hasCombo) log?.addInstant(`> ✦ ${mult}× COMBO  +${total}`, { tone: "combo" });
     onBalanceChange?.();
     return Promise.resolve();
   }
@@ -225,7 +225,7 @@ export function playPayoutSequence(opts = {}) {
       spawnGoldCoins(Math.min(28, Math.max(6, Math.round(total / 18))));
       onBalanceChange?.();
       celebrateCombo?.(discoveries.length, mult);
-      log?.logLine(`✦ ${mult}× COMBO  +${bonus}`, { tone: "combo" });
+      log?.logLine(`✦ ${mult}× COMBO  +${total}`, { tone: "combo" });
       setTimeout(resolve, PAYOUT_BEAT_MS);
     }
 
