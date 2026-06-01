@@ -1378,3 +1378,71 @@ html[data-edition="jackpot"] .key:active {
 html[data-edition="jackpot"] .key.green { background: linear-gradient(#2bf07a, #1aa353); }
 html[data-edition="jackpot"] .key.yellow { background: linear-gradient(#ffe27a, #d9ad2f); color: #2a1d00; }
 html[data-edition="jackpot"] .key.gray { background: linear-gradient(#2a2438, #1a1726); }
+
+/* --- Room tabs (Play / Games / Players) --- */
+.room-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 14px auto 18px;
+  padding: 3px;
+  width: max-content;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.room-tab {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 6px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color .18s ease, background .18s ease;
+}
+.room-tab:hover { color: var(--fg); }
+.room-tab.is-active { color: #16140f; background: var(--accent); }
+/* Active guessing is immersive — tabs are a between-games surface. */
+body.playing .room-tabs { display: none; }
+.room-tab-panel[hidden] { display: none; }
+
+/* --- Games panel --- */
+.games-panel { max-width: 460px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
+.games-empty { text-align: center; padding: 24px 0; }
+.game-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 14px;
+}
+.game-row.is-live { border-color: var(--accent); }
+.game-mode {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.05);
+  color: var(--muted);
+}
+.game-mode[data-mode="race"] { color: var(--accent); }
+.game-who { flex: 1; color: var(--fg); font-weight: 500; }
+.game-result { color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.game-when { color: var(--muted); font-size: 12px; opacity: .7; }
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent);
+  animation: live-pulse 1.6s ease-out infinite;
+}
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(200,169,106,.5); }
+  70% { box-shadow: 0 0 0 6px rgba(200,169,106,0); }
+  100% { box-shadow: 0 0 0 0 rgba(200,169,106,0); }
+}

@@ -571,6 +571,7 @@ function showRoom(owner, slug) {
   game.chatCollapsed = false;
   game.lastGuessCounts = new Map();
   game.autoStart = false;
+  game.roomTab = "play";
   game.shareImage = null;
   game.replay = [];
   game.payingOut = false;
@@ -590,6 +591,7 @@ function showRoom(owner, slug) {
     send({ type: "rematch" });
   });
   wireChat();
+  wireRoomTabs();
   buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
   connect();
 }
@@ -1076,6 +1078,114 @@ function onServerMessage(msg) {
 
 // --- Render ---
 
+// --- Room tabs (Play / Games / Players) ---
+// Tabs are a between-games surface; active guessing stays immersive (board only,
+// driven by body.playing). Off-play, the active tab gates the three panels.
+
+function wireRoomTabs() {
+  const tabs = $("#roomTabs");
+  if (!tabs) return;
+  tabs.querySelectorAll(".room-tab").forEach((btn) => {
+    btn.addEventListener("click", () => setRoomTab(btn.dataset.tab));
+  });
+  updateTabUI();
+}
+
+function setRoomTab(tab) {
+  game.roomTab = tab;
+  updateTabUI();
+  applyTabVisibility(game.snapshot?.phase === "playing");
+}
+
+function updateTabUI() {
+  $("#roomTabs")?.querySelectorAll(".room-tab").forEach((b) => {
+    const on = b.dataset.tab === game.roomTab;
+    b.classList.toggle("is-active", on);
+    b.setAttribute("aria-selected", String(on));
+  });
+}
+
+function applyTabVisibility(playing) {
+  const play = $("#tabPlay"), games = $("#tabGames"), players = $("#tabPlayers");
+  if (!play) return;
+  if (playing) {
+    // Immersive: board only. #tabPlayers wrapper stays present so the .playing CSS
+    // (and its hub-reveal peek) keeps owning #scoreboard.
+    play.hidden = false;
+    games.hidden = true;
+    players.hidden = false;
+    return;
+  }
+  play.hidden = game.roomTab !== "play";
+  games.hidden = game.roomTab !== "games";
+  players.hidden = game.roomTab !== "players";
+}
+
+function renderGames(snap) {
+  const panel = $("#gamesPanel");
+  if (!panel) return;
+  panel.textContent = "";
+  const frag = document.createDocumentFragment();
+
+  if (snap.phase === "playing") {
+    const names = snap.players.map((p) => p.username);
+    frag.appendChild(gameRow({ live: true, solo: names.length === 1, names, result: "in progress" }));
+  }
+  const hist = Array.isArray(snap.history) ? snap.history : [];
+  for (let i = hist.length - 1; i >= 0; i--) {
+    const g = hist[i];
+    const names = g.players.map((p) => p.username);
+    const winnerP = g.players.find((p) => p.username === g.winner);
+    const result = g.winner
+      ? `${g.winner === getUsername() ? "you" : g.winner} · ${winnerP?.guesses ?? "?"}/${snap.maxGuesses}`
+      : `no one · X/${snap.maxGuesses}`;
+    frag.appendChild(gameRow({ live: false, solo: g.solo, names, result, when: relativeTime(g.finishedAt) }));
+  }
+
+  if (!frag.childNodes.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted small games-empty";
+    empty.textContent = "No games yet. Start one to begin this room's story.";
+    panel.appendChild(empty);
+    return;
+  }
+  panel.appendChild(frag);
+}
+
+function gameRow(g) {
+  const row = document.createElement("div");
+  row.className = "game-row" + (g.live ? " is-live" : "");
+
+  const mode = document.createElement("span");
+  mode.className = "game-mode";
+  mode.dataset.mode = g.solo ? "solo" : "race";
+  mode.textContent = g.solo ? "solo" : "race";
+  row.appendChild(mode);
+
+  const who = document.createElement("span");
+  who.className = "game-who";
+  who.textContent = g.names.map((n) => (n === getUsername() ? "you" : n)).join(g.solo ? "" : " vs ");
+  row.appendChild(who);
+
+  const res = document.createElement("span");
+  res.className = "game-result";
+  if (g.live) {
+    const dot = document.createElement("span");
+    dot.className = "live-dot";
+    res.appendChild(dot);
+  }
+  res.appendChild(document.createTextNode(g.result));
+  row.appendChild(res);
+
+  if (g.when) {
+    const when = document.createElement("span");
+    when.className = "game-when";
+    when.textContent = g.when;
+    row.appendChild(when);
+  }
+  return row;
+}
+
 function render() {
   if (!game.snapshot) return;
   const snap = game.snapshot;
@@ -1110,8 +1220,8 @@ function render() {
     syncLengthSelect(snap);
     startBtn.hidden = false;
     $("#lobbyHint").textContent = snap.players.length < 2
-      ? `Waiting for friends — share the link. (You can start solo too.)`
-      : `${snap.players.length} players in.`;
+      ? `Waiting for friends · start solo anytime`
+      : `${snap.players.length} players in`;
   } else if (snap.phase === "playing") {
     lobby.hidden = true;
     endControls.hidden = true;
@@ -1140,6 +1250,8 @@ function render() {
   renderKeyboard($("#keyboard"), me);
   renderChat(snap);
   renderScoreboard(snap);
+  renderGames(snap);
+  applyTabVisibility(snap.phase === "playing");
   renderPowerups(powerupsCtx, snap, me);
 
   // Show the keyboard only when a guess is actually possible — keeps the lobby

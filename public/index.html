@@ -147,20 +147,35 @@
       </div>
     </div>
 
-    <div id="boards" class="boards"></div>
-    <div id="scoreboard" class="scoreboard" hidden></div>
-    <div id="messageRow" class="message-row" aria-live="polite"></div>
+    <nav id="roomTabs" class="room-tabs" role="tablist" aria-label="Room views">
+      <button class="room-tab is-active" data-tab="play" role="tab" type="button">Play</button>
+      <button class="room-tab" data-tab="games" role="tab" type="button">Games</button>
+      <button class="room-tab" data-tab="players" role="tab" type="button">Players</button>
+    </nav>
 
-    <div id="hacklog" class="hacklog" hidden></div>
+    <div id="tabPlay" class="room-tab-panel">
+      <div id="boards" class="boards"></div>
+      <div id="messageRow" class="message-row" aria-live="polite"></div>
 
-    <p id="powerHints" class="power-hints" hidden></p>
-    <div class="magic-bar">
-      <button id="magicBtn" class="magic-icon" type="button" title="Power-ups" aria-label="Power-ups" aria-haspopup="true" hidden>✨</button>
-      <button id="giveUpBtn" class="give-up-icon" type="button" title="Give up" aria-label="Give up" hidden>💀</button>
-      <div id="magicPopover" class="magic-popover" role="menu" aria-label="Power-ups" hidden></div>
+      <div id="hacklog" class="hacklog" hidden></div>
+
+      <p id="powerHints" class="power-hints" hidden></p>
+      <div class="magic-bar">
+        <button id="magicBtn" class="magic-icon" type="button" title="Power-ups" aria-label="Power-ups" aria-haspopup="true" hidden>✨</button>
+        <button id="giveUpBtn" class="give-up-icon" type="button" title="Give up" aria-label="Give up" hidden>💀</button>
+        <div id="magicPopover" class="magic-popover" role="menu" aria-label="Power-ups" hidden></div>
+      </div>
+
+      <div id="keyboard" class="keyboard" aria-label="On-screen keyboard"></div>
     </div>
 
-    <div id="keyboard" class="keyboard" aria-label="On-screen keyboard"></div>
+    <div id="tabGames" class="room-tab-panel" hidden>
+      <div id="gamesPanel" class="games-panel"></div>
+    </div>
+
+    <div id="tabPlayers" class="room-tab-panel" hidden>
+      <div id="scoreboard" class="scoreboard" hidden></div>
+    </div>
 
     <div id="chatBackdrop" class="chat-backdrop" hidden></div>
     <section id="chatPanel" class="chat-panel" aria-label="Chat" hidden>
