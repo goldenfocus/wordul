@@ -114,3 +114,17 @@ describe("companionReact (tiered selection over Yang's banks)", () => {
     expect(r.text).toContain("CRANE");
   });
 });
+
+describe("companionReact through the mergeConfig seam (rung 1)", () => {
+  it("returns a spoken progress line (flat bank, not routine)", () => {
+    const r = companionReact("progress", {});
+    expect(r.tier).toBeNull();
+    expect(r.text.length).toBeGreaterThan(0);
+    expect(r.speak).toBe(true);
+  });
+  it("still resolves the existing tiered banks (genius win) unchanged", () => {
+    const r = companionReact("win", { guessesUsed: 2 });
+    expect(r.tier).toBe("genius");
+    expect(r.text.length).toBeGreaterThan(0);
+  });
+});

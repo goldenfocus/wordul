@@ -1,6 +1,7 @@
 // Wordul edition runtime: apply theme packs, picker, shared wallet, companion.
 import { EDITIONS, getEdition } from "/editions/index.js";
 import { resolveTier, shouldSpeak } from "/companion.js";
+import { mergeConfig } from "/roomConfig.js";
 
 const LS = { edition: "wordul.edition", gold: "wordul.gold", muted: "wordul.muted" };
 
@@ -54,6 +55,11 @@ export function drainGold(amount) {
 let activeId = "default";
 const reactCounters = {};
 
+// Rung 1: no per-room override exists yet, so the room voice config is empty and
+// companionReact resolves byte-for-byte to the edition default. Rung 2 returns
+// `currentSnapshot?.roomConfig?.voice ?? {}` here — the ONE place persistence wires in.
+function snapshotVoiceConfig() { return {}; }
+
 export function resolveEdition(id) { return getEdition(id); }
 // Sensory feedback config for committing a sloppy mistake (reusing a proven-gray
 // letter). Every room inherits this default; an edition can override via
@@ -70,8 +76,13 @@ export const VOICE_EDITION = "yang";
 
 export function companionReact(event, ctx = {}) {
   const ed = getEdition(VOICE_EDITION);
-  const react = ed.companion?.react;
-  const banks = ed.companion?.lines?.[event];
+  // Resolve config through the merge contract: edition default <- room override (empty in rung 1).
+  const merged = mergeConfig(
+    { voice: { react: ed.companion?.react ?? {}, lines: ed.companion?.lines ?? {} } },
+    { voice: snapshotVoiceConfig() },
+  );
+  const react = merged.voice?.react;
+  const banks = merged.voice?.lines?.[event];
   if (!banks) return { text: "", raw: "", tier: null, speak: false };
 
   // Flat bank → use the array; nested bank → resolve the tier and read its array.
