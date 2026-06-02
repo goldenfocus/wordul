@@ -386,6 +386,10 @@ export class Room extends DurableObject<Env> {
         const { word, wordLength } = (await res.json()) as { word: string; wordLength: number };
         this.state.word = word ?? null;
         this.state.wordLength = wordLength ?? this.state.wordLength;
+        this.state.maxGuesses = guessesFor(this.state.wordLength);
+      } else {
+        this.send(ws, { type: "error", message: "challenge unavailable" });
+        return;
       }
     } else {
       this.state.word = pool.answers[Math.floor(Math.random() * pool.answers.length)] ?? null;
