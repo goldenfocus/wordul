@@ -24,8 +24,10 @@ MSG
 # 2. Sync with main
 git fetch origin main -q && git rebase origin/main
 
-# 3. Gauntlet — both must pass
-npm run typecheck && npm test
+# 3. Gauntlet — all must pass. check-graph runs FIRST: a <1s static scan that
+#    fast-fails if any public/ JS import OR HTML <script>/<link> ref points at a
+#    missing file — the exact class that blanked the site (share-card.js, Jun 2 2026).
+npm run check-graph && npm run typecheck && npm test
 
 # 4. GitHub
 git push origin HEAD:main
