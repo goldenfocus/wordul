@@ -37,6 +37,84 @@ function fallbackSpeak(text) {
   try { window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch { /* ignore */ }
 }
 
+// Pick the most mechanical voice the browser offers, so the answer reveal sounds
+// deliberately uncanny against Yan's warm frame. Falls back to pitch/rate mangling.
+function pickRoboticVoice() {
+  const voices = window.speechSynthesis?.getVoices?.() ?? [];
+  const wanted = ["Zarvox", "Trinoids", "Cellos", "Bad News", "Boing", "Albert"];
+  for (const name of wanted) {
+    const v = voices.find((x) => x.name && x.name.includes(name));
+    if (v) return v;
+  }
+  return null;
+}
+
+function roboticUtterance(text) {
+  const u = new SpeechSynthesisUtterance(text);
+  const v = pickRoboticVoice();
+  if (v) u.voice = v;
+  else { u.pitch = 0.3; u.rate = 0.85; } // no robot voice available → mangle the default
+  return u;
+}
+
+export function speakRobotic(word) {
+  if (!word || !window.speechSynthesis) return;
+  try { window.speechSynthesis.speak(roboticUtterance(word)); } catch { /* ignore */ }
+}
+
+// A templated line like "The word was {answer}." spoken in two voices: the static
+// frame in Yan's cloned voice (pre-rendered clip, else fallback TTS), the answer in
+// the robotic voice. Segments play strictly in order via the audio's `ended` event.
+export async function speakTemplated(editionId, rawLine, ctx = {}) {
+  if (!rawLine || isMuted()) return;
+  const token = "{answer}";
+  const idx = rawLine.indexOf(token);
+  if (idx === -1) { // not actually templated — fall back to the normal path
+    return speakLine(editionId, rawLine, rawLine);
+  }
+  const prefix = rawLine.slice(0, idx).trim();
+  const suffix = rawLine.slice(idx + token.length).trim();
+  const map = await loadManifest(editionId);
+  if (isMuted()) return;
+
+  // Play one cloned-voice segment, resolving when it finishes (clip end, or TTS end,
+  // or immediately if empty / on error). Reuses module-level `current` for stop().
+  const playSegment = (seg) => new Promise((resolve) => {
+    if (!seg) return resolve();
+    const file = map[lineKey(seg)];
+    if (file) {
+      stopSpeaking();
+      try {
+        const audio = new Audio(`/voice/${editionId}/${file}`);
+        current = { audio };
+        audio.addEventListener("ended", resolve, { once: true });
+        audio.play().catch(resolve);
+      } catch { resolve(); }
+    } else {
+      try {
+        const u = new SpeechSynthesisUtterance(seg);
+        u.addEventListener("end", resolve, { once: true });
+        window.speechSynthesis.speak(u);
+      } catch { resolve(); }
+    }
+  });
+
+  const sayAnswer = () => new Promise((resolve) => {
+    if (!ctx.answer || !window.speechSynthesis) return resolve();
+    try {
+      const u = roboticUtterance(ctx.answer);
+      u.addEventListener("end", resolve, { once: true });
+      window.speechSynthesis.speak(u);
+    } catch { resolve(); }
+  });
+
+  await playSegment(prefix);
+  if (isMuted()) return;
+  await sayAnswer();
+  if (isMuted()) return;
+  await playSegment(suffix);
+}
+
 export async function speakLine(editionId, rawLine, spokenText) {
   if (!rawLine || isMuted()) return;
   const map = await loadManifest(editionId);
