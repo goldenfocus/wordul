@@ -69,6 +69,8 @@ function clearUsername() {
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;
 function parseRoute() {
+  const challenge = location.pathname.match(/^\/c\/([0-9A-Za-z]{5})$/);
+  if (challenge) return { kind: "challenge", id: challenge[1] };
   const room = location.pathname.match(ROOM_RE);
   if (room) return { kind: "room", owner: room[1], slug: room[2] };
   const prof = location.pathname.match(PROFILE_RE);
@@ -360,6 +362,8 @@ function showRoomEntry(owner, slug) {
 
 const game = {
   ws: null,
+  challengeId: null,   // /c/<id> solo-replay: the challenge being raced (null in normal rooms)
+  challengeMeta: null, // cached { owner, ownerScore, record, ... } from /api/challenge/<id>/meta
   owner: null,
   slug: null,
   path: null,
@@ -516,6 +520,99 @@ function showRoom(owner, slug) {
   wireRoomTabs();
   buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
   connect();
+}
+
+// A challenge link (/c/<id>): solo board on the owner's exact word, racing their
+// standing record. Reuses the room engine via a per-player challenge WS.
+async function showChallenge(id) {
+  // Gate: a challenge WS needs a username (it's the player's identity + score key).
+  if (!getUsername()) { showChallengeEntry(id); return; }
+  let meta;
+  try {
+    const res = await fetch(`/api/challenge/${id}/meta`);
+    if (!res.ok) throw new Error("gone");
+    meta = await res.json();
+  } catch {
+    toast("That challenge link has expired.", { error: true, duration: 3000 });
+    navigate("/");
+    return;
+  }
+  game.challengeId = id;
+  game.challengeMeta = meta;
+
+  // Stand up the room view (same engine; challenge chrome instead of owner/slug).
+  leaveRoom();
+  game.owner = meta.owner;
+  game.slug = null;
+  game.path = null;
+  game.name = `@${meta.owner}'s challenge`;
+  game.snapshot = null;
+  game.pending = "";
+  game.hasShownEndStats = false;
+  game.lastChatLen = 0;
+  game.unreadChat = 0;
+  game.chatCollapsed = false;
+  game.lastGuessCounts = new Map();
+  game.autoStart = true; // challenge boards go live immediately — no lobby ceremony
+  game.roomTab = "play";
+  game.shareImage = null;
+  game.replay = [];
+  game.payingOut = false;
+  hacklog = null;
+  mount("tpl-room");
+  renderRoomHeader();
+  wireChat();
+  wireRoomTabs();
+  buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
+
+  const target = meta.record
+    ? `${meta.record.username} holds the record at ${meta.record.score}`
+    : `@${meta.owner} scored ${meta.ownerScore}`;
+  toast(`Challenge from @${meta.owner} — ${target}. Beat it.`, { duration: 4200 });
+  connectChallenge(id);
+}
+
+// No-username gate for a challenge link — pick a name, then resolve the challenge.
+// Mirrors showRoomEntry's join flow.
+function showChallengeEntry(id) {
+  mount("tpl-home");
+  const topBtn = $("#chatTopBtn");
+  if (topBtn) topBtn.hidden = true;
+  $("#homeGreeting").hidden = true;
+  $("#homeRooms").hidden = true;
+  $("#homeIntro").hidden = false;
+  $(".tagline").textContent = "You've been challenged on Wordul.";
+  $(".sub").textContent = "Pick a username to take the challenge.";
+
+  const input = $("#usernameInput");
+  input.value = getUsername();
+  input.focus();
+  const btn = $("#startPlayingBtn");
+  const label = btn.querySelector(".hero-btn-label") || btn;
+  label.textContent = "Take the challenge →";
+  const go = () => {
+    const username = setUsername(input.value);
+    if (username.length < 3) {
+      input.focus();
+      toast("Pick a username — at least 3 letters", { error: true, duration: 1800 });
+      return;
+    }
+    showChallenge(id);
+  };
+  btn.addEventListener("click", go);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") go();
+  });
+}
+
+// Connect the per-player challenge WS — an isolated solo room seeded with the
+// challenge's pinned word. Username is guaranteed by showChallenge's gate.
+function connectChallenge(id) {
+  const username = getUsername();
+  if (!username) { showChallengeEntry(id); return; }
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const url = `${proto}//${location.host}/ws?challenge=${id}&username=${encodeURIComponent(username)}`;
+  openSocket(url);
 }
 
 // Hand the player the invite link with minimum ceremony: native share sheet on
@@ -784,6 +881,13 @@ const HEARTBEAT_MS = 25_000;
 function connect() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const url = `${proto}//${location.host}/ws?room=${encodeURIComponent(game.path)}`;
+  openSocket(url);
+}
+
+// Open (and auto-reconnect) a game WebSocket to `url`, wiring the shared hello /
+// snapshot / heartbeat handlers. Used by both the room path (connect) and the
+// challenge path (connectChallenge); reconnect re-opens the SAME url.
+function openSocket(url) {
   const ws = new WebSocket(url);
   game.ws = ws;
 
@@ -821,7 +925,7 @@ function connect() {
       () => toast("Reconnecting…", { duration: 4000 }),
       RECONNECT_TOAST_AFTER_MS,
     );
-    setTimeout(connect, RECONNECT_DELAY_MS);
+    setTimeout(() => openSocket(url), RECONNECT_DELAY_MS);
   });
 }
 
@@ -2337,6 +2441,21 @@ function openStats(opts = {}) {
   // Pre-render the share card now (modal open) so the Share click can fire
   // navigator.share synchronously — iOS rejects share() after an async toBlob.
   void prepareShareCard();
+
+  // Challenge end screen: show how I did vs the standing record (re-fetched fresh —
+  // my own run may have just set/beaten it). Cleared for non-challenge games.
+  const recEl = document.getElementById("challengeRecordLine");
+  if (recEl) recEl.textContent = "";
+  if (game.challengeId && recEl) {
+    const me = game.snapshot?.players.find((p) => p.username === getUsername());
+    const myScore = me?.status === "won" ? `${me.guesses.length}/${game.snapshot.maxGuesses}` : `X/${game.snapshot.maxGuesses}`;
+    fetch(`/api/challenge/${game.challengeId}/meta`).then((r) => r.json()).then((m) => {
+      const rec = m.record ? `Record: @${m.record.username} ${m.record.score}` : "You set the first record!";
+      const el = document.getElementById("challengeRecordLine");
+      if (el) el.textContent = `You: ${myScore} · ${rec}`;
+    }).catch(() => {});
+  }
+
   $("#modalShare").onclick = () => shareResult();
 
   modal.addEventListener("click", onModalClick);
@@ -2543,6 +2662,8 @@ function toggleMute() {
 // Tear down any live room connection when leaving a room view.
 function leaveRoom() {
   stopHeartbeat();
+  game.challengeId = null; // drop challenge context (re-set by showChallenge after this)
+  game.challengeMeta = null;
   clearPayoutTimers(); // cancel any pending payout/drain so it can't fire off-screen + mutate gold
   if (game.ws) {
     try { game.ws.onclose = null; game.ws.close(); } catch {}
@@ -2574,7 +2695,7 @@ function renderCrumbs(r) {
     nav.innerHTML = "";
     return;
   }
-  const here = r.kind === "room" ? r.slug.replace(/-/g, " ") : `@${r.username}`;
+  const here = r.kind === "room" ? r.slug.replace(/-/g, " ") : r.kind === "challenge" ? "challenge" : `@${r.username}`;
   nav.hidden = false;
   nav.innerHTML = "";
   const home = document.createElement("button");
@@ -2596,6 +2717,10 @@ function renderCrumbs(r) {
 function route() {
   const r = parseRoute();
   renderCrumbs(r);
+  if (r.kind === "challenge") {
+    showChallenge(r.id);
+    return;
+  }
   if (r.kind === "room") {
     if (getUsername()) {
       showRoom(r.owner, r.slug);
