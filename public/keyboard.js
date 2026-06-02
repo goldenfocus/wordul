@@ -99,8 +99,27 @@ export function buildKeyboard(root, layoutId, handlers) {
     // path below (keeps desktop + tests working).
     let activeKey = null;
     let suppressClick = false;
+    // Long-press ⌫ to wipe the whole row (the mobile twin of desktop's Esc). The
+    // timer arms on press of the back key and disarms the moment you slide off it.
+    let longPressTimer = null;
+    let didLongPress = false;
+    const HOLD_MS = 400;
+    const armHold = (k) => {
+      clearHold();
+      if (k && k.dataset.action === "back" && handlers.onClear) {
+        longPressTimer = setTimeout(() => {
+          didLongPress = true;
+          if (activeKey) { activeKey.classList.remove("pressed"); activeKey = null; }
+          handlers.onClear();
+        }, HOLD_MS);
+      }
+    };
+    const clearHold = () => {
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    };
     const press = (k) => {
       if (activeKey && activeKey !== k) activeKey.classList.remove("pressed");
+      if (k !== activeKey) { clearHold(); armHold(k); }
       activeKey = k;
       if (k) k.classList.add("pressed");
     };
@@ -109,21 +128,25 @@ export function buildKeyboard(root, layoutId, handlers) {
       const k = e.target.closest && e.target.closest("button.key");
       if (!k) return;
       e.preventDefault();
+      didLongPress = false;
       press(k);
     });
     root.addEventListener("pointermove", (e) => {
-      if (!activeKey) return;
+      if (!activeKey && !longPressTimer) return;
       const k = keyAt(e.clientX, e.clientY);
       press(k); // null when slid into a gap → release there cancels
     });
     function endTouch(e) {
       if (e.pointerType === "mouse") return;
+      clearHold();
       const target = activeKey;
       if (activeKey) { activeKey.classList.remove("pressed"); activeKey = null; }
-      // Commit the key under the lift-off point (slide-to-correct); none → cancel.
-      const k = (e.type === "pointerup") ? (keyAt(e.clientX, e.clientY) || target) : null;
       suppressClick = true;
       setTimeout(() => { suppressClick = false; }, 400);
+      // A long-press already cleared the row on its own — don't also fire a backspace.
+      if (didLongPress) { didLongPress = false; return; }
+      // Commit the key under the lift-off point (slide-to-correct); none → cancel.
+      const k = (e.type === "pointerup") ? (keyAt(e.clientX, e.clientY) || target) : null;
       fire(k);
     }
     root.addEventListener("pointerup", endTouch);

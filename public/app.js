@@ -1562,9 +1562,7 @@ function renderBoards(snap, me) {
       // One-shot line clear: tap your active row to wipe the whole guess (no Delete button).
       if (isMe && isCurrentRow && snap.phase === "playing" && p.status === "playing") {
         row.classList.add("input-row");
-        row.addEventListener("click", () => {
-          if (game.pending.length) { game.pending = ""; render(); resetIdle(); }
-        });
+        row.addEventListener("click", clearRow);
       }
       grid.appendChild(row);
     }
@@ -1595,7 +1593,7 @@ function resolvedLayoutId() {
 }
 
 // Handlers injected into the on-screen keyboard's delegated click listener.
-const keyboardHandlers = { onEnter: submitGuess, onBack: backspace, onLetter: typeLetter };
+const keyboardHandlers = { onEnter: submitGuess, onBack: backspace, onLetter: typeLetter, onClear: clearRow };
 
 function onPhysicalKey(e) {
   // Don't hijack typing in any input fields, with modifiers, or while a modal is open.
@@ -1638,6 +1636,7 @@ function onPhysicalKey(e) {
   if (game.hasShownEndStats) return;
 
   if (isEnter) { submitGuess(); e.preventDefault(); }
+  else if (e.key === "Escape") { clearRow(); e.preventDefault(); }
   else if (e.key === "Backspace") { backspace(); e.preventDefault(); }
   else if (isLetter) { typeLetter(e.key.toUpperCase()); e.preventDefault(); }
 }
@@ -1648,6 +1647,9 @@ function typeLetter(l) {
   game.pending += l.toUpperCase();
   render();
   resetIdle();
+}
+function clearRow() {
+  if (game.pending.length) { game.pending = ""; render(); resetIdle(); }
 }
 function backspace() {
   if (game.pending.length === 0) return;
