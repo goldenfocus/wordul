@@ -62,15 +62,14 @@ function wireSectionToggles(modal) {
   });
 }
 
-// openSettings({ onChange, mountLayoutPicker, renderEditionPicker, resetStats })
+// openSettings({ onChange, mountLayoutPicker, renderEditionPicker })
 //  - onChange()           re-applies the live board after a toggle/theme change (the
 //                         orchestrator wires this to `() => { if (game.snapshot) render(); }`).
 //  - mountLayoutPicker(el) lets the orchestrator (or keyboard.js) render the layout
 //                         picker into the Advanced section — avoids a settings↔keyboard cycle.
 //  - renderEditionPicker(el, onPick) the edition.js theme picker (re-imported by the caller).
-//  - resetStats()         wipes local stats (lives in app.js).
 //  - toast(text, opts)    optional feedback channel (app.js owns the toast UI).
-export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker, onEditionPick, editionLocked, resetStats, toast } = {}) {
+export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker, onEditionPick, editionLocked, toast } = {}) {
   const modal = document.getElementById("settingsModal");
   if (!modal) return;
   const s = getSettings();
@@ -115,15 +114,6 @@ export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker,
   // save → rebuild → re-render; we just hand it the mount element.
   const layoutPicker = document.getElementById("layoutPicker");
   if (layoutPicker && mountLayoutPicker) mountLayoutPicker(layoutPicker);
-
-  const reset = document.getElementById("resetStatsBtn");
-  if (reset) {
-    reset.onclick = () => {
-      if (!confirm("Wipe all your stats? This can't be undone.")) return;
-      resetStats?.();
-      toast?.("Stats reset", { duration: 1200 });
-    };
-  }
 
   wireSectionToggles(modal);
 

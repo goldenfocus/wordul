@@ -21,7 +21,6 @@ applyEdition(getActiveEditionId());
 
 const LS = {
   username: "wr.username",
-  stats: "wr.stats",
   preferredLength: "wr.length",
   replay: "wr.replay", // structured per-guess payout log, keyed per game (slug:round)
 };
@@ -54,59 +53,12 @@ function getUsername() {
 function setUsername(u) {
   const clean = normalizeUsername(u);
   localStorage.setItem(LS.username, clean);
-  // Cookie cache so the server can recognise returning players if needed.
-  document.cookie = `wr_user=${clean}; path=/; max-age=31536000; samesite=lax`;
   syncAvatar(); // keep the hub avatar glyph in sync with the chosen name
   return clean;
 }
 function clearUsername() {
   localStorage.removeItem(LS.username);
-  document.cookie = "wr_user=; path=/; max-age=0";
   syncAvatar();
-}
-
-// One-time device-stats import guard. The backend exposes no /import endpoint
-// (User DO only has /append + /room), and the legacy localStorage stats shape
-// (aggregate counts, no per-game records) can't be cleanly mapped onto the
-// server's per-game applyGame model. Per the plan's G4 fallback, we ship without
-// import and just set the guard flag so the server profile starts fresh. The
-// local stats stay on-device and still power the existing stats modal.
-function importLocalStatsOnce(username) {
-  const flag = "wr.imported." + username;
-  if (localStorage.getItem(flag)) return;
-  localStorage.setItem(flag, "1");
-}
-
-// --- stats ---
-const DEFAULT_STATS = {
-  played: 0, wins: 0,
-  currentStreak: 0, maxStreak: 0,
-  distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 },
-};
-function getStats() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(LS.stats) || "{}");
-    return { ...DEFAULT_STATS, distribution: { ...DEFAULT_STATS.distribution }, ...raw };
-  } catch {
-    return { ...DEFAULT_STATS, distribution: { ...DEFAULT_STATS.distribution } };
-  }
-}
-function saveStats(s) { localStorage.setItem(LS.stats, JSON.stringify(s)); }
-function recordResult(won, guessCount) {
-  const s = getStats();
-  s.played += 1;
-  if (won) {
-    s.wins += 1;
-    s.currentStreak += 1;
-    s.maxStreak = Math.max(s.maxStreak, s.currentStreak);
-    if (guessCount >= 1 && guessCount <= 6) {
-      s.distribution[guessCount] = (s.distribution[guessCount] || 0) + 1;
-    }
-  } else {
-    s.currentStreak = 0;
-  }
-  saveStats(s);
-  return s;
 }
 
 // --- routing ---
@@ -248,7 +200,6 @@ function enterNewRoom({ autoStart }) {
     toast("Pick a username — at least 3 letters", { error: true, duration: 1800 });
     return;
   }
-  importLocalStatsOnce(username);
   const slug = generateRoomCode();
   history.pushState(null, "", `/@${username}/${slug}`);
   showRoom(username, slug);
@@ -460,7 +411,6 @@ function showRoomEntry(owner, slug) {
       toast("Pick a username — at least 3 letters", { error: true, duration: 1800 });
       return;
     }
-    importLocalStatsOnce(username);
     showRoom(owner, slug);
   };
   btn.addEventListener("click", join);
@@ -2000,7 +1950,6 @@ function forfeit(reason) {
   clearIdle();
   clearGiveUpTimer();
   game.finishReason = reason;
-  recordResult(false, me.guesses.length); // a forfeit is a loss for local stats
   game.hasShownEndStats = true;
   // Tell the server we're out: it marks us lost (others see OUT) and the next snapshot
   // reveals the word to US, so the end-screen word card has it by the time it opens.
@@ -2016,7 +1965,6 @@ function handleGameOver(snap) {
   clearGiveUpTimer();
   const won = me.status === "won";
   const guessCount = me.guesses.length;
-  recordResult(won, guessCount);
   game.hasShownEndStats = true;
   // C4: record how the game ended (give-up / bankruptcy already set theirs before
   // reaching here via forfeit, which short-circuits this path).
@@ -2249,23 +2197,26 @@ function renderWordCard(parent, word) {
     });
 }
 
-function openStats(opts = {}) {
-  const modal = $("#statsModal");
-  modal.hidden = false;
-  modal.removeAttribute("hidden");
-  const s = getStats();
-  $("#statPlayed").textContent = s.played;
-  $("#statWinPct").textContent = s.played ? Math.round((s.wins / s.played) * 100) : 0;
-  $("#statCurStreak").textContent = s.currentStreak;
-  $("#statMaxStreak").textContent = s.maxStreak;
-
+const STAT_BOX_IDS = ["statPlayed", "statWinPct", "statCurStreak", "statMaxStreak"];
+// Replace the distribution area with a single muted note (no username / load fail).
+function setStatsNote(msg) {
+  for (const id of STAT_BOX_IDS) $("#" + id).textContent = "–";
   const dist = $("#dist");
   dist.textContent = "";
-  const counts = [1,2,3,4,5,6].map((i) => s.distribution[i] || 0);
+  const note = document.createElement("p");
+  note.className = "muted dist-note";
+  note.textContent = msg;
+  dist.appendChild(note);
+}
+
+// Render the 1–6 guess-distribution bars from a {guesses: count} map.
+function renderDist(distribution, highlight) {
+  const dist = $("#dist");
+  dist.textContent = "";
+  const counts = [1,2,3,4,5,6].map((i) => distribution[i] || 0);
   const maxDist = Math.max(1, ...counts);
-  const highlight = opts.justFinished && opts.won ? opts.lastGuessCount : null;
   for (let i = 1; i <= 6; i++) {
-    const v = s.distribution[i] || 0;
+    const v = distribution[i] || 0;
     const isEmpty = v === 0;
     const row = document.createElement("div");
     row.className = "dist-row" + (i === highlight ? " current" : "") + (isEmpty ? " empty" : "");
@@ -2288,6 +2239,40 @@ function openStats(opts = {}) {
     row.appendChild(track);
     dist.appendChild(row);
   }
+}
+
+// Fetch the server profile and fill the stats boxes + distribution. The just-
+// finished append may land a beat after the modal opens (room broadcasts finish
+// and reports in parallel) — we accept eventual consistency; the next open is
+// correct. No username → prompt to pick one; fetch failure → honest note.
+async function fillStatsPanel(opts = {}) {
+  const username = getUsername();
+  if (!username) { setStatsNote(t("stats.needUsername")); return; }
+  let stats;
+  try {
+    const res = await fetch(`/api/user/${encodeURIComponent(username)}`);
+    if (!res.ok) throw new Error(String(res.status));
+    stats = (await res.json()).stats;
+  } catch {
+    setStatsNote(t("stats.loadFailed"));
+    return;
+  }
+  const played = stats.gamesPlayed || 0;
+  $("#statPlayed").textContent = played;
+  $("#statWinPct").textContent = played ? Math.round((stats.wins / played) * 100) : 0;
+  $("#statCurStreak").textContent = stats.currentStreak || 0;
+  $("#statMaxStreak").textContent = stats.bestStreak || 0;
+  renderDist(stats.guessDistribution || {}, opts.justFinished && opts.won ? opts.lastGuessCount : null);
+}
+
+function openStats(opts = {}) {
+  const modal = $("#statsModal");
+  modal.hidden = false;
+  modal.removeAttribute("hidden");
+  // Stats are server-truth: the room reports every finished game to the player's
+  // User DO, so we fetch the profile rather than keep a parallel local tally.
+  // Async-fill the four boxes + distribution; the rest of the modal renders now.
+  fillStatsPanel(opts);
 
   const eg = $("#endgameMsg");
   eg.textContent = "";
@@ -2603,7 +2588,6 @@ function showSettings() {
     onEditionPick: (id) => send({ type: "set_edition", edition: id }),
     editionLocked: game.snapshot?.phase === "playing",
     toast: (t, o) => toast(t, o),
-    resetStats: () => saveStats({ ...DEFAULT_STATS, distribution: { ...DEFAULT_STATS.distribution } }),
     // Mount the keyboard layout picker into the Advanced section. Owning the
     // save → rebuild → re-render here keeps settings.js free of a keyboard import
     // (keyboard.js imports settings.js, not the reverse — no cycle).

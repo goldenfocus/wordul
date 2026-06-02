@@ -17,6 +17,10 @@ export const en = {
   "endscreen.nobodyWon": "Nobody got it this time.",
   "endscreen.didYouKnow": "Did you know",
 
+  // Stats modal (server-truth)
+  "stats.needUsername": "Pick a username to track your stats.",
+  "stats.loadFailed": "Couldn’t load your stats right now.",
+
   // Mode picker (lobby)
   "mode.heading": "Choose a mode",
   "mode.comingSoon": "soon",
