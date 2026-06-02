@@ -3,7 +3,7 @@
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
 import { applyEdition, getActiveEditionId, getGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION } from "/edition.js";
-import { speakLine } from "/voice.js";
+import { speakLine, speakTemplated } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
 import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence } from "/gold.js";
 import { createHacklog } from "/hacklog.js";
@@ -628,12 +628,16 @@ function celebrateCombo(discoveries, mult) {
 }
 
 // Surface the active edition's companion line for an event, reusing the toast.
-function showCompanion(event, ctx) {
-  const { text, raw, speak } = companionReact(event, ctx);
+function showCompanion(event, ctx = {}) {
+  const { text, raw, tier, speak } = companionReact(event, ctx);
   if (!text) return;
-  toast(text, { duration: 3200 });
-  // Look up the clip by the RAW template; fall back to speaking the substituted text.
-  if (speak) speakLine(VOICE_EDITION, raw, text);
+  // Big moments linger; routine lines stay snappy.
+  const big = tier && !(event === "wrong" && tier === "normal");
+  toast(text, { duration: big ? 4200 : 3200 });
+  if (!speak) return;
+  // Templated lines (the loss reveal) split across Yan's voice + the robot.
+  if (raw.includes("{answer}")) speakTemplated(VOICE_EDITION, raw, ctx);
+  else speakLine(VOICE_EDITION, raw, text);
 }
 
 // --- Idle taunts: the companion checks in when you go quiet mid-game. ---
@@ -992,7 +996,7 @@ function onServerMessage(msg) {
         if (getActiveEditionId() === "yang" && ng >= 1) {
           setTimeout(() => celebrateGreens(ng), flipDoneMs);
         } else if (discoveries === 0) {
-          showCompanion("wrong");
+          showCompanion("wrong", { reusedDeadLetter: wasted.letters.length > 0 });
         }
         resetIdle();
       }
@@ -1810,13 +1814,16 @@ function playChime(notes) {
 
 // Yang's scaled green celebration. 1 new green → spark + soft chime; 2+ → confetti
 // + an ascending chime + a hyped voice line. Visual bits respect reduced motion.
+// Yang's scaled green celebration. 1 new green → spark + soft chime; 2+ → confetti
+// + chime + a hyped voice line whose words match the real count. Respects reduced motion.
 function celebrateGreens(count) {
   const reduced = getSettings().reducedMotion;
   const boards = $("#boards");
   if (count >= 2) {
-    playChime([[523, 0], [659, 0.09], [784, 0.18]]);
-    if (!reduced) spawnConfetti(28);
-    showCompanion("rush");
+    if (count >= 3) playChime([[523, 0], [659, 0.08], [784, 0.16], [1047, 0.26]]);
+    else playChime([[523, 0], [659, 0.09], [784, 0.18]]);
+    if (!reduced) spawnConfetti(count >= 3 ? 28 + (count - 2) * 18 : 28); // 3→46, 4→64, 5→82
+    showCompanion("greens", { count });
   } else {
     playChime([[660, 0], [880, 0.08]]);
     if (boards && !reduced) {
@@ -1942,7 +1949,7 @@ function handleGameOver(snap) {
     }
     triggerWinCelebration();
     playChime([[523, 0], [659, 0.1], [784, 0.2], [1047, 0.32]]);
-    showCompanion("win");
+    showCompanion("win", { guessesUsed: me.guesses.length });
     // Same gentle pacing as before — wait for the final row's flip to finish.
     setTimeout(
       () => openStats({ snap, me, won, justFinished: true, lastGuessCount: guessCount }),
