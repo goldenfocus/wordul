@@ -3,6 +3,7 @@
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
 import { applyEdition, getActiveEditionId, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
+import { pickGuessEvent } from "/roomConfig.js";
 import { speakLine, speakTemplated } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
 import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence } from "/gold.js";
@@ -1121,11 +1122,13 @@ function onServerMessage(msg) {
           // No discoveries this guess — no payout to wait on; drain once the row flips.
           deferPayout(runDrain, flipDoneMs);
         }
-        // Yang keeps its green party; other editions only get nudged on a dud guess.
-        if (getActiveEditionId() === "yang" && ng >= 1) {
-          setTimeout(() => celebrateGreens(ng), flipDoneMs);
-        } else if (discoveries === 0) {
-          showCompanion("wrong", { reusedDeadLetter: wasted.letters.length > 0 });
+        // Never silent: every accepted guess resolves to exactly ONE companion event,
+        // on EVERY edition. Yang's green confetti stays Yang-only + cosmetic; voice is global.
+        const { event: guessEvent, ctx: guessCtx } = pickGuessEvent(ng, ny, wasted.letters.length > 0);
+        if (getActiveEditionId() === "yang" && guessEvent === "greens") {
+          setTimeout(() => celebrateGreens(ng), flipDoneMs); // celebrateGreens internally showCompanion("greens",{count})
+        } else {
+          setTimeout(() => showCompanion(guessEvent, guessCtx), flipDoneMs);
         }
         resetIdle();
       }
