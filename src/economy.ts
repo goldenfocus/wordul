@@ -1,0 +1,138 @@
+// src/economy.ts — pure, shared economy math (server + tests). No DOM, no I/O.
+// Ported from public/celebrate.js (discovery helpers) and public/gold.js (constants),
+// so the ROOM Durable Object computes the exact same numbers the client animates.
+import type { Color } from "./color.ts";
+
+export type GuessRow = { word: string; mask: Color[] };
+export type LedgerTx = { token: string; delta: number; reason: string; ts: number; ref?: string };
+
+export const POINTS = {
+  green: 100,
+  yellow: 50,
+  solve: 500,
+  speedPerGuessLeft: 300,
+  revealCost: 4000,
+  vowelCost: 200,
+  wastedLetterPenalty: 50,
+  wastedCapPerGuess: 200,
+};
+
+// 2 hits -> 1.5x, 3 -> 2x, 4 -> 2.5x, 5 -> 3x.
+export function comboMultiplier(discoveries: number): number {
+  return discoveries >= 2 ? 1 + (discoveries - 1) * 0.5 : 1;
+}
+
+// 1st reuse of a dead letter = base, 2nd = 2x base, ...
+export function escalatedPenalty(base: number, reuseCount: number): number {
+  return base * (Math.max(0, reuseCount) + 1);
+}
+
+// New discoveries in the LATEST guess — yellows first, then greens, ascending index.
+// Dup-safe: a color already seen at that index in an earlier guess is not re-counted.
+export function orderedDiscoveriesInLast(
+  guesses: GuessRow[],
+): { index: number; kind: "yellow" | "green"; letter: string }[] {
+  if (!guesses || guesses.length === 0) return [];
+  const last = guesses[guesses.length - 1];
+  if (!last || !last.mask) return [];
+  const wasGreen = new Set<number>();
+  const wasYellow = new Set<number>();
+  for (let g = 0; g < guesses.length - 1; g++) {
+    const mask = guesses[g].mask || [];
+    for (let i = 0; i < mask.length; i++) {
+      if (mask[i] === "green") wasGreen.add(i);
+      else if (mask[i] === "yellow") wasYellow.add(i);
+    }
+  }
+  const word = last.word || "";
+  const out: { index: number; kind: "yellow" | "green"; letter: string }[] = [];
+  for (let i = 0; i < last.mask.length; i++) {
+    if (last.mask[i] === "yellow" && !wasYellow.has(i)) out.push({ index: i, kind: "yellow", letter: word[i] });
+  }
+  for (let i = 0; i < last.mask.length; i++) {
+    if (last.mask[i] === "green" && !wasGreen.has(i)) out.push({ index: i, kind: "green", letter: word[i] });
+  }
+  return out;
+}
+
+// Letters PROVEN dead: gray somewhere and never green/yellow at any position (dup-safe).
+export function deadLettersFrom(guesses: GuessRow[]): Set<string> {
+  if (!guesses || guesses.length === 0) return new Set();
+  const good = new Set<string>();
+  for (const g of guesses) {
+    if (!g || !g.mask) continue;
+    const word = g.word || "";
+    for (let i = 0; i < g.mask.length; i++) {
+      if (g.mask[i] === "green" || g.mask[i] === "yellow") good.add((word[i] || "").toUpperCase());
+    }
+  }
+  const dead = new Set<string>();
+  for (const g of guesses) {
+    if (!g || !g.mask) continue;
+    const word = g.word || "";
+    for (let i = 0; i < g.mask.length; i++) {
+      if (g.mask[i] === "gray") {
+        const c = (word[i] || "").toUpperCase();
+        if (c && !good.has(c)) dead.add(c);
+      }
+    }
+  }
+  return dead;
+}
+
+// Unique already-dead letters reused in the latest guess (knowledge from PRIOR guesses).
+export function wastedDeadLettersInLast(guesses: GuessRow[]): { letters: string[]; count: number } {
+  if (!guesses || guesses.length < 2) return { letters: [], count: 0 };
+  const last = guesses[guesses.length - 1];
+  if (!last || !last.word) return { letters: [], count: 0 };
+  const dead = deadLettersFrom(guesses.slice(0, -1));
+  const seen = new Set<string>();
+  const letters: string[] = [];
+  const word = last.word || "";
+  for (let i = 0; i < word.length; i++) {
+    const c = (word[i] || "").toUpperCase();
+    if (dead.has(c) && !seen.has(c)) {
+      seen.add(c);
+      letters.push(c);
+    }
+  }
+  return { letters, count: letters.length };
+}
+
+// Deterministic total Points earned across a whole guess sequence (no spends).
+// Walks guess-by-guess so wasted-letter penalties escalate exactly like the client.
+export function pointsEarned(guesses: GuessRow[], maxGuesses: number): number {
+  if (!guesses || guesses.length === 0) return 0;
+  let pts = 0;
+  const reuse = new Map<string, number>();
+  for (let k = 0; k < guesses.length; k++) {
+    const upto = guesses.slice(0, k + 1);
+    const disc = orderedDiscoveriesInLast(upto);
+    const base = disc.reduce((s, d) => s + (d.kind === "green" ? POINTS.green : POINTS.yellow), 0);
+    pts += Math.round(base * comboMultiplier(disc.length));
+    const wasted = wastedDeadLettersInLast(upto);
+    let pen = 0;
+    for (const letter of wasted.letters) {
+      const c = reuse.get(letter) ?? 0;
+      pen += escalatedPenalty(POINTS.wastedLetterPenalty, c);
+      reuse.set(letter, c + 1);
+    }
+    pts -= Math.min(pen, POINTS.wastedCapPerGuess);
+  }
+  const last = guesses[guesses.length - 1];
+  if (last && last.mask.length > 0 && last.mask.every((c) => c === "green")) {
+    const guessesLeft = Math.max(0, maxGuesses - guesses.length);
+    pts += POINTS.solve + POINTS.speedPerGuessLeft * guessesLeft;
+  }
+  return pts;
+}
+
+// Cash-out conversion. Tunable. Never mints negative gold from a single bad game.
+export function goldFromPoints(points: number): number {
+  return Math.max(0, Math.round(points / 100));
+}
+
+// Sum of signed deltas for one token. Allows negative (day-one credit card).
+export function balance(ledger: LedgerTx[], token: string): number {
+  return (ledger || []).reduce((s, tx) => (tx.token === token ? s + tx.delta : s), 0);
+}
