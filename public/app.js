@@ -1658,6 +1658,15 @@ function onPhysicalKey(e) {
   // Don't hijack typing in any input fields, with modifiers, or while a modal is open.
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+  // End-game: when the stats modal is up with Play Again showing, Enter starts a
+  // new game — so the instinctive "tap Enter to keep going" just works.
+  if (e.key === "Enter") {
+    const playAgain = $("#modalPlayAgain");
+    if (playAgain && !playAgain.hidden && playAgain.offsetParent !== null) {
+      e.preventDefault(); playAgain.click(); return;
+    }
+  }
   if (document.querySelector(".modal:not([hidden])")) return;
 
   const isLetter = /^[a-zA-Z]$/.test(e.key);
