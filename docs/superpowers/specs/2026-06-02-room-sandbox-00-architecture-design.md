@@ -109,8 +109,10 @@ export type VoiceConfig = {
 
   /** Threshold knobs forwarded verbatim into companion.js scoring (resolveTier/scoreGreens/etc).
    *  Shape = the SHIPPED `companion.react` object (see smart-companion-engine spec). Override merges
-   *  OVER the edition default; this is how a room retunes genius/clutch/sloppy without touching code. */
-  react?: ReactConfig;           // { voiceBudget?, win?, greens?, mistake? } — cite smart-companion-engine
+   *  OVER the edition default; this is how a room retunes genius/clutch/sloppy without touching code.
+   *  voiceBudget.progress (default 1.0 = always-speak, honoring "never silent") is configurable;
+   *  the room's talkativeness dial can lower it. voiceBudget.routine governs wrong/idle as before. */
+  react?: ReactConfig;           // { voiceBudget?: { routine, progress }, win?, greens?, mistake? } — cite smart-companion-engine
 
   /** Additive line banks. EXTRA lines added on top of the edition default banks (see Merge semantics:
    *  banks APPEND by default). To REPLACE a bank wholesale, wrap it: { replace: [...] }. */
@@ -191,9 +193,11 @@ export type ConfigVersion = {
 editionDefault  ←  roomOverride  ←  userDefault  ←  session
    (the active edition's companion block, the always-on baseline)
    (snapshot.roomConfig — what THIS room set)
-   (rung: personal-defaults — the user's saved fork; NOT in rung 00, layer reserved)
+   (rung: personal-defaults — see below; NOT in rung 00, layer reserved)
    (rung: session — ephemeral "just for me right now" tweaks; reserved)
 ```
+
+**Personal-default application (LOCKED — rung 06 decision):** When you join a room, you see the HOST's vibe (room config) by default. Each guest gets a personal **"switch to my vibe"** opt-in toggle that locally applies their own personal default (a client-side/session override of the personal-experience parts — e.g. companion voice/chattiness — without changing the room for others). In practice: the `userDefault` layer is realized **through the seed path for rooms you own** and held out of the guest merge unless the guest has explicitly toggled "use my vibe" on. The call site decides whether to pass the layer, not `mergeConfig` itself.
 
 Rung 00 implements only the first two layers. `mergeConfig` accepts N layers so adding `userDefault`/`session` later is a call-site change, not a rewrite.
 
@@ -201,7 +205,7 @@ Rung 00 implements only the first two layers. `mergeConfig` accepts N layers so 
 
 1. **Sections fall through independently.** A missing top-level section (`voice` absent) → use the lower layer entirely. Sections never cross-contaminate.
 2. **Objects shallow-merge per section, one level deep.** `voice.talkativeness`, `voice.events`, `voice.priority`, `voice.react` each replace the same key in the lower layer if present; absent keys fall through. (Rationale: simplest predictable contract; no accidental deep-clobber.)
-   - `voice.react` is the one exception that **deep-merges** by sub-key (`voiceBudget`/`win`/`greens`/`mistake` — every sub-key of the shipped `companion.react`), because it mirrors the shipped nested `companion.react` and rooms typically retune one tier. Documented exception, not a general rule.
+   - `voice.react` is the one exception that **deep-merges** by sub-key (`voiceBudget`/`win`/`greens`/`mistake` — every sub-key of the shipped `companion.react`, including `voiceBudget.progress` and `voiceBudget.routine`), because it mirrors the shipped nested `companion.react` and rooms typically retune one tier. Documented exception, not a general rule.
 3. **`events` and `priority` REPLACE.** A provided `events` object replaces the lower `events` map key-by-key (shallow); `priority` array replaces wholesale. Absent → fall through (default priority `["greens","progress","wrong"]`).
 4. **Line banks APPEND by default.** `voice.lines.wrong.sloppy: [...]` adds those lines on top of the edition's sloppy bank (round-robin then draws from the union). This is the "additive overrides/extras" the vision asks for.
    - To **replace** a bank wholesale, wrap it: `{ replace: ["only line"] }`. The merger detects the `replace` wrapper and discards the lower layer for that leaf bank.
@@ -317,12 +321,16 @@ Existing rooms → empty override = edition default. Zero breaking changes.
 2. **Server stores the override delta only; client resolves.** The DO never imports an edition.
 3. **Two messages total:** `set_room_config`, `revert_config`. Both follow the existing 4-step setter pattern + `persistAndBroadcast`.
 4. **Kindness model:** any present player may edit; `by` records authorship; no owner gate in rung 00.
-5. **Merge contract:** sections fall through independently; objects shallow-merge one level (`react` deep-merges by sub-key); `priority`/`events` replace; **line banks append unless wrapped in `{replace}`**.
+5. **Merge contract:** sections fall through independently; objects shallow-merge one level (`react` deep-merges by sub-key, including `voiceBudget.progress` and `voiceBudget.routine`); `priority`/`events` replace; **line banks append unless wrapped in `{replace}`**.
 6. **Default-preserving guarantee:** `{}` override ≡ today's Yang-global behavior, enforced by test.
 7. **Versioning:** append-only `configHistory` in the DO `state` blob; revert is forward-only (appends a new version); caps `historyMax=50`, `bankMax=24`, `lineMax=140`.
 8. **Presets are partial `RoomConfig`s** under a name; selecting sets the config; `preset` field records provenance; advanced edits diverge without clearing it.
 9. **Simple path = preset chip + talkativeness dial.** Everything else is collapsed Advanced with safe defaults. Progressive disclosure is the #1 UX law.
 10. **`VOICE_EDITION` stays `"yang"`** this rung; voice override governs *what/how-often/priority*, not clip identity.
+11. **Personal-default precedence (rung 06):** host's room config is the default for all guests; each guest may toggle "use my vibe" to apply their personal default locally (personal-experience parts only). The `userDefault` layer is realized through the seed path for owned rooms; guests hold it dormant unless opted in. See merge semantics above.
+12. **`voiceBudget.progress` is a configurable budget knob** (default 1.0 = always-speak, honoring "never silent"); the room's talkativeness dial can lower it. Defined in `voice.react.voiceBudget` alongside `routine`. See `VoiceConfig.react` above.
+13. **`/api/themes` is public with usernames.** Every room's config + author usernames are exposed at `/api/themes` with no auth, consistent with the existing public `/api/user`. Authorship enumeration is the intended behavior (rung 05).
+14. **Advanced editor uses an explicit "Save changes" button** (rung 03). Advanced edits stage locally and commit + create a version only on explicit save — forgiving, undo-friendly, fewer version entries. Simple-mode preset/dial changes may still apply instantly.
 
 ---
 

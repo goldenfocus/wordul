@@ -155,7 +155,7 @@ TIMELINE — revert
 
 1. **Version timeline scope (keystone now updated).** The keystone dependency table has been reconciled so the **read+revert timeline lives in this rung (03)**, with full history UX (diffs, rename labels, branch view) deferred as a later enhancement. Confirm that read+revert-here / diffs-later split is the intended scope.
 2. **Voice-only edits while locked.** Should the chatty dial + line edits stay live mid-round (voice is cosmetic), or lock the whole section during play for calm? Leaning: voice live, only rules-touching controls locked.
-3. **Advanced commit model.** "Save changes" button vs auto-commit-on-blur for advanced edits. Leaning explicit button (clear, version-frugal) — but a kid-friendly playground might prefer instant. Confirm.
+3. ~~**Advanced commit model.**~~ **RESOLVED (Yan, 2026-06-02).** Advanced edits STAGE locally and commit + create a version only on an explicit **"Save changes"** action — forgiving, undo-friendly, fewer version entries. Simple-mode preset/dial changes may still apply instantly. This is now a locked decision.
 4. **Card width / `--wide`.** Adopt the wider settings card for the editor, or keep 420px and let Advanced scroll? Leaning keep 420px (mobile-first), revisit after a real screenshot.
 
 ## Locked decisions

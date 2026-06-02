@@ -110,15 +110,16 @@ A `DELETE …/config` (or `PUT {}`) clears it back to "no default". `load()` nee
 **Merge resolution at runtime (rung-00 chain, now 3 layers):**
 ```
 mergeConfig(editionDefault, snapshot.roomConfig, userDefault)
-            ▲ baseline       ▲ what THIS room set   ▲ your saved default (rung 6)
+            ▲ baseline       ▲ what THIS room set   ▲ your saved default (rung 6, opt-in for guests)
 ```
-Per rung-00 precedence, **roomOverride ranks BELOW userDefault** — i.e. *your personal default wins over the room's setting for sections the room left untouched, but the room's explicit override wins where both set the same section* … **clarification (LOCKED below):** the keystone orders `roomOverride ← userDefault` meaning userDefault is **higher** precedence. For a shared room this is wrong — a guest's personal default would silently override the host's room vibe. See **Locked decision 1**: in a *room you are visiting*, the room's override is authoritative; the user default only fills sections the room left absent. We achieve this **without** changing the keystone's layer order by passing layers correctly per context (seed vs. live), described next.
+**Precedence (LOCKED, Yan 2026-06-02):** When you JOIN a room, you see the HOST's vibe (room config) by default. Each guest gets a personal **"switch to my vibe"** opt-in toggle that locally applies their own personal default (a client-side/session override of the personal-experience parts — e.g. companion voice/chattiness — without changing the room for others). The `userDefault` layer is passed into `mergeConfig` only when this toggle is on (or for rooms the guest owns, where their default seeded the room). See **Locked decision 1**.
 
 **Seed vs. live (the precedence subtlety, resolved):**
 - **Seeding a fresh room you own** (`hello`, round 0): the server writes your `userDefault` *as* the room's `roomConfig`. From then on it's a room override like any other — editing it in-room is editing the room, not your default (until you re-`★`). This is where "your default follows you" actually takes effect.
-- **Visiting someone else's room:** you do **not** send your default as a seed (the owner gate already blocks it). For live resolution you call `mergeConfig(editionDefault, snapshot.roomConfig)` **without** the user-default layer — the host's vibe is what everyone hears. Your default is dormant as a guest. (This sidesteps the "guest default clobbers host" hazard cleanly: the user-default layer is only folded in for rooms where it was the seed, i.e. effectively already the room override.)
+- **Visiting someone else's room (toggle OFF — default):** you do **not** send your default as a seed (the owner gate already blocks it). For live resolution you call `mergeConfig(editionDefault, snapshot.roomConfig)` **without** the user-default layer — the host's vibe is what everyone hears. Your default is dormant.
+- **Visiting someone else's room (toggle ON — "use my vibe"):** the `userDefault` layer is passed as the third arg. This locally applies your personal-experience parts (e.g. talkativeness, companion chattiness) without changing the room config for others. The room's lines/priority/events still win per section fall-through.
 
-This means the rung-00 `userDefault` layer is, in practice, realized **through the seed path** for owned rooms, and held out of the guest merge. The variadic `mergeConfig` is still the mechanism; the call site chooses whether to pass the layer based on ownership. Documented as Locked decision 1.
+The variadic `mergeConfig` is the mechanism; the call site decides whether to pass the layer. Documented as Locked decision 1.
 
 ### Error handling
 
@@ -150,13 +151,13 @@ This means the rung-00 `userDefault` layer is, in practice, realized **through t
 ## Open questions
 
 1. **Rung numbering (now resolved in-doc).** The keystone table has been corrected so rung 05 = AI-browsable intel and rung 06 = personal defaults + discovery/forking (this doc). Remaining choice: keep defaults + discovery together as 06 (current), or split discovery into its own 07. Leaning: keep together as 06.
-2. **Default-as-seed vs. default-as-live-layer.** Locked decision 1 realizes the user default *through the seed path* for owned rooms and holds it out of the guest merge — is that the intended "follows you" semantic, or do you also want your default to subtly re-flavor *guest* rooms (e.g. your talkativeness preference) while leaving the host's lines intact? Leaning: seed-only for v1 (predictable, no guest/host conflict); revisit a "personal talkativeness always wins" carve-out later.
+2. ~~**Default-as-seed vs. default-as-live-layer.**~~ **RESOLVED (Yan, 2026-06-02).** Guests see the host's vibe by default. Each guest gets a **"switch to my vibe"** opt-in toggle that locally applies their personal default (personal-experience parts only) without changing the room for others. Seed-only for owned rooms, opt-in layer for guests. See merge resolution above and Locked decision 1.
 3. **Invite affordance.** Just copy-link, or generate a share card / QR (ties into the no-buyer-left-behind + VEO goals)? Leaning: copy-link now, share card later.
 4. **Clearing the default.** `PUT {}` vs. a dedicated `DELETE /config` — cosmetic; leaning `DELETE` for intent clarity.
 
 ## Locked decisions
 
-1. **User default is realized through the seed path for owned rooms and held out of the guest merge.** In a room you own & open fresh, your default seeds `roomConfig` (becomes a normal room override). In a room you're visiting, the host's `roomConfig` is authoritative and your default is dormant. This honors "your default follows you" without a guest silently overriding a host — and needs **no** change to the keystone's `mergeConfig` layer order (the call site decides whether to pass the layer).
+1. **Personal-default precedence: host vibe by default, "switch to my vibe" opt-in for guests (LOCKED, Yan 2026-06-02).** When you join a room, you see the HOST's vibe by default. Each guest has a **"switch to my vibe"** toggle that locally applies their personal default to personal-experience parts (e.g. companion chattiness) without changing the room for others. The `userDefault` layer is passed into `mergeConfig` only when this toggle is on. For rooms you own and open fresh, your default seeds `roomConfig` (becomes a normal room override). The host's `roomConfig` is authoritative for all guests by default — no guest silently overrides a host. No change to the keystone's `mergeConfig` layer order; the call site decides whether to pass the layer.
 2. **One field, on the existing profile blob.** `UserProfile.defaultRoomConfig?: RoomConfig`, stored in the `profile` key — no new storage key, no personal version history. Small by `CONFIG_CAPS`.
 3. **One new write endpoint:** `PUT /api/user/<name>/config` (first client-writable User-DO route), validated by rung-00 `sanitizeRoomConfig`. Clearing via `DELETE`/`PUT {}`.
 4. **`forkFrom` is the single fork primitive** — accepts a live `roomConfig` or a `ConfigVersion`, returns a clean `RoomConfig` (drops version metadata, keeps `preset`, stamps `forkedFrom` provenance). Used by both "Fork to my default" and discover's "Fork this vibe".

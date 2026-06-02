@@ -158,7 +158,7 @@ The word-intel roadmap (memory `wordul-i18n-and-word-intel`; `scripts/gen-word-i
 1. **KV write amplification.** `publishIndex()` fires on every `set_room_config`. A rapid editor session (slider drags) could spam KV writes. Debounce in the DO (coalesce to the last write per N seconds), or only publish on preset-pick/revert (matching rung-00 open-question #4's "chat on preset + revert only")? Leaning: publish on the same events that `pushSystem` — i.e. piggyback rung 00's debounce decision.
 2. **`/api/themes` at scale.** A full KV list scan is fine for hundreds of rooms (today's scale) but unbounded long-term. Add `?limit`+cursor pagination now (cheap) and revisit a materialized aggregate later? Leaning: paginate from day one.
 3. **Should `RoomIndexRecord` embed a config hash** (FNV-1a like `voice-key.js`'s `lineKey`) so the miner can dedupe identical themes cheaply across rooms? Low cost, high value for the miner. Leaning yes — reuse `public/voice-key.js`'s hash, mirrored server-side.
-4. **Open-by-default confirmation (Yan).** Publishing every room's config + the `by` usernames to an unauthenticated `/api/themes` is the vision's intent, but it makes authorship publicly enumerable. Confirm that's desired before shipping the read API. (Usernames are already public via `/api/user`, so this is consistent — flagging for explicit sign-off.)
+4. ~~**Open-by-default confirmation (Yan).**~~ **RESOLVED (Yan, 2026-06-02).** `/api/themes` exposes every room's config + author usernames with no auth. This is confirmed intended — consistent with the existing public `/api/user`. Authorship enumeration is desired.
 
 ## Locked decisions
 

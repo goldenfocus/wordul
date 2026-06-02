@@ -227,7 +227,7 @@ Side-effect glue (`companionReact` merge wiring, the app.js call site, the new `
 
 ## Open questions
 
-1. **Progress voice budget.** `progress` currently **always speaks** (it's non-routine, so `shouldSpeak` returns `true`). On a fast game a player could get a `progress` line nearly every guess — is that delightful or chatty? Option: treat `progress` as semi-routine and route it through `voiceBudget.routine` too. Leaning always-speak for rung 1 (the whole point is "never silent"); the talkativeness dial in rung 3 will give players the off-ramp. Flag for Yan.
+1. ~~**Progress voice budget.**~~ **RESOLVED (Yan, 2026-06-02).** `progress` speaks based on a configurable `voiceBudget.progress` knob in `voice.react.voiceBudget` (alongside `routine`). DEFAULT = 1.0 (always-speak), honoring "never silent". The room's talkativeness dial can lower it. Rung 1 ships `progress` as always-speak (default 1.0); rung 3's talkativeness dial is the off-ramp. The `voiceBudget.progress` field is defined in rung 00's `VoiceConfig.react` shape.
 2. **`progress` toast duration.** `showCompanion`'s `big` flag is `tier && !(wrong.normal)`; `progress` has `tier === null`, so it gets the short 3200ms toast. That's probably right (modest moment), but confirm we don't want `progress` to linger slightly longer than a routine `wrong`.
 
 ## Locked decisions
@@ -237,6 +237,6 @@ Side-effect glue (`companionReact` merge wiring, the app.js call site, the new `
 3. **`pickGuessEvent` carries the `voice?` param now**, called with `{}` in rung 1, so rung 2 wires the override with zero signature change.
 4. **`companionReact` merges through `mergeConfig`** with an empty override this rung — the one seam rung 2 fills.
 5. **Confetti stays Yang-only and cosmetic; voice is global** — the `getActiveEditionId() === "yang"` check survives **only** around `celebrateGreens`, never around the voice.
-6. **`progress` is a flat, non-routine, always-speak bank** — no `react` threshold, no `companion.js` change.
+6. **`progress` is a flat bank with a configurable budget** — `voiceBudget.progress` (defined in rung-00 `VoiceConfig.react.voiceBudget`) defaults to 1.0 (always-speak this rung); no `react` threshold, no `companion.js` change required in rung 1.
 7. **`VOICE_EDITION` stays `"yang"`** (inherited from Keystone locked decision 10).
 8. **Default-preserving guarantee is a test** — `mergeConfig(editionDefault, {})` ≡ `editionDefault`, enforced in `test/roomConfig.test.ts`.

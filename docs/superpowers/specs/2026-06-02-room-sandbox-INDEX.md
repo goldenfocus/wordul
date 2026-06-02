@@ -60,8 +60,8 @@ Quick map of who owns what (all anchored in rung 00):
   - `palette`, `sounds` — promoted to live in **rung 04** (`sounds` was added to rung 00's canonical schema during this pass, per the citation rule).
   - `fonts`, `rules`, `creature` — scaffolded in rung 04; full hooks deferred to their own rungs.
   - `economy` — **Sacred / Tier A**, deferred to its own gated rung; never touched in 00–06.
-- **Merge chain (LOCKED):** `editionDefault ← roomOverride ← userDefault ← session`, resolved client-side by the variadic `mergeConfig`. Rungs 00–02 implement the first two layers; rung 06 activates `userDefault` (via the owned-room **seed path**, held out of the guest merge); `session` stays reserved.
-- **Merge rules:** sections fall through independently; objects shallow-merge one level; `voice.react` **deep-merges** by every sub-key (`voiceBudget`/`win`/`greens`/`mistake`); `events`/`priority` replace; **line banks append unless wrapped `{replace}`**.
+- **Merge chain (LOCKED):** `editionDefault ← roomOverride ← userDefault ← session`, resolved client-side by the variadic `mergeConfig`. Rungs 00–02 implement the first two layers; rung 06 activates `userDefault` (via the owned-room **seed path**; guests get it only when they toggle "switch to my vibe" on); `session` stays reserved.
+- **Merge rules:** sections fall through independently; objects shallow-merge one level; `voice.react` **deep-merges** by every sub-key (`voiceBudget`/`win`/`greens`/`mistake`; `voiceBudget` includes both `routine` and `progress`); `events`/`priority` replace; **line banks append unless wrapped `{replace}`**.
 - **Versioning:** append-only `configHistory: ConfigVersion[]` in the Room DO blob; revert is forward-only. `v` is a **monotone counter** (`lastEntry.v + 1`), not array index (rung-02 correction to the keystone sketch — needs Yan's blessing).
 - **Caps (`CONFIG_CAPS`):** `historyMax = 50` (FIFO), `bankMax = 24` lines/leaf, `lineMax = 140` chars/line.
 - **Protocol:** two `ClientMessage`s — `set_room_config`, `revert_config` — plus optional `roomConfig` seed on `hello`. Kindness model: any present player may edit; `by` records authorship.
@@ -73,17 +73,31 @@ Quick map of who owns what (all anchored in rung 00):
 
 The load-bearing ones first — these shape implementation plans:
 
-1. **Personal-default precedence semantics (rung 06, the big one).** The keystone orders `roomOverride ← userDefault`, i.e. a user default would *outrank* a room's vibe. Rung 06 resolves this by realizing your default **through the seed path for rooms you own** and holding it **out of the guest merge** — your default follows you without a guest clobbering a host. Confirm that "follows you = seed-only for owned rooms" is the intended semantic, or whether personal talkativeness should subtly win even as a guest.
+1. ~~**Personal-default precedence semantics (rung 06, the big one).**~~ **RESOLVED (Yan, 2026-06-02).** Guests see the host's vibe by default; each guest gets a "switch to my vibe" opt-in toggle that locally applies their personal default (personal-experience parts only). See rung 06 and the keystone merge semantics.
 
-2. **Open-by-default publishing (rung 05).** `/api/themes` exposes every room's config **and** the `by` usernames with no auth (consistent with the already-public `/api/user`). Confirm public authorship enumeration is intended before the read API ships.
+2. ~~**Open-by-default publishing (rung 05).**~~ **RESOLVED (Yan, 2026-06-02).** `/api/themes` exposes every room's config + author usernames with no auth — confirmed intended, consistent with the existing public `/api/user`.
 
-3. **`v` numbering post-FIFO drop (rung 02).** The keystone sketch numbers versions `configHistory.length + 1`, which breaks `revert(v)`/`parent` after the 50-entry FIFO drop. Rung 02 proposes a **monotone counter** (`lastEntry.v + 1`). One-line blessing needed — it diverges from the keystone example (now flagged in the keystone too).
+3. ~~**`v` numbering post-FIFO drop (rung 02).**~~ **RESOLVED (auto-adopted).** Monotone counter `lastEntry.v + 1` — does not reset after the 50-entry FIFO drop. Noted in the keystone.
 
-4. **Progress voice budget (rung 01).** `progress` currently **always-speaks** (the point of "never silent"), so a fast game could surface a line nearly every guess. Keep always-speak (rung-03's talkativeness dial is the off-ramp), or budget it like routine `wrong`? Specs lean always-speak.
+4. ~~**Progress voice budget (rung 01).**~~ **RESOLVED (Yan, 2026-06-02).** `voiceBudget.progress` is a configurable knob in `voice.react.voiceBudget` (alongside `routine`). Default = 1.0 (always-speak). The room's talkativeness dial can lower it. Defined in rung 00's `VoiceConfig.react`.
 
-5. **Editor scope + commit model (rung 03).** (a) The keystone split version-history into its own rung; rung 03 folds a **read+revert timeline** in (full diff/label UX stays later) — confirm the merge. (b) Advanced edits commit behind an explicit **"Save changes"** button (version-frugal) vs. instant-commit — confirm for the playground feel.
+5. ~~**Editor scope + commit model (rung 03).**~~ **RESOLVED (Yan, 2026-06-02).** (a) Read+revert timeline folds into rung 03 — confirmed. (b) Advanced edits use an explicit **"Save changes"** button (stage locally, commit on save). Simple-mode preset/dial changes may apply instantly.
 
 Secondary taste calls (won't block plans): preset re-pick after advanced edits = hard-reset-with-confirm (keystone OQ #3); system-chat noise debounce (chat on preset-pick + revert only, keystone OQ #4); palette default surface = curated-5 swatches vs. all ~14 vars (rung 04); fonts bundled into the "Colors & Skin" card (rung 04).
+
+---
+
+## Locked decisions (Yan, 2026-06-02)
+
+These four decisions were made in review and are now binding across all rungs:
+
+1. **Personal-default precedence.** Host's room config is the default for all guests. Each guest may toggle "switch to my vibe" to locally apply their personal default (personal-experience parts only, client-side, no effect on the room for others). `userDefault` layer is only passed into `mergeConfig` when the toggle is on (or for rooms the guest owns via seed). See rung 00 merge semantics + rung 06.
+
+2. **`/api/themes` is public with usernames.** Every room's config + author usernames are exposed at `/api/themes` with no auth — consistent with the existing public `/api/user`. Resolves rung 05 open question #4.
+
+3. **`voiceBudget.progress` is a configurable budget knob** (default 1.0 = always-speak). Lives in `voice.react.voiceBudget` alongside `routine`. The room's talkativeness dial can lower it. Defined in rung 00 `VoiceConfig.react`; rung 01 ships it at default 1.0. Resolves rung 01 open question #1.
+
+4. **Advanced editor uses an explicit "Save changes" button.** Advanced edits stage locally and commit + create a version only on explicit save. Simple-mode preset/dial changes may still apply instantly. Resolves rung 03 open question #3.
 
 ---
 
