@@ -49,8 +49,12 @@ export function getActiveEditionId() {
   return localStorage.getItem(LS.edition) ?? "default";
 }
 
+// The companion always speaks in Yang's cloned voice + lines, regardless of the
+// active visual theme. Voice is decoupled from theming on purpose.
+export const VOICE_EDITION = "yang";
+
 export function companionReact(event, ctx = {}) {
-  const ed = getEdition(activeId);
+  const ed = getEdition(VOICE_EDITION);
   const bank = ed.companion?.lines?.[event] ?? [];
   if (bank.length === 0) return { text: "", raw: "", speak: false };
   const i = (reactCounters[event] = (reactCounters[event] ?? -1) + 1) % bank.length;

@@ -2,7 +2,7 @@
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
-import { applyEdition, getActiveEditionId, getGold, drainGold, companionReact, renderEditionPicker } from "/edition.js";
+import { applyEdition, getActiveEditionId, getGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION } from "/edition.js";
 import { speakLine } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
 import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence } from "/gold.js";
@@ -703,13 +703,13 @@ function showCompanion(event, ctx) {
   if (!text) return;
   toast(text, { duration: 3200 });
   // Look up the clip by the RAW template; fall back to speaking the substituted text.
-  if (speak) speakLine(getActiveEditionId(), raw, text);
+  if (speak) speakLine(VOICE_EDITION, raw, text);
 }
 
 // --- Idle taunts: the companion checks in when you go quiet mid-game. ---
 let idleTimer = null;
-const IDLE_FIRST_MS = 22000;
-const IDLE_REPEAT_MS = 34000;
+const IDLE_FIRST_MS = 180000; // 3 min of silence before the companion checks in
+const IDLE_REPEAT_MS = 180000; // …and every 3 min after that
 
 function isMyTurn() {
   const me = game.snapshot?.players.find((p) => p.username === getUsername());

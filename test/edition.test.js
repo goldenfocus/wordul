@@ -53,7 +53,18 @@ describe("editions + companion", () => {
     }
   });
   it("companionReact substitutes {answer}", () => {
-    expect(companionReact("loss", { answer: "CRANE" }).text).toContain("CRANE");
+    // Rotate through the loss bank until we hit an {answer} template, then
+    // confirm it was substituted (some loss lines legitimately omit the token).
+    let substituted = false;
+    for (let i = 0; i < 40; i++) {
+      const r = companionReact("loss", { answer: "CRANE" });
+      if (r.raw.includes("{answer}")) {
+        expect(r.text).toContain("CRANE");
+        substituted = true;
+        break;
+      }
+    }
+    expect(substituted).toBe(true);
   });
   it("companion lines rotate on repeat calls", () => {
     const a = companionReact("wrong").text;
