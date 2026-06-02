@@ -23,6 +23,7 @@ const LS = {
   username: "wr.username",
   preferredLength: "wr.length",
   replay: "wr.replay", // structured per-guess payout log, keyed per game (slug:round)
+  clearHint: "wr.clearHint", // one-time "press Esc / hold ⌫ to clear the row" nudge
 };
 
 const SUPPORTED_LENGTHS = [4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -634,7 +635,8 @@ function showCompanion(event, ctx = {}) {
   // Big moments linger; routine lines stay snappy.
   const big = tier && !(event === "wrong" && tier === "normal");
   toast(text, { duration: big ? 4200 : 3200 });
-  if (!speak) return;
+  // The wipe aside is text-only — it fires often enough that voicing it would grate.
+  if (!speak || event === "wipe") return;
   // Templated lines (the loss reveal) split across Yan's voice + the robot.
   if (raw.includes("{answer}")) speakTemplated(VOICE_EDITION, raw, ctx);
   else speakLine(VOICE_EDITION, raw, text);
@@ -1661,14 +1663,54 @@ function typeLetter(l) {
   render();
   resetIdle();
 }
+let lastWipeReactAt = 0;
 function clearRow() {
-  if (game.pending.length) { game.pending = ""; render(); resetIdle(); }
+  if (!game.pending.length) return;
+  const cleared = game.pending.length;
+  resetIdle();
+
+  // A meaningful wipe (most of a word, not one stray letter) earns a dry companion
+  // aside — throttled so rapid retries don't turn it into a chatterbox. Text-only:
+  // the wipe is frequent enough that voicing it would wear thin fast.
+  if (cleared >= 3 && Date.now() - lastWipeReactAt > 8000) {
+    lastWipeReactAt = Date.now();
+    showCompanion("wipe", { cleared });
+  }
+
+  const row = activeInputRow();
+  if (!row || getSettings().reducedMotion) { game.pending = ""; render(); return; }
+
+  // Sweep the tiles away left-to-right, THEN clear + re-render once the gesture lands.
+  const tiles = row.querySelectorAll(".tile");
+  tiles.forEach((t, i) => t.style.setProperty("--wipe-delay", `${i * 22}ms`));
+  row.classList.add("wipe");
+  const total = 180 + (tiles.length - 1) * 22;
+  setTimeout(() => { game.pending = ""; render(); }, total);
+}
+// The active (unplayed) input row for me — sits right after my played guesses.
+function activeInputRow() {
+  const myBoard = $$(".player-board")[0];
+  const me = game.snapshot?.players.find((p) => p.username === getUsername());
+  if (!myBoard || !me) return null;
+  return myBoard.querySelectorAll(".grid-row")[me.guesses.length] || null;
 }
 function backspace() {
   if (game.pending.length === 0) return;
   game.pending = game.pending.slice(0, -1);
   render();
   resetIdle();
+  maybeShowClearHint();
+}
+// One-time nudge: the first time someone backspaces, reveal the faster way to bail
+// on a whole guess. Shown once ever (localStorage), never nags again.
+function maybeShowClearHint() {
+  if (localStorage.getItem(LS.clearHint) === "1") return;
+  localStorage.setItem(LS.clearHint, "1");
+  const tip = isTouch() ? "Tip: hold ⌫ to clear the whole row" : "Tip: press Esc to clear the whole row";
+  setTimeout(() => toast(tip, { duration: 3200 }), 500);
+}
+function isTouch() {
+  return window.matchMedia?.("(pointer: coarse)").matches || "ontouchstart" in window;
 }
 function submitGuess() {
   resetIdle();

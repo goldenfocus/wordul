@@ -73,6 +73,11 @@ export const edition = {
         "Chips are down, but the night is young.",
         "The house edge held, come back swinging.",
       ],
+      wipe: [
+        "Folded the hand. Re-deal, darling.",
+        "Chips back, fresh bet. The table's patient.",
+        "Cleared the felt. Place your letters again.",
+      ],
       idle: [
         "The table is waiting on you, darling.",
         "Take your time. The night is young.",

@@ -100,6 +100,12 @@ export const edition = {
         "Didn't land it. I'm not even mad.",
         "Out of guesses, never out of class. It was {answer}.",
       ],
+      wipe: [
+        "Wiped it clean. Bold. Try again, champion.",
+        "Whole row, gone. I respect the audacity.",
+        "Erased and unbothered. The board awaits.",
+        "Starting over, are we? Love the confidence.",
+      ],
       idle: [
         "Still there? No rush. None at all.",
         "The cursor's blinking. You're not.",

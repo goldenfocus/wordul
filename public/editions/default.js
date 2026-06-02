@@ -28,6 +28,7 @@ export const edition = {
       win:     ["The precious is yours. Elegant.", "Solved, with taste.", "Yesss — that's the standard. Again?"],
       loss:    ["It slips away. The word was {answer}.", "Even masters miss. It was {answer}."],
       idle:    ["The board is waiting, precious.", "Whenever you're ready."],
+      wipe:    ["Clean slate. Begin again.", "Wiped. Choose more wisely.", "Gone. Start fresh, precious."],
     },
   },
 };

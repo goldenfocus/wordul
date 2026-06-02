@@ -46,7 +46,7 @@ describe("editions + companion", () => {
     expect(resolveEdition("default").id).toBe("default");
   });
   it("companionReact returns a line for each event type", () => {
-    for (const ev of ["invalid", "wrong", "win", "loss", "idle"]) {
+    for (const ev of ["invalid", "wrong", "win", "loss", "idle", "wipe"]) {
       const r = companionReact(ev, { answer: "CRANE" });
       expect(typeof r.text).toBe("string");
       expect(r.text.length).toBeGreaterThan(0);

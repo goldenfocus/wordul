@@ -730,6 +730,17 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
   40%,60% { transform: translateX(8px); }
 }
 
+/* Row wipe: clearing the whole guess (Esc / long-press ⌫ / tap-row). Tiles collapse
+   and fade left-to-right — a deliberate "swept away" sweep, NOT the error shake. The
+   per-tile stagger is written as --wipe-delay by JS so it reads as one gesture. */
+.grid-row.wipe .tile { animation: tile-wipe 0.18s ease forwards; animation-delay: var(--wipe-delay, 0ms); }
+@keyframes tile-wipe {
+  0%   { transform: scale(1); opacity: 1; }
+  55%  { transform: scale(0.72) translateY(2px); opacity: 0.25; }
+  100% { transform: scale(1); opacity: 1; }
+}
+body.reduced-motion .grid-row.wipe .tile { animation: none; }
+
 /* Spectator boards (others) — no letters visible. Tile SIZE is inherited from the
    board's --tile-size (set below / per breakpoint); don't set it on the tile here
    or it shadows the responsive parent value. */

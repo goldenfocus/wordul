@@ -50,6 +50,11 @@ export const edition = {
         "Bzzt... it was {answer}. No rust on you, let's go again!",
         "My gears wobbled too. The answer was {answer}.",
       ],
+      wipe: [
+        "*whirr-clunk* row cleared, buddy! Fresh start.",
+        "Beep! Letters recycled. Try a new one, pal.",
+        "*spring resets* clean slate, let's go again!",
+      ],
       idle: [
         "*ticking* ...still wound up and ready when you are!",
         "Beep? You still there, buddy?",
