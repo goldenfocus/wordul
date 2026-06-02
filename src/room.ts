@@ -70,6 +70,7 @@ export class Room extends DurableObject<Env> {
       scoreboard: [],
       history: [],
       edition: "default",
+      challengeId: null,
     };
     // Async restore — DO ctor can't await, so we kick it off and gate writes via blockConcurrencyWhile.
     ctx.blockConcurrencyWhile(async () => {
@@ -92,6 +93,8 @@ export class Room extends DurableObject<Env> {
     const url = new URL(req.url);
     if (url.pathname.endsWith("/ws")) {
       const path = url.searchParams.get("room") ?? "";
+      const challengeId = url.searchParams.get("challenge");
+      if (challengeId && !this.state.challengeId) this.state.challengeId = challengeId;
       if (this.state.path === "") {
         this.state.path = path;
         const [owner, slug] = path.split("/");
@@ -374,7 +377,19 @@ export class Room extends DurableObject<Env> {
       this.send(ws, { type: "error", message: "no words available for that length" });
       return;
     }
-    this.state.word = pool.answers[Math.floor(Math.random() * pool.answers.length)] ?? null;
+    if (this.state.challengeId) {
+      // Challenge room: ALWAYS play the pinned word (even on rematch), fetched
+      // server→server so the answer never touches the client.
+      const cs = this.env.CHALLENGE.get(this.env.CHALLENGE.idFromName(this.state.challengeId));
+      const res = await cs.fetch(new Request("https://do/word", { method: "GET" }));
+      if (res.ok) {
+        const { word, wordLength } = (await res.json()) as { word: string; wordLength: number };
+        this.state.word = word ?? null;
+        this.state.wordLength = wordLength ?? this.state.wordLength;
+      }
+    } else {
+      this.state.word = pool.answers[Math.floor(Math.random() * pool.answers.length)] ?? null;
+    }
     if (!this.state.word) return;
     this.state.phase = "playing";
     this.state.winner = null;
@@ -436,6 +451,16 @@ export class Room extends DurableObject<Env> {
       this.pushSystem(`${player.username} got it in ${player.guesses.length}!`);
     } else if (player.guesses.length >= this.state.maxGuesses) {
       player.status = "lost";
+    }
+    if (this.state.challengeId && (player.status === "won" || player.status === "lost") && !player.isBot) {
+      const solved = player.status === "won";
+      const score = solved ? `${player.guesses.length}/${this.state.maxGuesses}` : `X/${this.state.maxGuesses}`;
+      const cs = this.env.CHALLENGE.get(this.env.CHALLENGE.idFromName(this.state.challengeId));
+      this.ctx.waitUntil(cs.fetch(new Request("https://do/attempt", {
+        method: "POST",
+        body: JSON.stringify({ username: player.username, score, solved, guesses: player.guesses.length }),
+        headers: { "content-type": "application/json" },
+      })));
     }
     await this.maybeFinish();
   }
