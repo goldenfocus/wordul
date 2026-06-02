@@ -1500,6 +1500,10 @@ function renderBoards(snap, me) {
   if (preserveMine) {
     for (const board of root.querySelectorAll(".player-board")) {
       if (board.dataset.player !== getUsername()) board.remove();
+      // My board is frozen to protect the animating row + coin floaters, but the input
+      // row below it has no animation to guard. Sync it in place so letters typed mid-
+      // payout actually paint — otherwise fast play looks like it eats the next word.
+      else if (me) syncMyInputRow(board, snap, me);
     }
   } else {
     root.textContent = "";
@@ -1581,6 +1585,29 @@ function renderBoards(snap, me) {
     root.appendChild(board);
     game.lastGuessCounts.set(p.username, p.guesses.length);
   }
+}
+
+// During a preserved render (mid-payout / mid-explosion) the board DOM is frozen so the
+// flipping row's coin floaters stay anchored. The input row has nothing to protect, so we
+// patch its tiles in place to mirror game.pending. We only rewrite tiles that actually
+// changed, so an existing letter never re-fires its pop animation on each new keystroke.
+function syncMyInputRow(board, snap, me) {
+  if (snap.phase !== "playing" || me.status !== "playing") return;
+  const inputRow = board.querySelectorAll(".grid-row")[me.guesses.length];
+  if (!inputRow) return;
+  const pending = game.pending;
+  inputRow.querySelectorAll(".tile").forEach((tile, c) => {
+    const want = pending[c] ?? "";
+    const isCursor = c === pending.length;
+    if (tile.textContent === want && tile.classList.contains("filled") === !!want) {
+      tile.classList.toggle("cursor", isCursor); // letter unchanged — just move the cursor
+      return;
+    }
+    tile.className = "tile";
+    tile.textContent = "";
+    if (want) { tile.classList.add("filled", "pop"); tile.textContent = want; }
+    else if (isCursor) tile.classList.add("cursor");
+  });
 }
 
 function scheduleReveal(tile, color, colIdx) {
