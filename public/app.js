@@ -12,6 +12,8 @@ import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, 
 import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, detectLayout } from "/keyboard.js";
 import { getSettings, saveSettings, applySettings, openSettings, openHub } from "/settings.js";
 import { buildShareCardModel, renderShareCard } from "/share-card.js";
+import { renderHub } from "/hub.js";
+import { EDITIONS, getEdition } from "/editions/index.js";
 import { MODES, isAvailableMode } from "/modes.js";
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
@@ -123,19 +125,46 @@ function showHome() {
   renderHomeIdentity();
 }
 
-// Toggle greeting vs. intro based on whether we know who the player is, and kick
-// off the rooms fetch for returning users.
+// Toggle greeting vs. intro based on whether we know who the player is.
+// For returning users, render the Hub (hides the legacy greeting/rooms sections).
 function renderHomeIdentity() {
   const u = getUsername();
   const greeting = $("#homeGreeting");
   const intro = $("#homeIntro");
   const rooms = $("#homeRooms");
   if (u) {
-    if (greeting) greeting.hidden = false;
+    // Hide legacy home sections — the Hub takes over.
+    if (greeting) greeting.hidden = true;
     if (intro) intro.hidden = true;
-    const nameEl = $("#greetingName");
-    if (nameEl) { nameEl.textContent = ""; nameEl.appendChild(userLink(u, { at: true })); }
-    loadHomeRooms(u);
+    if (rooms) rooms.hidden = true;
+    // Also hide the CTA button and how-to link — hub has its own play action.
+    const cta = $(".home-cta");
+    if (cta) cta.hidden = true;
+    const howto = $(".home-howto");
+    if (howto) howto.hidden = true;
+
+    const cbs = {
+      username: u,
+      editions: EDITIONS,
+      editionName: (id) => getEdition(id).name,
+      companionIdleLine: () => {
+        const lines = getEdition(getActiveEditionId()).companion?.lines?.idle ?? ["The board is waiting."];
+        return lines[Math.floor(Date.now() / 86400000) % lines.length];
+      },
+      onPlay: (editionId) => { applyEdition(editionId); enterNewRoom({ autoStart: true }); },
+      renderRecentRooms: (mountEl) => renderRecentRoomsInto(mountEl),
+      onInvite: () => enterNewRoom({ autoStart: false }),
+      openMenu: (anchor) => openHub({ anchor }),
+    };
+    fetch(`/api/user/${encodeURIComponent(u)}`)
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((profile) => {
+        // Populate homeRoomRows so renderRecentRoomsInto has data ready.
+        homeRoomRows = buildRoomRows(profile, u);
+        homeRoomVisible = HOME_ROOMS_PAGE;
+        renderHub(profile, cbs);
+      })
+      .catch(() => renderHub({}, cbs));
   } else {
     if (greeting) greeting.hidden = true;
     if (intro) intro.hidden = false;
@@ -232,8 +261,14 @@ function buildRoomRows(profile, username) {
   return Array.from(byPath.values()).sort((a, b) => b.ts - a.ts);
 }
 
-function renderRoomList() {
-  const list = $("#roomList");
+// Render homeRoomRows into an arbitrary <ul> mount element (defaults to #roomList).
+// The hub calls this with #hubRoomList so it can embed the list in The Daily panel.
+function renderRecentRoomsInto(mountEl) {
+  renderRoomList(mountEl);
+}
+
+function renderRoomList(mountEl) {
+  const list = mountEl || $("#roomList");
   if (!list) return;
   const rows = homeRoomRows;
   list.textContent = "";
