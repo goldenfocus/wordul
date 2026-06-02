@@ -21,6 +21,7 @@ export interface Env {
   ASSETS: Fetcher;
   ROOM: DurableObjectNamespace;
   USER: DurableObjectNamespace;
+  CHALLENGE: DurableObjectNamespace;
   DIRECTORY: KVNamespace;
   DESIGNS: R2Bucket;
 }
@@ -86,3 +87,7 @@ export type ServerMessage =
   | { type: "revealed_letter"; index: number; letter: string }
   | { type: "vowels"; count: number }
   | { type: "pong" };
+
+// Challenge link types live in challenge-core.ts (pure + unit-tested); re-export
+// here so DO/worker/room import them alongside the other shared types.
+export type { ChallengeAttempt, ChallengeRecord, ChallengeState, ChallengeMeta } from "./challenge-core.ts";
