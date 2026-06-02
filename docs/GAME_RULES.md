@@ -74,8 +74,9 @@ as bankruptcy, in **any** mode.
 
 Reskin the whole game. Current editions: **Wordul** (default), **Editorial**,
 **Yang's Table** (with a cloned-voice companion who reacts as you play), **Tactile**,
-**Arcade**, and **Jackpot** (a payout vibe). Editions are cosmetic — the rules above
-hold across all of them.
+**Arcade**, **Jackpot** (a payout vibe), and **Tin Bot** (a 1950s wind-up pal — the
+lineup's one *light* theme, with a companion named Sprocket). Editions are cosmetic —
+the rules above hold across all of them.
 
 ## 6. Modes
 
