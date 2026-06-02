@@ -56,8 +56,10 @@ const reactCounters = {};
 
 export function resolveEdition(id) { return getEdition(id); }
 // Sensory feedback config for committing a sloppy mistake (reusing a proven-gray
-// letter). Null when the active edition opts out. See app.js mistakeFx().
-export function activeMistakeFx() { return getEdition(activeId).effects?.mistake ?? null; }
+// letter). Every room inherits this default; an edition can override via
+// effects.mistake. See app.js mistakeFx().
+const DEFAULT_MISTAKE_FX = { shake: true, crack: true, sound: "glass", flash: false, haptics: false };
+export function activeMistakeFx() { return getEdition(activeId).effects?.mistake ?? DEFAULT_MISTAKE_FX; }
 export function getActiveEditionId() {
   return localStorage.getItem(LS.edition) ?? "default";
 }

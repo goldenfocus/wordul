@@ -144,6 +144,25 @@ body {
   30%, 50%, 70% { transform: translateX(-8px); }
   40%, 60% { transform: translateX(8px); }
 }
+/* Broken-letter graphic: shudder the reused dead-letter tile and overlay crack lines. */
+.tile.fx-break { position: relative; animation: fx-break-shudder 0.5s ease; }
+.tile.fx-break::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+  background:
+    linear-gradient(72deg, transparent 47%, rgba(255,255,255,.95) 48%, transparent 50%),
+    linear-gradient(-58deg, transparent 45%, rgba(255,255,255,.7) 46%, transparent 48%),
+    linear-gradient(18deg, transparent 48%, rgba(255,255,255,.6) 49%, transparent 51%);
+  animation: fx-break-fade 0.6s ease forwards;
+}
+@keyframes fx-break-shudder {
+  0%, 100% { transform: none; }
+  20% { transform: translate(-2px, 1px) rotate(-3deg); }
+  40% { transform: translate(2px, -1px) rotate(3deg); }
+  60% { transform: translate(-1px, 1px) rotate(-2deg); }
+  80% { transform: translate(1px, 0) rotate(1deg); }
+}
+@keyframes fx-break-fade { from { opacity: 1; } to { opacity: 0; } }
+
 /* A brief lightning-white flash over the whole screen. */
 .fx-flash {
   position: fixed; inset: 0; z-index: 9999; pointer-events: none;

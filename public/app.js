@@ -952,7 +952,7 @@ function onServerMessage(msg) {
           goldDrain(penalty, reducedMotion, playChime);
           const log = getHacklog();
           for (const line of penaltyLines) log?.logLine(line, { tone: "loss" });
-          mistakeFx(activeMistakeFx()); // sensory punishment for the sloppy reuse (room-themed)
+          mistakeFx(activeMistakeFx(), wasted.letters); // sensory punishment for the sloppy reuse (room-themed)
           checkBankruptcy(powerupsCtx); // C4: a wasted-letter drain may bankrupt Hard Mode
         };
 
@@ -1894,7 +1894,7 @@ function playNoise(kind) {
 // Sensory feedback for a committed sloppy mistake (reused dead letter). Config comes
 // from the active edition (activeMistakeFx); reduced motion suppresses shake + flash
 // but keeps the non-motion cues (sound, haptics). No-ops when the edition opts out.
-function mistakeFx(cfg) {
+function mistakeFx(cfg, letters) {
   if (!cfg) return;
   if (cfg.sound) playNoise(cfg.sound);
   if (cfg.haptics && navigator.vibrate) navigator.vibrate([30, 40, 30]);
@@ -1906,11 +1906,37 @@ function mistakeFx(cfg) {
     boards.classList.add("fx-shake");
     setTimeout(() => boards.classList.remove("fx-shake"), 360);
   }
+  if (cfg.crack && letters && letters.size) crackTiles(letters);
   if (cfg.flash) {
     const flash = document.createElement("div");
     flash.className = "fx-flash";
     document.body.appendChild(flash);
     setTimeout(() => flash.remove(), 320);
+  }
+}
+
+// Shatter just the reused dead-letter tiles in MY fresh row (matched by letter).
+// Same bottom-up "is it filled?" walk as getMyFreshTile so a mid-payout repaint
+// can't target a detached node.
+function crackTiles(letters) {
+  const up = new Set([...letters].map((l) => l.toUpperCase()));
+  const myBoard = document.querySelector("#boards .player-board:not(.spectator)");
+  if (!myBoard) return;
+  const rows = myBoard.querySelectorAll(".grid .grid-row");
+  for (let r = rows.length - 1; r >= 0; r--) {
+    const tiles = rows[r].querySelectorAll(".tile");
+    const filled = tiles[0] && (tiles[0].classList.contains("reveal") ||
+      tiles[0].classList.contains("green") || tiles[0].classList.contains("yellow") ||
+      tiles[0].classList.contains("gray"));
+    if (!filled) continue;
+    tiles.forEach((t) => {
+      if (!up.has((t.textContent || "").toUpperCase())) return;
+      t.classList.remove("fx-break");
+      void t.offsetWidth; // restart the animation
+      t.classList.add("fx-break");
+      setTimeout(() => t.classList.remove("fx-break"), 600);
+    });
+    return; // only the fresh row
   }
 }
 

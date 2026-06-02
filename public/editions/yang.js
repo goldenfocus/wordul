@@ -18,8 +18,8 @@ export const edition = {
   motion: { revealStaggerMs: 105, flipHalfMs: 200 },
   sound: { voice: { rate: 1.0, pitch: 1.0, on: true } },
   // Sensory punishment for a sloppy mistake (reusing a proven-gray letter).
-  // shake jolts the board; sound: "glass" | "shock" | "buzz" | null.
-  effects: { mistake: { shake: true, sound: "glass", flash: false, haptics: false } },
+  // shake jolts the board; crack shatters the reused tiles; sound: "glass" | "shock" | "buzz" | null.
+  effects: { mistake: { shake: true, crack: true, sound: "glass", flash: false, haptics: false } },
   companion: {
     name: "Yang",
     react: {
