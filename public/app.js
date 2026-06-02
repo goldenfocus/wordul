@@ -116,7 +116,7 @@ function showHome() {
 
   const input = $("#usernameInput");
   input.value = getUsername();
-  buildHomeLengthSelect();
+  buildHomeLengthPills();
 
   // Both intents land in the lobby (never auto-start) so you can set your theme +
   // word length before the board goes live — the edition picker locks once playing.
@@ -168,22 +168,30 @@ function renderHomeIdentity() {
   }
 }
 
-function buildHomeLengthSelect() {
-  const sel = $("#homeLengthSelect");
-  if (!sel) return;
-  sel.textContent = "";
+// Word length as a tap-to-pick segmented control — the whole choice space is
+// visible, one tap commits. Beats a dropdown for a 3-option set.
+function buildHomeLengthPills() {
+  const box = $("#homeLengthPills");
+  if (!box) return;
+  box.textContent = "";
   const pref = getPreferredLength();
   for (const n of SUPPORTED_LENGTHS) {
-    const opt = document.createElement("option");
-    opt.value = String(n);
-    opt.textContent = `${n} letters`;
-    if (n === pref) opt.selected = true;
-    sel.appendChild(opt);
+    const pill = document.createElement("button");
+    pill.type = "button";
+    pill.className = "length-pill" + (n === pref ? " selected" : "");
+    pill.setAttribute("role", "radio");
+    pill.setAttribute("aria-checked", String(n === pref));
+    pill.textContent = String(n);
+    pill.addEventListener("click", () => {
+      setPreferredLength(n);
+      for (const p of box.children) {
+        const on = p === pill;
+        p.classList.toggle("selected", on);
+        p.setAttribute("aria-checked", String(on));
+      }
+    });
+    box.appendChild(pill);
   }
-  sel.addEventListener("change", () => {
-    const n = parseInt(sel.value, 10);
-    if (SUPPORTED_LENGTHS.includes(n)) setPreferredLength(n);
-  });
 }
 
 // Shared create flow for both CTAs. autoStart=true → solo game begins on the
@@ -395,15 +403,16 @@ function showRoomEntry(owner, slug) {
   $("#homeIntro").hidden = false;
   $(".tagline").textContent = `Join @${owner}'s Wordul room.`;
   $(".sub").textContent = "Pick a username to join.";
-  // Length is decided by the room, so the picker is irrelevant here.
-  $("#homeLengthSelect").hidden = true;
-  $("#inviteFriendBtn").hidden = true;
+  // Length is decided by the room, so the secondary row is irrelevant here.
+  const secondary = $(".home-secondary");
+  if (secondary) secondary.hidden = true;
 
   const input = $("#usernameInput");
   input.value = getUsername();
   input.focus();
   const btn = $("#startPlayingBtn");
-  btn.textContent = "Join room →";
+  const label = btn.querySelector(".hero-btn-label") || btn;
+  label.textContent = "Join room →";
   const join = () => {
     const username = setUsername(input.value);
     if (username.length < 3) {

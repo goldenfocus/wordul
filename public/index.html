@@ -85,6 +85,9 @@
 <!-- Templates -->
 <template id="tpl-home">
   <section class="screen home">
+    <!-- Ambient gold orbs — pure decoration, reduced-motion safe. -->
+    <div class="home-aura" aria-hidden="true"><span class="orb orb-a"></span><span class="orb orb-b"></span></div>
+
     <!-- Returning user: greeting + switch-user. Hidden for new users. -->
     <div id="homeGreeting" class="home-greeting" hidden>
       <h1 class="greeting-title">👋 Welcome back, <span id="greetingName" class="greeting-name">@you</span></h1>
@@ -102,13 +105,12 @@
     </div>
 
     <div class="home-cta">
-      <button id="startPlayingBtn" class="btn primary block">▶ Start playing</button>
+      <button id="startPlayingBtn" class="btn primary block hero-btn"><span class="hero-btn-label">▶ Start playing</span></button>
       <p id="startHint" class="start-hint"></p>
-      <button id="inviteFriendBtn" class="btn ghost block">＋ Invite friend</button>
-      <label class="home-length">
-        <span class="label">Word length</span>
-        <select id="homeLengthSelect" class="length-select" aria-label="Word length"></select>
-      </label>
+      <div class="home-secondary">
+        <div id="homeLengthPills" class="length-pills" role="radiogroup" aria-label="Word length"></div>
+        <button id="inviteFriendBtn" class="btn ghost invite-btn">＋ Invite</button>
+      </div>
     </div>
 
     <!-- Returning user: rooms to rejoin. Hidden when empty or for new users. -->
@@ -120,7 +122,6 @@
       <ul id="roomList" class="room-list"></ul>
     </section>
 
-    <p class="muted small home-foot">One try per turn per player. First to guess wins.</p>
     <a href="/how-to-play" class="home-howto link">New here? See how Wordul works →</a>
   </section>
 </template>

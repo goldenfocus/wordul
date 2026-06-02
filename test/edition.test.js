@@ -83,7 +83,7 @@ describe("applyEdition", () => {
     const html = document.documentElement;
     expect(html.dataset.edition).toBe("default");
     expect(html.style.getPropertyValue("--bg").trim()).toBe("#0e0e10");
-    expect(html.style.getPropertyValue("--green").trim()).toBe("#5b8c6e");
+    expect(html.style.getPropertyValue("--green").trim()).toBe("#c8a96a");
     expect(window.WordulMotion.revealStaggerMs).toBe(110);
     expect(localStorage.getItem("wordul.edition")).toBe("default");
   });

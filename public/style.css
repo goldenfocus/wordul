@@ -8,7 +8,8 @@
   --tile-empty: #0e0e10;
   --tile-pending-border: #46464c;
   --key-bg: #2a2a2e;
-  --green: #5b8c6e;
+  --green: #c8a96a; /* Obsidian default: the accent is gold (was sage). Tiles use their
+                       own literal gold treatment below; this drives buttons/links/etc. */
   --yellow: #c8a96a;
   --gray: #3a3a3e; /* clearly distinct from --border so submitted "absent" tiles stand out */
   --accent: #c8a96a;
@@ -311,7 +312,49 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 }
 
 /* Home */
-.home { justify-content: center; max-width: 480px; margin: 0 auto; }
+.home {
+  justify-content: center; max-width: 480px; margin: 0 auto;
+  position: relative;
+}
+/* Children rise in, staggered, above the ambient aura. */
+.home > *:not(.home-aura) {
+  position: relative; z-index: 1;
+  animation: home-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.home > *:nth-child(2) { animation-delay: 0.04s; }
+.home > *:nth-child(3) { animation-delay: 0.10s; }
+.home > *:nth-child(4) { animation-delay: 0.16s; }
+.home > *:nth-child(5) { animation-delay: 0.22s; }
+@keyframes home-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Ambient gold orbs — slow drift behind the hero. */
+.home-aura { position: absolute; inset: -10% -20%; z-index: 0; pointer-events: none; overflow: hidden; }
+.home-aura .orb {
+  position: absolute; border-radius: 50%;
+  filter: blur(60px); opacity: 0.5;
+}
+.home-aura .orb-a {
+  width: 260px; height: 260px; top: -40px; left: -30px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 55%, transparent), transparent 70%);
+  animation: orb-drift-a 16s ease-in-out infinite;
+}
+.home-aura .orb-b {
+  width: 220px; height: 220px; bottom: 10%; right: -20px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 40%, transparent), transparent 70%);
+  animation: orb-drift-b 20s ease-in-out infinite;
+}
+@keyframes orb-drift-a {
+  0%,100% { transform: translate(0,0) scale(1); }
+  50% { transform: translate(40px, 30px) scale(1.12); }
+}
+@keyframes orb-drift-b {
+  0%,100% { transform: translate(0,0) scale(1); }
+  50% { transform: translate(-36px, -28px) scale(0.9); }
+}
+
 .tagline {
   font-size: clamp(24px, 5vw, 32px);
   margin: 0;
@@ -1051,6 +1094,29 @@ html[data-edition="default"] .tile.gray {
 }
 html[data-edition="default"] .key.gray {
   background: #121214; color: #5a5a60; opacity: 1;
+}
+/* The accent is gold now, so every accent-FILLED surface needs dark ink to stay
+   readable (text-colored uses of --green on the dark bg are fine as-is). */
+html[data-edition="default"] .btn:not(.ghost),
+html[data-edition="default"] .room-filter-btn.selected,
+html[data-edition="default"] .length-btn.selected,
+html[data-edition="default"] .player-name .badge.won,
+html[data-edition="default"] .chat-badge,
+html[data-edition="default"] .topbar-chat-badge,
+html[data-edition="default"] .chat-send,
+html[data-edition="default"] .ewc-look {
+  color: #1c1503;
+}
+/* Keyboard: etched-flat keys with a touch of float — a real bottom edge that
+   depresses on press. State colors (gold / champagne / cold) are set above. */
+html[data-edition="default"] .key {
+  background: #16161a; border-radius: 9px;
+  box-shadow: 0 2px 0 #050506, 0 4px 10px rgba(0,0,0,.45);
+}
+html[data-edition="default"] .key:active,
+html[data-edition="default"] .key.pressed {
+  transform: translateY(2px); filter: none;
+  box-shadow: 0 0 0 #050506, 0 1px 4px rgba(0,0,0,.5);
 }
 
 /* ✨ Power-ups: one subtle magic icon, hidden until you can afford the cheapest

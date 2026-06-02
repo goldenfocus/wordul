@@ -40,7 +40,7 @@ describe("activeLayoutId", () => {
 const noopHandlers = () => ({ onEnter: vi.fn(), onBack: vi.fn(), onLetter: vi.fn() });
 
 describe("buildKeyboard", () => {
-  it("renders all 26 letters once plus ⌫ and Enter", () => {
+  it("renders all 26 letters once plus ⌫ and Return", () => {
     const root = document.createElement("div");
     buildKeyboard(root, "qwerty", noopHandlers());
     const letterKeys = root.querySelectorAll(".key[data-key]");
@@ -48,7 +48,11 @@ describe("buildKeyboard", () => {
     const letters = Array.from(letterKeys).map((k) => k.dataset.key).sort().join("");
     expect(letters).toBe("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
     expect(root.querySelector('.key[data-action="back"]').textContent).toBe("⌫");
-    expect(root.querySelector('.key[data-action="enter"]').textContent).toBe("Enter");
+    expect(root.querySelector('.key[data-action="enter"]').textContent).toBe("Return");
+    // ⌫ lives on the top row, Return on the bottom row (both right-edge).
+    const kbRows = root.querySelectorAll(".kb-row");
+    expect(kbRows[0].querySelector('.key[data-action="back"]')).not.toBeNull();
+    expect(kbRows[kbRows.length - 1].querySelector('.key[data-action="enter"]')).not.toBeNull();
   });
 
   it("reorders keys for azerty (top row starts AZERTY)", () => {

@@ -33,10 +33,13 @@ export function buildKeyboard(root, layoutId, handlers) {
   root.innerHTML = "";
   // Make every LETTER key the same width across ALL rows (not just within a row): give
   // each row the same total flex "units" by padding the shorter rows with end spacers.
-  // units = letters (1 each) + a wide key (1.5) on rows 0/1. Deficit vs the widest row is
-  // split as a spacer on each end → all letters render at rowWidth / maxUnits.
+  // units = letters (1 each) + a wide key (1.5) on the rows that carry an action key.
+  // Deficit vs the widest row is split as a spacer on each end → all letters render at
+  // rowWidth / maxUnits.
   const WIDE = 1.5;
-  const units = rows.map((letters, idx) => letters.length + (idx <= 1 ? WIDE : 0));
+  const lastRow = rows.length - 1;
+  const hasWide = (idx) => idx === 0 || idx === lastRow; // ⌫ top row, Enter bottom row
+  const units = rows.map((letters, idx) => letters.length + (hasWide(idx) ? WIDE : 0));
   const maxUnits = Math.max(...units);
   const spacer = (flex) => {
     const s = document.createElement("div");
@@ -56,18 +59,18 @@ export function buildKeyboard(root, layoutId, handlers) {
       k.dataset.key = l;
       row.appendChild(k);
     }
-    // Match a real computer keyboard: ⌫ sits top-right (end of row 1), Enter
-    // mid-right (end of row 2). The bottom row is letters only.
+    // Actions stack on the right edge, thumb-reachable: ⌫ at the end of the TOP row,
+    // Return at the end of the BOTTOM row. The middle row is letters only.
     if (idx === 0) {
       const back = document.createElement("button");
       back.className = "key wide";
       back.textContent = "⌫";
       back.dataset.action = "back";
       row.appendChild(back);
-    } else if (idx === 1) {
+    } else if (idx === lastRow) {
       const enter = document.createElement("button");
       enter.className = "key wide";
-      enter.textContent = "Enter";
+      enter.textContent = "Return";
       enter.dataset.action = "enter";
       row.appendChild(enter);
     }

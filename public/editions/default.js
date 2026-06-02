@@ -7,7 +7,7 @@ export const edition = {
   palette: {
     bg: "#0e0e10", fg: "#f4f2ec", muted: "#8a8a8f", border: "#2a2a2e",
     tileEmpty: "#0e0e10", tilePendingBorder: "#46464c", keyBg: "#2a2a2e",
-    green: "#5b8c6e", yellow: "#c8a96a", gray: "#3a3a3e",
+    green: "#c8a96a", yellow: "#c8a96a", gray: "#3a3a3e", // gold accent (Obsidian)
     accent: "#c8a96a", bgCard: "#17171a", error: "#e0796b",
   },
   fonts: {
