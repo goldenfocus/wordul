@@ -485,6 +485,7 @@ export class Room extends DurableObject<Env> {
   // Finish the round once every connected player is done — NOT the instant someone wins.
   // The winner was already announced; here we just reveal the word to everyone and record.
   private async maybeFinish(): Promise<void> {
+    if (this.state.phase === "finished") return;
     if (!this.isGameOver()) return;
     this.state.phase = "finished";
     this.state.finishedAt = Date.now();
@@ -513,22 +514,22 @@ export class Room extends DurableObject<Env> {
   // EZ-mode power-up: reveal one letter the player hasn't greened yet. Only the DO
   // holds the answer, so this must happen server-side. No state change, no broadcast —
   // the hint goes only to the requester.
-  private onRevealLetter(ws: WebSocket, known?: number[]): void {
+  private async onRevealLetter(ws: WebSocket, known?: number[]): Promise<void> {
     if (this.state.phase !== "playing" || !this.state.word) return;
     const username = this.userFor(ws);
     const player = this.state.players.find((p) => p.username === username);
     if (!player || player.status !== "playing") return;
     if (player.points < POINTS.revealCost) { this.send(ws, { type: "error", message: "not enough points" }); return; }
     const hit = revealUngreened(this.state.word, player.guesses, known ?? []);
-    if (!hit) return; // nothing left to reveal — no charge
+    if (!hit) { this.send(ws, { type: "error", message: "nothing left to reveal" }); return; }
     player.pointsSpent += POINTS.revealCost;
     player.points -= POINTS.revealCost;
     this.send(ws, { type: "revealed_letter", index: hit.index, letter: hit.letter });
-    void this.persistAndBroadcast();
+    await this.persistAndBroadcast();
   }
 
   // EZ-mode power-up: how many vowels are in the answer. Requester-only.
-  private onVowelCount(ws: WebSocket): void {
+  private async onVowelCount(ws: WebSocket): Promise<void> {
     if (this.state.phase !== "playing" || !this.state.word) return;
     const username = this.userFor(ws);
     const player = this.state.players.find((p) => p.username === username);
@@ -537,7 +538,7 @@ export class Room extends DurableObject<Env> {
     player.pointsSpent += POINTS.vowelCost;
     player.points -= POINTS.vowelCost;
     this.send(ws, { type: "vowels", count: countVowels(this.state.word) });
-    void this.persistAndBroadcast();
+    await this.persistAndBroadcast();
   }
 
   /** On the finish transition: bump the room scoreboard, then report a personalized
@@ -582,7 +583,7 @@ export class Room extends DurableObject<Env> {
           stub.fetch(`https://do/append?username=${encodeURIComponent(username)}`, { method: "POST", body: JSON.stringify(record) })
             .catch((e) => console.error("report failed", username, (e as Error).message)),
         ];
-        if (gold > 0) {
+        if (gold > 0 && !player?.isBot) {
           calls.push(
             stub.fetch(`https://do/ledger/append?username=${encodeURIComponent(username)}`, {
               method: "POST",

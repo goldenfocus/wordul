@@ -13,7 +13,8 @@ export type UserProfile = {
   stats: UserStats;
   games: GameRecord[];     // most-recent-first, capped
   ownedRooms: OwnedRoom[];
-  ledger: LedgerTx[];   // append-only token transactions; gold balance = balance(ledger,"gold")
+  ledger: LedgerTx[];   // append-only token transactions; capped audit log (last 500)
+  balances: Record<string, number>;  // running per-token balance; authoritative (ledger is a capped audit log)
 };
 
 export interface Env {
