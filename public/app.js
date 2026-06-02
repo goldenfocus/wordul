@@ -158,13 +158,8 @@ function enterNewRoom({ autoStart }) {
   history.pushState(null, "", `/@${username}/${slug}`);
   showRoom(username, slug);
   // showRoom resets game state, so set the one-shot flag after it.
-  if (autoStart) {
-    game.autoStart = true;
-  } else {
-    // Invite path: hand over the link immediately (still in the click gesture, so
-    // navigator.share is allowed) rather than making them find the lobby button.
-    shareRoomInvite();
-  }
+  // Invite path lands quietly in the lobby; the explicit invite button shares on demand.
+  if (autoStart) game.autoStart = true;
 }
 
 // --- Home rooms list ---
