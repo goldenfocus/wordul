@@ -2,7 +2,7 @@
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
-import { applyEdition, getActiveEditionId, getGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION } from "/edition.js";
+import { applyEdition, getActiveEditionId, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION } from "/edition.js";
 import { speakLine, speakTemplated } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
 import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence } from "/gold.js";
@@ -800,6 +800,7 @@ function connect() {
       edition: getActiveEditionId(), // seeds a fresh room with the creator's theme
       mode: "race", // only valid selectable mode today
     });
+    refreshGold(); // sync server-authoritative balance into HUD cache on join
     // Kick off heartbeat so the path stays warm.
     startHeartbeat();
   });
@@ -857,6 +858,17 @@ function send(msg) {
   if (game.ws && game.ws.readyState === WebSocket.OPEN) {
     game.ws.send(JSON.stringify(msg));
   }
+}
+
+// Pull the server-authoritative gold balance into the HUD cache. The server (USER
+// ledger) is the source of truth; localStorage is just a display mirror now.
+function refreshGold() {
+  const name = getUsername();
+  if (!name) return;
+  fetch(`/api/user/${encodeURIComponent(name)}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((p) => { if (p && typeof p.gold === "number") setGold(p.gold); })
+    .catch(() => {});
 }
 
 function onServerMessage(msg) {
@@ -1012,6 +1024,7 @@ function onServerMessage(msg) {
     if ((phaseEnded || personallyLost || personallyWon) && !game.hasShownEndStats) {
       handleGameOver(msg.room);
     }
+    if (msg.room.phase === "finished") refreshGold(); // reconcile persistent balance after cash-out
     render();
   } else if (msg.type === "invalid_guess") {
     // Letters are still in game.pending — we never cleared them. Shake the row and

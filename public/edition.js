@@ -3,6 +3,15 @@ import { EDITIONS, getEdition } from "/editions/index.js";
 import { resolveTier, shouldSpeak } from "/companion.js";
 
 const LS = { edition: "wordul.edition", gold: "wordul.gold", muted: "wordul.muted" };
+
+// Gold is now server-authoritative (USER ledger). The local value is a display cache
+// only; clear any pre-existing balance once so a hacked/leaked localStorage number
+// can't pose as a real balance. (Spec: secured two-token economy.)
+if (typeof localStorage !== "undefined" && localStorage.getItem("wordul.goldMigratedV2") !== "1") {
+  localStorage.removeItem(LS.gold);
+  localStorage.setItem("wordul.goldMigratedV2", "1");
+}
+
 const DEFAULT_GOLD = 0; // you start broke and earn your way up
 
 export function getGold() {
