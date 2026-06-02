@@ -5,6 +5,7 @@ import { computeNextGuess } from "./solver.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { buildGameRecords, summarizeRoomGame } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
+import { pointsEarned, goldFromPoints, POINTS } from "./economy.ts";
 import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
 import type { RoomMode } from "./modes.ts";
 import type {
@@ -81,6 +82,7 @@ export class Room extends DurableObject<Env> {
         if (!restored.maxGuesses) restored.maxGuesses = guessesFor(restored.wordLength);
         if (!restored.mode) restored.mode = DEFAULT_MODE;
         if (!restored.edition) restored.edition = "default"; // pre-theme rooms
+        for (const p of restored.players) { if (typeof p.points !== "number") p.points = 0; if (typeof p.pointsSpent !== "number") p.pointsSpent = 0; }
         this.state = restored;
       }
     });
@@ -215,7 +217,7 @@ export class Room extends DurableObject<Env> {
         this.send(ws, { type: "error", message: "room full" });
         return;
       }
-      this.state.players.push({ username, connected: true, guesses: [], status: "playing" });
+      this.state.players.push({ username, connected: true, guesses: [], status: "playing", points: 0, pointsSpent: 0 });
       // The room's default word length follows its owner's preference, and only in a
       // pristine lobby. Anyone can still change it mid-lobby via set_length (shared control).
       if (
@@ -382,6 +384,8 @@ export class Room extends DurableObject<Env> {
     for (const p of this.state.players) {
       p.guesses = [];
       p.status = "playing";
+      p.points = 0;
+      p.pointsSpent = 0;
     }
     const who = this.userFor(ws) ?? "someone";
     this.pushSystem(`${who} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
@@ -421,6 +425,7 @@ export class Room extends DurableObject<Env> {
   private async applyGuess(player: PlayerState, word: string): Promise<void> {
     const mask = scoreGuess(word, this.state.word!);
     player.guesses.push({ word, mask });
+    player.points = pointsEarned(player.guesses, this.state.maxGuesses) - player.pointsSpent;
     const allGreen = mask.every((c) => c === "green");
     if (allGreen) {
       player.status = "won";
@@ -447,7 +452,7 @@ export class Room extends DurableObject<Env> {
     if (!this.isRobotRoom()) return;
     if (this.state.players.some((p) => p.isBot)) return;
     if (this.state.players.length >= MAX_PLAYERS) return;
-    this.state.players.push({ username: BOT_NAME, connected: true, guesses: [], status: "playing", isBot: true });
+    this.state.players.push({ username: BOT_NAME, connected: true, guesses: [], status: "playing", isBot: true, points: 0, pointsSpent: 0 });
     this.pushSystem(`🤖 ${BOT_NAME} powered on — knows the basics, holds no grudges.`);
   }
 
@@ -513,8 +518,13 @@ export class Room extends DurableObject<Env> {
     const username = this.userFor(ws);
     const player = this.state.players.find((p) => p.username === username);
     if (!player || player.status !== "playing") return;
+    if (player.points < POINTS.revealCost) { this.send(ws, { type: "error", message: "not enough points" }); return; }
     const hit = revealUngreened(this.state.word, player.guesses, known ?? []);
-    if (hit) this.send(ws, { type: "revealed_letter", index: hit.index, letter: hit.letter });
+    if (!hit) return; // nothing left to reveal — no charge
+    player.pointsSpent += POINTS.revealCost;
+    player.points -= POINTS.revealCost;
+    this.send(ws, { type: "revealed_letter", index: hit.index, letter: hit.letter });
+    void this.persistAndBroadcast();
   }
 
   // EZ-mode power-up: how many vowels are in the answer. Requester-only.
@@ -523,7 +533,11 @@ export class Room extends DurableObject<Env> {
     const username = this.userFor(ws);
     const player = this.state.players.find((p) => p.username === username);
     if (!player || player.status !== "playing") return;
+    if (player.points < POINTS.vowelCost) { this.send(ws, { type: "error", message: "not enough points" }); return; }
+    player.pointsSpent += POINTS.vowelCost;
+    player.points -= POINTS.vowelCost;
     this.send(ws, { type: "vowels", count: countVowels(this.state.word) });
+    void this.persistAndBroadcast();
   }
 
   /** On the finish transition: bump the room scoreboard, then report a personalized
@@ -560,11 +574,24 @@ export class Room extends DurableObject<Env> {
     // Report to every player's User DO in parallel — caps the wait at one round-trip
     // instead of N. Best-effort: a failed/slow write can't block or break the finish.
     await Promise.allSettled(
-      Object.entries(records).map(([username, record]) =>
-        this.env.USER.get(this.env.USER.idFromName(username))
-          .fetch(`https://do/append?username=${encodeURIComponent(username)}`, { method: "POST", body: JSON.stringify(record) })
-          .catch((e) => console.error("report failed", username, (e as Error).message)),
-      ),
+      Object.entries(records).flatMap(([username, record]) => {
+        const player = this.state.players.find((p) => p.username === username);
+        const gold = goldFromPoints(player ? player.points : 0);
+        const stub = this.env.USER.get(this.env.USER.idFromName(username));
+        const calls = [
+          stub.fetch(`https://do/append?username=${encodeURIComponent(username)}`, { method: "POST", body: JSON.stringify(record) })
+            .catch((e) => console.error("report failed", username, (e as Error).message)),
+        ];
+        if (gold > 0) {
+          calls.push(
+            stub.fetch(`https://do/ledger/append?username=${encodeURIComponent(username)}`, {
+              method: "POST",
+              body: JSON.stringify({ token: "gold", delta: gold, reason: "mint:cashout", ref: `${this.state.path}#${this.state.round}` }),
+            }).catch((e) => console.error("mint failed", username, (e as Error).message)),
+          );
+        }
+        return calls;
+      }),
     );
   }
 
@@ -578,6 +605,8 @@ export class Room extends DurableObject<Env> {
     for (const p of this.state.players) {
       p.guesses = [];
       p.status = "playing";
+      p.points = 0;
+      p.pointsSpent = 0;
     }
     await this.persistAndBroadcast();
   }
