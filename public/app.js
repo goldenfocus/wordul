@@ -1933,7 +1933,7 @@ function mistakeFx(cfg, letters) {
     boards.classList.add("fx-shake");
     setTimeout(() => boards.classList.remove("fx-shake"), 360);
   }
-  if (cfg.crack && letters && letters.size) crackTiles(letters);
+  if (cfg.crack && letters && letters.length) crackTiles(letters);
   if (cfg.flash) {
     const flash = document.createElement("div");
     flash.className = "fx-flash";
