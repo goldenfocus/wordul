@@ -2,7 +2,7 @@
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
-import { applyEdition, getActiveEditionId, resolveEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
+import { applyEdition, getActiveEditionId, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
 import { pickGuessEvent } from "/roomConfig.js";
 import { speakLine, speakTemplated } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
@@ -542,12 +542,6 @@ function showRoom(owner, slug) {
   hacklog = null;
   mount("tpl-room");
   renderRoomHeader();
-  const hasNativeShare = typeof navigator.share === "function";
-  const inviteLabel = $("#inviteLabel");
-  if (inviteLabel) inviteLabel.textContent = hasNativeShare ? "Share" : "Copy link";
-  // One Share control: shareRoomInvite copies the link AND opens the native share sheet.
-  // The old raw-URL field + separate Copy button were clutter — removed.
-  $("#inviteBtn").addEventListener("click", () => shareRoomInvite());
   $("#startBtn").addEventListener("click", () => send({ type: "start" }));
   $("#rematchBtn").addEventListener("click", () => {
     game.hasShownEndStats = false;
@@ -675,29 +669,34 @@ async function shareRoomInvite() {
   }
   try {
     await navigator.clipboard.writeText(inviteUrl);
-    const ok = $("#copyOk");
-    if (ok) { ok.hidden = false; setTimeout(() => (ok.hidden = true), 1500); }
     toast("Link copied — send it to a friend!", { duration: 2400 });
   } catch {
     prompt("Copy this link:", inviteUrl);
   }
 }
 
-// Render the room name + owner + a rename affordance. Control is shared (anyone
-// present can rename), matching the server's "kindness model".
+// Render the room name. The name IS the share affordance — tapping it copies the
+// room link. Rename + invite live in the avatar hub now (nothing lost, just moved).
 function renderRoomHeader() {
   const nameEl = $("#roomName");
-  const ownerEl = $("#roomOwner");
-  if (nameEl) nameEl.textContent = game.name || game.slug;
-  if (ownerEl) {
-    ownerEl.textContent = `@${game.owner}`;
-    ownerEl.href = `/@${game.owner}`;
-    ownerEl.onclick = (e) => { e.preventDefault(); navigate(`/@${game.owner}`); };
+  if (nameEl) {
+    nameEl.textContent = game.name || game.slug;
+    nameEl.onclick = copyRoomLink;
   }
-  const renameBtn = $("#renameBtn");
-  if (renameBtn) renameBtn.onclick = renameRoom;
   renderHeaderIdentity();
   renderGoldHud();
+}
+
+// Copy the room link with a subtle confirmation. The whole share/copy surface
+// collapsed into one gesture: tap the name.
+async function copyRoomLink() {
+  const url = `${location.origin}/@${game.owner}/${game.slug}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("Link copied ✓", { duration: 1200 });
+  } catch {
+    prompt("Copy this link:", url);
+  }
 }
 
 // The immersive in-game header (C5) shows username + gold beside the avatar. The
@@ -1347,9 +1346,6 @@ function render() {
     syncModePicker(snap);
     syncLobbySetup(snap);
     startBtn.hidden = false;
-    $("#lobbyHint").textContent = snap.players.length < 2
-      ? `Waiting for friends · start solo anytime`
-      : `${snap.players.length} players in`;
   } else if (snap.phase === "playing") {
     lobby.hidden = true;
     endControls.hidden = true;
@@ -1586,14 +1582,12 @@ function syncLengthSelect(snap) {
   if (parseInt(sel.value, 10) !== snap.wordLength) sel.value = String(snap.wordLength);
 }
 
-// Lobby setup line — a compact "⚙ 5 letters · Theme" button that opens the gear, where
-// length + theme now live. Keeps the lobby minimal while staying discoverable.
-function syncLobbySetup(snap) {
+// The lobby gear — one bare ⚙ that opens Settings (where length + theme live). The
+// "5 letters · Theme" label is gone; the gear is the whole affordance.
+function syncLobbySetup() {
   const btn = $("#lobbySetup");
   if (!btn) return;
   btn.hidden = false;
-  const themeName = resolveEdition(getActiveEditionId())?.name ?? "Theme";
-  $("#lobbySetupText").textContent = `${snap.wordLength} letters · ${themeName}`;
   if (!btn.dataset.wired) {
     btn.dataset.wired = "1";
     btn.addEventListener("click", () => showSettings());

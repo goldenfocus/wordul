@@ -663,24 +663,15 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
   text-decoration: underline;
   padding: 4px;
 }
-.invite-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  text-transform: none; letter-spacing: 0.02em;
-}
-.invite-icon { font-size: 14px; line-height: 1; }
-.copy-ok { color: var(--green); font-size: 12px; font-weight: 600; }
 .lobby-controls { display: flex; align-items: center; gap: 10px; }
-/* Compact lobby setup line — opens the gear (where length + theme now live). */
-.lobby-setup {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: color-mix(in srgb, var(--bg-card, #17171a) 70%, transparent); color: var(--fg);
-  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
-  border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 10px;
-  padding: 5px 12px; cursor: pointer;
-  font-size: 12px; font-weight: 600;
+/* The lobby gear — one bare ⚙ that opens Settings (length · theme live there). */
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 999px;
+  cursor: pointer; font-size: 17px; line-height: 1;
 }
-.lobby-setup:hover { border-color: color-mix(in srgb, var(--accent) 34%, transparent); }
-.lobby-setup-icon { font-size: 13px; line-height: 1; opacity: 0.8; }
+.lobby-setup:hover { border-color: var(--accent); }
 
 /* Boards */
 .boards {
@@ -1559,15 +1550,11 @@ html[data-edition="default"] .key.pressed {
 .settings-section-body .setting-row:first-child { padding-top: 0; }
 body.reduced-motion .settings-chevron { transition: none; }
 
-/* Immersive UI hide-chrome (C5): while a guess is in progress, the room name /
-   ✎ rename / Share ↗ / scoreboard collapse away — all reachable via the avatar
-   hub. Lobby + finished states show everything. A hub "peek" (.hub-reveal) forces
-   the scoreboard back even mid-play. */
+/* Immersive UI hide-chrome (C5): while a guess is in progress, the room name +
+   scoreboard collapse away — both reachable via the avatar hub. Lobby + finished
+   states show everything. A hub "peek" (.hub-reveal) forces the scoreboard back
+   even mid-play. */
 body.playing .room-name,
-body.playing .rename-btn,
-body.playing .room-owner,
-body.playing .invite-btn,
-body.playing .copy-ok,
 body.playing #scoreboard:not(.hub-reveal) { display: none; }
 
 /* iOS-style toggle switch */
@@ -1724,13 +1711,17 @@ body.reduced-motion .gold-floater { display: none !important; }
 }
 .linklike:hover { color: var(--fg); }
 
-/* --- Room header (name / owner / rename) --- */
+/* --- Room name — the name IS the share: tap to copy the room link. --- */
 .room-name {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--fg);
   font-size: 16px; font-weight: 700; letter-spacing: 0.02em;
   text-transform: capitalize;
 }
-.rename-btn { font-size: 13px; width: 28px; height: 28px; }
-.room-owner { font-size: 13px; font-weight: 600; }
+/* A subtle 🔗 hint that the name copies the link, brightening on hover. */
+.room-name::after { content: " 🔗"; font-size: 0.8em; opacity: 0.45; }
+.room-name:hover { color: var(--accent); }
+.room-name:hover::after { opacity: 0.8; }
 
 /* --- Per-room scoreboard --- */
 .scoreboard {
@@ -2014,7 +2005,6 @@ body.playing .room-tabs { display: none; }
 }
 
 .share-row { display: flex; gap: 8px; align-items: stretch; margin-top: 0; }
-.invite-share-row { margin-top: 0; }
 .share-url {
   flex: 1; min-width: 0; padding: 0 14px; border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--fg) 10%, transparent);

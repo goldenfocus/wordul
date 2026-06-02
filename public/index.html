@@ -146,29 +146,18 @@
 <template id="tpl-room">
   <section class="screen room">
     <div class="lobby-bar">
+      <!-- The name IS the share: tap it to copy the room link. Rename + invite still
+           live in the avatar hub; length + theme in the gear. Three things only. -->
       <div class="room-info">
-        <span class="room-name" id="roomName"></span>
+        <button type="button" class="room-name" id="roomName" title="Copy room link"></button>
         <span id="modeChip" class="mode-chip" hidden></span>
-        <button id="renameBtn" class="icon-btn rename-btn" type="button" title="Rename room" aria-label="Rename room">✎</button>
-        <a id="roomOwner" class="room-owner link" href="#">@owner</a>
-        <button id="inviteBtn" class="share-native invite-btn" type="button">
-          <span id="inviteLabel">Share</span>
-          <span class="invite-icon" aria-hidden="true">↗</span>
-        </button>
-        <span id="copyOk" class="copy-ok" hidden>Copied!</span>
       </div>
       <div id="lobbyControls" class="lobby-controls" hidden>
         <div id="modeControl" class="mode-control" hidden>
           <span class="label" id="modeHeading">Choose a mode</span>
           <ul id="modeList" class="mode-list" role="radiogroup" aria-label="Game mode"></ul>
         </div>
-        <!-- Room setup (length + theme) lives in the gear now; this compact line shows the
-             current setup and opens Settings to change it — minimal lobby, still discoverable. -->
-        <button type="button" id="lobbySetup" class="lobby-setup" aria-label="Room setup" hidden>
-          <span class="lobby-setup-icon" aria-hidden="true">⚙</span>
-          <span id="lobbySetupText" class="lobby-setup-text"></span>
-        </button>
-        <span id="lobbyHint" class="muted small"></span>
+        <button type="button" id="lobbySetup" class="lobby-setup" aria-label="Room setup" title="Length · theme" hidden>⚙</button>
         <button id="startBtn" class="btn primary small" hidden>Start game</button>
       </div>
       <div id="endControls" class="lobby-controls" hidden>
