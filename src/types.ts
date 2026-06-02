@@ -3,6 +3,7 @@ import type { UserStats } from "./stats.ts";
 import type { GameRecord, RoomGame } from "./records.ts";
 import type { RoomScore } from "./scoreboard.ts";
 import type { RoomMode } from "./modes.ts";
+import type { LedgerTx } from "./economy.ts";
 
 export type OwnedRoom = { slug: string; name: string; lastPlayedAt: number };
 
@@ -12,6 +13,7 @@ export type UserProfile = {
   stats: UserStats;
   games: GameRecord[];     // most-recent-first, capped
   ownedRooms: OwnedRoom[];
+  ledger: LedgerTx[];   // append-only token transactions; gold balance = balance(ledger,"gold")
 };
 
 export interface Env {
@@ -30,6 +32,8 @@ export type PlayerState = {
   guesses: GuessRow[];
   status: "playing" | "won" | "lost";
   isBot?: boolean;         // a worduler — born in Wordul, plays from public masks only
+  points: number;        // live in-game points (earned − spent); reset each round
+  pointsSpent: number;   // running power-up spend this round (internal accumulator)
 };
 
 export type RoomPhase = "lobby" | "playing" | "finished";
