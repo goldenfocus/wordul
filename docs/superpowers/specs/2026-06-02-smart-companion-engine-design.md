@@ -85,13 +85,26 @@ shouldSpeak(event, tier, cfg, rng) → boolean              (big & win/loss alwa
 
 `celebrateGreens` passes the **real** `count` into the `greens` event so the line matches the number. A win reaction passes `guessesUsed`; a wrong-guess reaction passes the sloppy boolean.
 
+### 5b. Split-voice templated lines (the loss reveal)
+
+Loss lines like `"The word was {answer}."` currently fall back *entirely* to `speechSynthesis` (render.mjs skips any line with `{`), so Yan's voice never says them. New behavior: **Yan's cloned voice speaks the static frame; the browser's most robotic voice speaks the answer word.**
+
+- Split the raw line on the `{answer}` token → `[prefix, suffix]` (e.g. `["The word was ", "."]`).
+- **Render** each non-empty trimmed segment as its own clip (keyed `lineKey(segment.trim())`) in `render.mjs` — so the human frame is pre-recorded in Yan's voice.
+- **Runtime** (`voice.js`, new `speakTemplated(editionId, rawLine, ctx)`): play the prefix clip → on `ended`, robot-speak `ctx.answer` → on `ended`, play the suffix clip. Each step falls back to `speechSynthesis` if its clip is missing.
+- **Robotic voice:** a `speakRobotic(word)` helper picks the most mechanical available `speechSynthesis` voice (heuristic match on names like "Albert"/"Zarvox"/"Cellos"/"Trinoids", else any voice with low pitch ~0.4 + rate ~0.9 as the robot fallback). Deliberately uncanny against Yan's warm frame.
+- `showCompanion("loss", ctx)` routes through `speakTemplated` when the raw line contains `{answer}`; all other events keep using `speakLine`.
+
+This generalizes to any future templated line, but `loss` is the only one today.
+
 ### 6. Files touched
 
 - `public/companion.js` — **new.** Pure scoring + selection + `shouldSpeak`. The unit-tested core.
 - `public/edition.js` — `companionReact` delegates tier resolution to `companion.js`; keeps `{answer}` substitution + mute check.
 - `public/editions/yang.js` — add `react` config; re-bucket `win`/`rush`→`greens`/`mistake` line banks; author `genius`/`clutch`/`3-5 greens`/`sloppy` lines.
 - `public/app.js` — `celebrateGreens(count)` passes real count to a `greens` event (replaces `rush`); win path passes `guessesUsed`; wrong path passes sloppy boolean; scale confetti/chime/toast per tier.
-- `scripts/voice/render.mjs` — flatten **nested** line banks (recurse objects, not just `Object.values().flat()`) so all tier lines render.
+- `public/voice.js` — add `speakTemplated(editionId, rawLine, ctx)` (sequenced prefix-clip → robot answer → suffix-clip) and `speakRobotic(word)` (most-mechanical `speechSynthesis` voice).
+- `scripts/voice/render.mjs` — flatten **nested** line banks (recurse objects, not just `Object.values().flat()`) so all tier lines render; for templated lines, render each non-empty `{answer}`-split segment instead of skipping the whole line.
 - `test/companion.test.ts` — **new.** TDD target.
 
 ### 7. Testing (TDD on `companion.js`)
@@ -103,6 +116,8 @@ shouldSpeak(event, tier, cfg, rng) → boolean              (big & win/loss alwa
 - Selection: round-robins within a tier without immediate repeat; nested vs flat banks both resolve.
 
 No audio clips required for any test.
+
+- Split-voice (pure helper, no audio playback): a `splitTemplate("The word was {answer}.")` → `["The word was", "."]` segment splitter, tested for prefix-only, suffix-only, and prefix+suffix cases. (Playback sequencing in `voice.js` is verified manually — it depends on `Audio`/`speechSynthesis`.)
 
 ## Non-goals (deferred)
 
