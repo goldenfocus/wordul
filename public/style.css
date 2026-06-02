@@ -708,8 +708,11 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 }
 .player-name .me { color: var(--green); }
 .player-name .badge {
-  font-size: 10px; padding: 2px 6px; border-radius: 999px;
-  background: var(--gray); color: var(--fg); text-transform: uppercase;
+  font-size: 10px; padding: 2px 6px; border-radius: 4px;
+  background: color-mix(in srgb, var(--gray) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent);
+  color: var(--fg); text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 .player-name .badge.won { background: var(--green); }
 .player-name .badge.lost { background: var(--error); }
@@ -989,12 +992,14 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
 .chat-toggle:hover { background: rgba(255,255,255,0.04); }
 .chat-toggle-label { flex: 1; }
 .chat-badge {
-  background: var(--green);
-  color: white;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
   font-size: 10px;
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   font-weight: 800;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 .chat-toggle-caret { color: var(--muted); transition: transform 0.2s; }
 .chat-panel.collapsed .chat-body { display: none; }
@@ -1070,18 +1075,20 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
 .topbar-chat-badge {
   position: absolute;
   top: 2px; right: 0;
-  background: var(--green);
-  color: white;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
   font-size: 9px;
   font-weight: 800;
   min-width: 16px;
   height: 16px;
-  border-radius: 999px;
-  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  padding: 0 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 .chat-close-btn {
   display: none;
@@ -1503,16 +1510,28 @@ html[data-edition="default"] .key.pressed {
 .edition-picker { display: flex; flex-wrap: wrap; gap: 8px; }
 .edition-chip {
   appearance: none; -webkit-appearance: none; cursor: pointer;
-  padding: 8px 14px; border-radius: 999px;
-  border: 1px solid var(--border); background: var(--bg-card, var(--bg));
+  padding: 8px 14px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  background: color-mix(in srgb, var(--bg-card, #17171a) 75%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   color: var(--fg); font-family: var(--font-body); font-size: 13px; font-weight: 600;
-  transition: border-color .15s ease, background .15s ease, color .15s ease, transform .08s ease;
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease, transform .08s ease;
 }
-.edition-chip:hover { border-color: var(--accent); }
+.edition-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 14px -6px color-mix(in srgb, var(--accent) 60%, transparent);
+}
 .edition-chip:active { transform: scale(.97); }
-.edition-chip.is-active { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+.edition-chip.is-active {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--fg);
+  box-shadow: 0 0 18px -6px color-mix(in srgb, var(--accent) 70%, transparent),
+              inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
+}
 .edition-chip:disabled { opacity: .5; cursor: not-allowed; }
-.edition-chip:disabled:hover { border-color: var(--border); }
+.edition-chip:disabled:hover { border-color: var(--border); box-shadow: none; }
 .picker-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 
 /* Lobby theme control — sits in the lobby bar next to word length. Compact chips so
@@ -1562,22 +1581,32 @@ body.playing #scoreboard:not(.hub-reveal) { display: none; }
 .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .switch-slider {
   position: absolute; inset: 0;
-  background: #3a3a3c;
-  border-radius: 999px;
-  transition: background 0.2s;
+  background: color-mix(in srgb, #3a3a3c 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent);
+  border-radius: 8px;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 .switch-slider::before {
   content: "";
   position: absolute;
-  height: 18px; width: 18px;
+  height: 16px; width: 16px;
   top: 3px; left: 3px;
-  background: white;
-  border-radius: 50%;
-  transition: transform 0.2s;
+  background: rgba(255,255,255,0.85);
+  border-radius: 5px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
 }
-.switch input:checked + .switch-slider { background: var(--green); }
-.switch input:checked + .switch-slider::before { transform: translateX(18px); }
-.switch input:focus-visible + .switch-slider { box-shadow: 0 0 0 2px var(--green); }
+.switch input:checked + .switch-slider {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 14px -4px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.switch input:checked + .switch-slider::before {
+  transform: translateX(18px);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent), 0 1px 4px rgba(0,0,0,0.3);
+}
+.switch input:focus-visible + .switch-slider { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent); }
 
 /* Color Blind Mode — body class overrides the green/yellow tokens. */
 body.cb {
@@ -1676,9 +1705,19 @@ body.reduced-motion .gold-floater { display: none !important; }
 }
 .ewc-look {
   display: inline-block; margin-top: 14px;
-  padding: 9px 18px; border-radius: 999px;
-  background: var(--green); color: #fff;
+  padding: 9px 18px; border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--fg);
   font-size: 13px; font-weight: 700; text-decoration: none;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 0 20px -8px color-mix(in srgb, var(--accent) 70%, transparent);
+  transition: background 0.18s, border-color 0.18s, box-shadow 0.18s;
+}
+.ewc-look:hover {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 75%, transparent);
+  box-shadow: 0 0 28px -6px color-mix(in srgb, var(--accent) 90%, transparent);
 }
 .endgame-status { display: block; margin-top: 6px; }
 
@@ -1878,28 +1917,33 @@ html[data-edition="robot"] .brand { animation: tinbot-antenna 2.8s ease-in-out i
 /* --- Room tabs (Play / Games / Players) --- */
 .room-tabs {
   display: flex;
-  gap: 2px;
+  gap: 0;
   margin: 14px auto 18px;
-  padding: 3px;
+  padding: 0;
   width: max-content;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border));
 }
 .room-tab {
   font: inherit;
   font-size: 14px;
   font-weight: 500;
-  padding: 6px 18px;
+  padding: 8px 20px;
   border: 0;
-  border-radius: 999px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  transition: color .18s ease, background .18s ease;
+  transition: color .18s ease, text-shadow .18s ease, border-color .18s ease;
 }
 .room-tab:hover { color: var(--fg); }
-.room-tab.is-active { color: #16140f; background: var(--accent); }
+.room-tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 65%, transparent);
+}
 /* Active guessing is immersive — tabs are a between-games surface. */
 body.playing .room-tabs { display: none; }
 .room-tab-panel[hidden] { display: none; }
@@ -1923,11 +1967,16 @@ body.playing .room-tabs { display: none; }
   text-transform: uppercase;
   letter-spacing: .06em;
   padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.05);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg) 8%, transparent);
   color: var(--muted);
 }
-.game-mode[data-mode="race"] { color: var(--accent); }
+.game-mode[data-mode="race"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 50%, transparent);
+}
 .game-who { flex: 1; color: var(--fg); font-weight: 500; }
 .game-result { color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
 .game-when { color: var(--muted); font-size: 12px; opacity: .7; }
@@ -1964,8 +2013,10 @@ body.playing .room-tabs { display: none; }
 .mode-row.locked { cursor: default; opacity: .5; }
 /* Read-only mode chip near room name */
 .mode-chip {
-  font-size: .72rem; padding: 2px 8px; border-radius: 999px;
-  background: var(--border, #2a2a2e); color: var(--muted, #8a8a8f);
+  font-size: .72rem; padding: 2px 8px; border-radius: 5px;
+  background: color-mix(in srgb, var(--bg-card, #17171a) 75%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fg) 10%, transparent);
+  color: var(--muted, #8a8a8f);
 }
 
 .share-row { display: flex; gap: 8px; align-items: stretch; margin-top: 0; }
@@ -2012,6 +2063,17 @@ body.playing .room-tabs { display: none; }
 }
 .challenge-cta:active:not(:disabled) { transform: translateY(1px); }
 .cta-replay { display: inline-block; opacity: 0.7; }
+
+/* --- Glass design system (Aurora) — reusable tokens. No pills; glass + glow. --- */
+.glass {
+  background: color-mix(in srgb, var(--bg-card, #17171a) 70%, transparent);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  border: 1px solid color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: 14px;
+}
+.glow-gold { text-shadow: 0 0 14px color-mix(in srgb, #d8c97a 55%, transparent); }
+.glow-uv   { text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 60%, transparent); }
+.glow-cta  { box-shadow: 0 8px 30px -8px color-mix(in srgb, #d8c97a 60%, transparent); }
 
 /* ─── Home hub — Glass Aurora design language ─────────────────────────────── */
 
