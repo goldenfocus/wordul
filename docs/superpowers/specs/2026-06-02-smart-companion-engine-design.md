@@ -40,8 +40,7 @@ react: {
 ```js
 lines: {
   invalid: [ ... ],                                  // flat
-  wrong:   [ ... ],                                  // flat (routine baseline)
-  mistake: { sloppy: [ ... ] },                      // big
+  wrong:   { normal: [...], sloppy: [...] },         // normal = routine baseline; sloppy = big (called-out)
   win:     { genius: [...], clutch: [...], solid: [...] },
   greens:  { "2": [...], "3": [...], "4": [...], "5": [...] },
   loss:    [ ... ],                                  // flat
@@ -59,8 +58,9 @@ Stateless functions, no DOM, no imports from app.js:
 ```js
 scoreWin(guessesUsed, cfg)      → "genius" | "clutch" | "solid"
 scoreGreens(newGreenCount, cfg) → "2" | "3" | "4" | "5"   (clamped to configured thresholds)
-scoreMistake(ctx, cfg)          → "sloppy" | "wrong"      (sloppy when the guess reused a known dead letter)
-shouldSpeak(event, tier, cfg, rng) → boolean              (big & win/loss always true; routine gated by voiceBudget.routine)
+scoreMistake(ctx, cfg)          → "sloppy" | "normal"     (sloppy when the guess reused a known dead letter)
+shouldSpeak(event, tier, cfg, rng) → boolean              (only a normal wrong guess + invalid are gated by voiceBudget.routine; sloppy/big/win/loss always speak)
+resolveTier(event, ctx, cfg)    → tier string | null      (null for flat banks: invalid, idle, loss)
 ```
 
 `scoreMistake` reads from the guess context: a guess is **sloppy** if it contains any letter already known gray that round. Source signal already exists — `game.deadLetterReuse` (`app.js:399`) tracks reused dead letters per game; the engine just needs the boolean "did this guess reuse a known-dead letter."
