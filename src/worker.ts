@@ -1,8 +1,10 @@
 import { Room } from "./room.ts";
 import { User } from "./user.ts";
+import { Challenge } from "./challenge.ts";
+import { makeChallengeId } from "./challenge-core.ts";
 import type { Env } from "./types.ts";
 import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts";
-export { Room, User };
+export { Room, User, Challenge };
 
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;
@@ -13,6 +15,17 @@ export default {
 
     // Room WebSocket: /ws?room=<owner>/<slug>
     if (url.pathname === "/ws") {
+      const challengeId = url.searchParams.get("challenge");
+      if (challengeId && /^[0-9A-Za-z]{5}$/.test(challengeId)) {
+        const player = normalizeUsername(url.searchParams.get("username") ?? "");
+        if (!isValidUsername(player)) return new Response("invalid player", { status: 400 });
+        const key = `c:${challengeId}:${player}`;
+        const stub = env.ROOM.get(env.ROOM.idFromName(key));
+        const upstream = new URL(req.url);
+        upstream.searchParams.set("room", key);
+        upstream.searchParams.set("challenge", challengeId);
+        return stub.fetch(new Request(upstream.toString(), req));
+      }
       const raw = url.searchParams.get("room") ?? "";
       const [ownerRaw, slugRaw] = raw.split("/");
       const owner = normalizeUsername(ownerRaw ?? "");
@@ -36,6 +49,25 @@ export default {
       if (!isValidUsername(name)) return new Response("bad username", { status: 400 });
       const stub = env.USER.get(env.USER.idFromName(name));
       return stub.fetch(new Request(`https://do/?username=${name}`, { method: "GET" }));
+    }
+
+    // Mint a challenge: POST /api/challenge
+    if (url.pathname === "/api/challenge" && req.method === "POST") {
+      const id = makeChallengeId();
+      const stub = env.CHALLENGE.get(env.CHALLENGE.idFromName(id));
+      const body = (await req.json()) as Record<string, unknown>;
+      return stub.fetch(new Request("https://do/", {
+        method: "POST",
+        body: JSON.stringify({ ...body, id }),
+        headers: { "content-type": "application/json" },
+      }));
+    }
+
+    // Challenge meta (no word): GET /api/challenge/<id>/meta
+    const metaMatch = url.pathname.match(/^\/api\/challenge\/([0-9A-Za-z]{5})\/meta$/);
+    if (metaMatch && req.method === "GET") {
+      const stub = env.CHALLENGE.get(env.CHALLENGE.idFromName(metaMatch[1]));
+      return stub.fetch(new Request("https://do/meta", { method: "GET" }));
     }
 
     // Sitemap from the directory.
