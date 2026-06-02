@@ -50,3 +50,53 @@ describe("fallbackWord", () => {
     expect(fallbackWord("2026-06-02", [])).toBe("");
   });
 });
+
+import { houseWorld, resolveWorld, normalizeWorld } from "../src/daily-core.ts";
+import type { World } from "../src/daily-core.ts";
+
+describe("houseWorld", () => {
+  it("wraps the deterministic fallback word in a default-edition World", () => {
+    const w = houseWorld("2026-06-02", 1_700_000_000_000);
+    expect(w.date).toBe("2026-06-02");
+    expect(w.word).toMatch(/^[A-Z]+$/);
+    expect(w.word.length).toBe(5); // fallback uses the 5-letter pool
+    expect(w.edition).toBe("default");
+    expect(w.voice).toBe("yang");
+    expect(typeof w.story.title).toBe("string");
+    expect(typeof w.story.body).toBe("string");
+    expect(houseWorld("2026-06-02", 1).word).toBe(w.word); // deterministic word
+  });
+});
+
+describe("resolveWorld", () => {
+  const curated: World = {
+    date: "2026-06-02", word: "EMBER", edition: "yang", voice: "yang",
+    story: { title: "Why EMBER?", body: "A small warmth that refuses to go out." },
+    createdAt: 1,
+  };
+  it("returns the curated World when the date is scheduled", () => {
+    expect(resolveWorld({ "2026-06-02": curated }, "2026-06-02", 99).word).toBe("EMBER");
+  });
+  it("falls back to a house World for an unscheduled date", () => {
+    const w = resolveWorld({}, "2026-06-05", 99);
+    expect(w.edition).toBe("default");
+    expect(w.word.length).toBe(5);
+  });
+});
+
+describe("normalizeWorld", () => {
+  it("accepts a valid payload and uppercases the word", () => {
+    const w = normalizeWorld({
+      date: "2026-06-02", word: "ember", edition: "yang", voice: "yang",
+      story: { title: "t", body: "b" },
+    });
+    expect(w?.word).toBe("EMBER");
+    expect(typeof w?.createdAt).toBe("number");
+  });
+  it("rejects garbage / missing fields", () => {
+    expect(normalizeWorld(null)).toBeNull();
+    expect(normalizeWorld({ word: "ember" })).toBeNull();               // no date
+    expect(normalizeWorld({ date: "nope", word: "EMBER", story: {} })).toBeNull(); // bad date
+    expect(normalizeWorld({ date: "2026-06-02", word: "EM3ER", story: { title: "t", body: "b" } })).toBeNull();
+  });
+});

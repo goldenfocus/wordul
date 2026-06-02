@@ -35,3 +35,58 @@ export function fallbackWord(date: string, answers: string[]): string {
   if (!answers || answers.length === 0) return "";
   return answers[fnv1a(date) % answers.length];
 }
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A generic "house" World for any unauthored date — deterministic fallback word. */
+export function houseWorld(date: string, nowMs: number): World {
+  const word = fallbackWord(date, WORDS_BY_SIZE[5]?.answers ?? []);
+  return {
+    date,
+    word,
+    edition: "default",
+    voice: "yang",
+    story: {
+      title: `Today's word`,
+      body: `No curator claimed ${date} — so the house drew a word. Play it, then come back: a curated day is coming.`,
+    },
+    createdAt: nowMs,
+  };
+}
+
+/** Curated World for the date if scheduled, else the deterministic house World. */
+export function resolveWorld(schedule: DailySchedule, date: string, nowMs: number): World {
+  return schedule[date] ?? houseWorld(date, nowMs);
+}
+
+/** Validate + normalize an admin-supplied World payload. Returns null if invalid. */
+export function normalizeWorld(input: unknown): World | null {
+  if (!input || typeof input !== "object") return null;
+  const o = input as Record<string, unknown>;
+  const date = typeof o.date === "string" ? o.date : "";
+  if (!DATE_RE.test(date)) return null;
+  const word = typeof o.word === "string" ? o.word.toUpperCase().trim() : "";
+  if (!/^[A-Z]+$/.test(word)) return null;
+  const story = (o.story && typeof o.story === "object" ? o.story : {}) as Record<string, unknown>;
+  if (typeof story.title !== "string" || typeof story.body !== "string") return null;
+  const world: World = {
+    date,
+    word,
+    edition: typeof o.edition === "string" && o.edition ? o.edition : "default",
+    voice: typeof o.voice === "string" && o.voice ? o.voice : "yang",
+    story: {
+      title: story.title,
+      body: story.body,
+      ...(typeof story.tip === "string" ? { tip: story.tip } : {}),
+    },
+    createdAt: typeof o.createdAt === "number" ? o.createdAt : Date.now(),
+  };
+  if (typeof o.bonusWord === "string" && /^[A-Za-z]+$/.test(o.bonusWord)) world.bonusWord = o.bonusWord.toUpperCase();
+  if (o.curator && typeof o.curator === "object") {
+    const c = o.curator as Record<string, unknown>;
+    if (typeof c.username === "string" && typeof c.message === "string") {
+      world.curator = { username: c.username, message: c.message };
+    }
+  }
+  return world;
+}
