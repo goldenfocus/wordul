@@ -4,6 +4,7 @@
 //     play it (the cloned voice). Otherwise speak `spokenText` via the browser's
 //     speechSynthesis (covers un-rendered and dynamic {answer} lines).
 import { lineKey } from "/voice-key.js";
+import { splitTemplate } from "/companion.js";
 
 const MUTE_LS = "wordul.muted";
 const manifests = {}; // editionId -> { key: filename }
@@ -67,15 +68,14 @@ export function speakRobotic(word) {
 // the robotic voice. Segments play strictly in order via the audio's `ended` event.
 export async function speakTemplated(editionId, rawLine, ctx = {}) {
   if (!rawLine || isMuted()) return;
-  const token = "{answer}";
-  const idx = rawLine.indexOf(token);
-  if (idx === -1) { // not actually templated — fall back to the normal path
+  if (!rawLine.includes("{answer}")) { // not actually templated — fall back to the normal path
     return speakLine(editionId, rawLine, rawLine);
   }
-  const prefix = rawLine.slice(0, idx).trim();
-  const suffix = rawLine.slice(idx + token.length).trim();
+  const { prefix, suffix } = splitTemplate(rawLine);
   const map = await loadManifest(editionId);
   if (isMuted()) return;
+  // Clear any clip/TTS still playing from a prior reaction so segments don't stack.
+  stopSpeaking();
 
   // Play one cloned-voice segment, resolving when it finishes (clip end, or TTS end,
   // or immediately if empty / on error). Reuses module-level `current` for stop().
