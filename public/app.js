@@ -510,6 +510,19 @@ function showRoom(owner, slug) {
   const inviteLabel = $("#inviteLabel");
   if (inviteLabel) inviteLabel.textContent = hasNativeShare ? "Share" : "Copy link";
   $("#inviteBtn").addEventListener("click", () => shareRoomInvite());
+  const inviteUrlEl = $("#inviteUrl");
+  const inviteRow = $(".invite-share-row");
+  if (inviteUrlEl) inviteUrlEl.value = `${location.origin}/@${game.owner}/${game.slug}`;
+  if (inviteRow) inviteRow.classList.toggle("no-native", !hasNativeShare);
+  const inviteCopy = $("#inviteCopy");
+  if (inviteCopy) inviteCopy.addEventListener("click", async () => {
+    const url = `${location.origin}/@${game.owner}/${game.slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      inviteCopy.textContent = "✓ Copied"; inviteCopy.classList.add("ok");
+      setTimeout(() => { inviteCopy.textContent = "Copy"; inviteCopy.classList.remove("ok"); }, 1600);
+    } catch { prompt("Copy this link:", url); }
+  });
   $("#startBtn").addEventListener("click", () => send({ type: "start" }));
   $("#rematchBtn").addEventListener("click", () => {
     game.hasShownEndStats = false;
@@ -2457,6 +2470,19 @@ function openStats(opts = {}) {
   }
 
   $("#modalShare").onclick = () => shareResult();
+
+  const urlEl = $("#shareUrl");
+  const copyBtn = $("#shareCopy");
+  const row = $(".share-row");
+  if (urlEl) urlEl.value = game.shareImage?.url ?? location.href;
+  if (row) row.classList.toggle("no-native", typeof navigator.share !== "function");
+  if (copyBtn) copyBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(game.shareImage?.url ?? location.href);
+      copyBtn.textContent = "✓ Copied"; copyBtn.classList.add("ok");
+      setTimeout(() => { copyBtn.textContent = "Copy"; copyBtn.classList.remove("ok"); }, 1600);
+    } catch { prompt("Copy this link:", game.shareImage?.url ?? location.href); }
+  };
 
   modal.addEventListener("click", onModalClick);
 }

@@ -127,10 +127,14 @@
         <span id="modeChip" class="mode-chip" hidden></span>
         <button id="renameBtn" class="icon-btn rename-btn" type="button" title="Rename room" aria-label="Rename room">✎</button>
         <a id="roomOwner" class="room-owner link" href="#">@owner</a>
-        <button id="inviteBtn" class="btn small ghost invite-btn">
-          <span id="inviteLabel">Copy link</span>
-          <span class="invite-icon" aria-hidden="true">↗</span>
-        </button>
+        <div class="share-row invite-share-row">
+          <input class="share-url" id="inviteUrl" readonly />
+          <button class="share-copy" id="inviteCopy" type="button">Copy</button>
+          <button id="inviteBtn" class="share-native invite-btn" type="button">
+            <span id="inviteLabel">Share</span>
+            <span class="invite-icon" aria-hidden="true">↗</span>
+          </button>
+        </div>
         <span id="copyOk" class="copy-ok" hidden>Copied!</span>
       </div>
       <div id="lobbyControls" class="lobby-controls" hidden>
@@ -230,7 +234,11 @@
     <div class="modal-actions">
       <button id="modalPlayAgain" class="btn primary block" hidden>PLAY AGAIN! ⟳</button>
       <div class="modal-divider"></div>
-      <button id="modalShare" class="btn ghost block">SHARE ↗</button>
+      <div class="share-row">
+        <input class="share-url" id="shareUrl" readonly />
+        <button class="share-copy" id="shareCopy" type="button">Copy</button>
+        <button class="share-native" id="modalShare" type="button">Share</button>
+      </div>
     </div>
   </div>
 </div>

@@ -1934,3 +1934,20 @@ body.playing .room-tabs { display: none; }
   font-size: .72rem; padding: 2px 8px; border-radius: 999px;
   background: var(--border, #2a2a2e); color: var(--muted, #8a8a8f);
 }
+
+.share-row { display: flex; gap: 8px; align-items: stretch; margin-top: 14px; }
+.invite-share-row { margin-top: 0; }
+.share-url {
+  flex: 1; min-width: 0; padding: 0 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg-card, #17171a);
+  color: var(--fg); font: 600 14px system-ui; overflow: hidden; text-overflow: ellipsis;
+}
+.share-copy, .share-native {
+  padding: 10px 16px; border-radius: 8px; border: 0; cursor: pointer;
+  font: 700 14px system-ui; color: #fff; white-space: nowrap;
+}
+.share-copy { background: var(--accent, #9d8bff); }
+.share-copy.ok { background: var(--green, #9d8bff); }
+.share-native { background: #f0c14b; color: #1a1410; }
+.share-row.no-native .share-native { display: none; }
+.challenge-record { margin-top: 10px; text-align: center; font: 600 15px system-ui; color: var(--muted, #8a8a8f); }
