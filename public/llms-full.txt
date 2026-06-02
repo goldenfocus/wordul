@@ -1,6 +1,6 @@
 # Wordul — full reference
 
-> Race your friends on the same Wordle. No password — pick a username, get a public profile, create a room, share the link, and keep score across games.
+> Race your friends on the same word. No password — pick a username, get a public profile, create a room, share the link, and keep score across games. (To play Wordul is to *wordul*; the people doing it are *wordulers*.)
 
 Wordul is a real-time multiplayer word game. Players guess the same hidden word at the same time; the first to solve it wins the round. It is designed for casual play with friends and family — no accounts, no passwords.
 

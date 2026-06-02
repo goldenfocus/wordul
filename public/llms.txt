@@ -1,6 +1,6 @@
 # Wordul
 
-> Race your friends on the same Wordle. No password — pick a username, get a public profile, create a room, share the link, and keep score across games.
+> Race your friends on the same word. No password — pick a username, get a public profile, create a room, share the link, and keep score across games. (To play Wordul is to *wordul*; the people doing it are *wordulers*.)
 
 ## How it works
 - Pick a username. You're recognized anywhere just by typing it again — no password, no signup.

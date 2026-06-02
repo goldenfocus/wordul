@@ -533,7 +533,7 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 .tile.gray { background: var(--gray); border-color: var(--gray); color: white; }
 
 /* Reveal: tile starts in "filled" look (no color yet), flips edge-on, and we swap
-   to the colored class at the 50% mark — this is what gives Wordle its signature
+   to the colored class at the 50% mark — this is what gives the board its signature
    "the answer is REVEALED through the flip" feel. The stagger is set via JS by
    writing --reveal-delay on each tile. */
 .tile.reveal {

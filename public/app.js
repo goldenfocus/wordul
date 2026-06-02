@@ -642,7 +642,7 @@ async function shareRoomInvite() {
     try {
       await navigator.share({
         title: `Wordul — ${game.name || game.slug}`,
-        text: `Race me on Wordle in ${game.owner}'s room!`,
+        text: `Race me on Wordul in ${game.owner}'s room!`,
         url: inviteUrl,
       });
       return;
@@ -1928,7 +1928,7 @@ const SOLO_LOSE_JOKES = [
   "Your dictionary called. It wants a refund.",
   "Even the alphabet feels bad for you right now.",
   "There are no losers here. Just you, specifically.",
-  "Wordle: 1. You: 0. The scoreboard speaks.",
+  "Wordul: 1. You: 0. The scoreboard speaks.",
   "Take comfort — somewhere, an etymologist is also crying.",
   "Your guesses formed a strong, structured wall of wrongness.",
   "An L isn't great. But it IS one of the letters.",
@@ -1949,7 +1949,7 @@ const RACE_LOSE_JOKES = [
   "{who} found it first. You found out about it.",
   "Imagine losing to {who}. Couldn't be me. (Wait — it was you.)",
   "{who} touched grass. The grass spelled the answer.",
-  "{who} is now in your contacts as \"better at Wordle\".",
+  "{who} is now in your contacts as \"better at worduling\".",
 ];
 
 // C4: self-inflicted ends get their own roast. Tapping 💀 to give up…

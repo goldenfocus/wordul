@@ -37,7 +37,7 @@ function sanitizeEdition(raw: string): string {
 }
 
 function guessesFor(length: number): number {
-  // length+1 preserves the Wordle 5/6 feel for short words (4→5, 5→6, 6→7, 7→8),
+  // length+1 preserves the classic 5/6 feel for short words (4→5, 5→6, 6→7, 7→8),
   // then plateaus at 8. Longer words convey more info per guess, so we don't
   // actually need 13 rows for a 12-letter board — it just looks intimidating.
   return Math.min(length + 1, 8);

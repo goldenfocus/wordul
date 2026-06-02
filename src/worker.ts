@@ -116,7 +116,7 @@ async function injectMeta(
   roomMatch: RegExpMatchArray | null,
 ): Promise<Response> {
   let title = "Wordul";
-  let description = "Race your friends on the same Wordle.";
+  let description = "Race your friends on the same word — come wordul with us.";
 
   if (roomMatch) {
     const [, owner, slug] = roomMatch;
