@@ -8,6 +8,7 @@ export { Room, User, Challenge };
 
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;
+const CHALLENGE_RE = /^\/c\/([0-9A-Za-z]{5})$/;
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -110,11 +111,12 @@ export default {
       );
     }
 
-    // Profile + room pages: serve SPA shell with per-route meta injected.
+    // Profile + room + challenge pages: serve SPA shell with per-route meta injected.
     const profileMatch = url.pathname.match(PROFILE_RE);
     const roomMatch = url.pathname.match(ROOM_RE);
-    if (profileMatch || roomMatch) {
-      return injectMeta(env, url, profileMatch, roomMatch);
+    const challengeMatch = url.pathname.match(CHALLENGE_RE);
+    if (profileMatch || roomMatch || challengeMatch) {
+      return injectMeta(env, url, profileMatch, roomMatch, challengeMatch);
     }
 
     // Everything else: static asset (SPA fallback handled by wrangler).
@@ -146,11 +148,30 @@ async function injectMeta(
   url: URL,
   profileMatch: RegExpMatchArray | null,
   roomMatch: RegExpMatchArray | null,
+  challengeMatch: RegExpMatchArray | null = null,
 ): Promise<Response> {
   let title = "Wordul";
   let description = "Race your friends on the same word — come wordul with us.";
 
-  if (roomMatch) {
+  if (challengeMatch) {
+    const [, id] = challengeMatch;
+    // Best-effort OG meta for a shared challenge link — a DO hiccup degrades to default.
+    try {
+      const res = await env.CHALLENGE.get(env.CHALLENGE.idFromName(id)).fetch("https://do/meta");
+      if (res.ok) {
+        const m = (await res.json()) as { owner?: string; ownerScore?: string };
+        const owner = m.owner ?? "someone";
+        title = `Beat @${owner}'s Wordul challenge`;
+        description = `@${owner} scored ${m.ownerScore ?? "?"} on this word. Same word, your turn — beat the score.`;
+      } else {
+        title = "A Wordul challenge";
+        description = "Same word, your turn — beat the score.";
+      }
+    } catch {
+      title = "A Wordul challenge";
+      description = "Same word, your turn — beat the score.";
+    }
+  } else if (roomMatch) {
     const [, owner, slug] = roomMatch;
     title = `${slug.replace(/-/g, " ")} — a Wordul room by ${owner}`;
     description = `Join ${owner}'s Wordul room and race on the same word.`;
