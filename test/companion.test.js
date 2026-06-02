@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
 import {
   scoreWin, scoreGreens, scoreMistake, shouldSpeak, resolveTier, splitTemplate,
 } from "/companion.js";
+import { companionReact } from "/edition.js";
 
 const cfg = {
   voiceBudget: { routine: 0.33 },
@@ -87,5 +89,28 @@ describe("splitTemplate", () => {
   });
   it("handles a trailing token (empty suffix)", () => {
     expect(splitTemplate("It was {answer}")).toEqual({ prefix: "It was", suffix: "" });
+  });
+});
+
+describe("companionReact (tiered selection over Yang's banks)", () => {
+  it("picks the genius tier for a 2-guess win", () => {
+    const r = companionReact("win", { guessesUsed: 2 });
+    expect(r.tier).toBe("genius");
+    expect(r.text.length).toBeGreaterThan(0);
+    expect(r.speak).toBe(true);
+  });
+  it("scales greens to the real count (no more hardcoded 'two')", () => {
+    const r = companionReact("greens", { count: 4 });
+    expect(r.tier).toBe("4");
+    expect(r.text).toContain("FOUR");
+  });
+  it("always speaks a sloppy mistake but gates normal misses", () => {
+    expect(companionReact("wrong", { reusedDeadLetter: true }).speak).toBe(true);
+    expect(companionReact("wrong", { reusedDeadLetter: false, rng: () => 1 }).speak).toBe(false);
+  });
+  it("substitutes {answer} in the flat loss bank", () => {
+    const r = companionReact("loss", { answer: "CRANE" });
+    expect(r.tier).toBeNull();
+    expect(r.text).toContain("CRANE");
   });
 });

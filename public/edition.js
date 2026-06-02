@@ -1,5 +1,6 @@
 // Wordul edition runtime: apply theme packs, picker, shared wallet, companion.
 import { EDITIONS, getEdition } from "/editions/index.js";
+import { resolveTier, shouldSpeak } from "/companion.js";
 
 const LS = { edition: "wordul.edition", gold: "wordul.gold", muted: "wordul.muted" };
 const DEFAULT_GOLD = 0; // you start broke and earn your way up
@@ -55,16 +56,24 @@ export const VOICE_EDITION = "yang";
 
 export function companionReact(event, ctx = {}) {
   const ed = getEdition(VOICE_EDITION);
-  const bank = ed.companion?.lines?.[event] ?? [];
-  if (bank.length === 0) return { text: "", raw: "", speak: false };
-  const i = (reactCounters[event] = (reactCounters[event] ?? -1) + 1) % bank.length;
+  const react = ed.companion?.react;
+  const banks = ed.companion?.lines?.[event];
+  if (!banks) return { text: "", raw: "", tier: null, speak: false };
+
+  // Flat bank → use the array; nested bank → resolve the tier and read its array.
+  const tier = Array.isArray(banks) ? null : resolveTier(event, ctx, react);
+  const bank = Array.isArray(banks) ? banks : (banks[tier] ?? []);
+  if (bank.length === 0) return { text: "", raw: "", tier, speak: false };
+
+  // Round-robin within the chosen tier so the same line never repeats back-to-back.
+  const counterKey = tier ? `${event}:${tier}` : event;
+  const i = (reactCounters[counterKey] = (reactCounters[counterKey] ?? -1) + 1) % bank.length;
   const raw = bank[i];
-  let text = raw;
-  if (ctx.answer) text = text.replace("{answer}", ctx.answer);
-  // Safety net: never show or speak a naked token if no answer was supplied.
-  text = text.replace("{answer}", "that one");
+
+  let text = raw.replace("{answer}", ctx.answer ?? "that one");
   const muted = localStorage.getItem(LS.muted) === "1";
-  return { text, raw, speak: !!ed.sound?.voice?.on && !muted };
+  const voiceOn = !!ed.sound?.voice?.on && !muted;
+  return { text, raw, tier, speak: voiceOn && shouldSpeak(event, tier, react, ctx.rng) };
 }
 
 const VAR_MAP = {
