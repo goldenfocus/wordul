@@ -10,11 +10,11 @@ import { createHacklog } from "/hacklog.js";
 import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, surfaceGiveUp, checkBankruptcy } from "/powerups.js";
 import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, detectLayout } from "/keyboard.js";
 import { getSettings, saveSettings, applySettings, openSettings, openHub } from "/settings.js";
+import { buildShareCardModel, renderShareCard } from "/share-card.js";
 import { MODES, isAvailableMode } from "/modes.js";
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
 import { pickInspire } from "/inspire.js";
-import { buildShareCardModel, renderShareCard } from "/share-card.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
 
@@ -2536,13 +2536,21 @@ async function prepareShareCard() {
     ? `${location.origin}/c/${challengeId}`
     : `${location.origin}/@${game.owner}/${game.slug}`;
 
+  // The card draws ONLY the color grid (no letters, no answer) — the model is the
+  // no-spoiler guarantee, unit-tested in test/share-card.test.js.
   const model = buildShareCardModel({
     username: getUsername(), guesses: me.guesses || [], won, score,
     challengeUrl: cardUrl.replace(/^https?:\/\//, ""),
   });
   const canvas = renderShareCard(model, snap.wordLength ?? 5);
-  const text = won ? `Solved Wordul in ${score} — beat me?` : `Wordul got me. Your turn?`;
+  const text = won
+    ? `Solved Wordul in ${score} — beat me?`
+    : `Wordul got me. Your turn?`;
+  // Sync essentials available immediately; the File arrives a tick later.
   game.shareImage = { file: null, url: cardUrl, text, canvas };
+  // The share row may have rendered before the mint resolved — backfill its URL field.
+  const urlEl = $("#shareUrl");
+  if (urlEl) urlEl.value = cardUrl;
   canvas.toBlob((blob) => {
     if (blob && game.shareImage && game.shareImage.canvas === canvas) {
       game.shareImage.file = new File([blob], "wordul.png", { type: "image/png" });
@@ -2602,6 +2610,7 @@ function downloadCanvas(canvas, name) {
   a.click();
   a.remove();
 }
+
 
 // --- top-level UI wiring ---
 document.addEventListener("DOMContentLoaded", () => {
