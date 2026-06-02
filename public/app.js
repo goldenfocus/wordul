@@ -545,20 +545,9 @@ function showRoom(owner, slug) {
   const hasNativeShare = typeof navigator.share === "function";
   const inviteLabel = $("#inviteLabel");
   if (inviteLabel) inviteLabel.textContent = hasNativeShare ? "Share" : "Copy link";
+  // One Share control: shareRoomInvite copies the link AND opens the native share sheet.
+  // The old raw-URL field + separate Copy button were clutter — removed.
   $("#inviteBtn").addEventListener("click", () => shareRoomInvite());
-  const inviteUrlEl = $("#inviteUrl");
-  const inviteRow = $(".invite-share-row");
-  if (inviteUrlEl) inviteUrlEl.value = `${location.origin}/@${game.owner}/${game.slug}`;
-  if (inviteRow) inviteRow.classList.toggle("no-native", !hasNativeShare);
-  const inviteCopy = $("#inviteCopy");
-  if (inviteCopy) inviteCopy.addEventListener("click", async () => {
-    const url = `${location.origin}/@${game.owner}/${game.slug}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      inviteCopy.textContent = "✓ Copied"; inviteCopy.classList.add("ok");
-      setTimeout(() => { inviteCopy.textContent = "Copy"; inviteCopy.classList.remove("ok"); }, 1600);
-    } catch { prompt("Copy this link:", url); }
-  });
   $("#startBtn").addEventListener("click", () => send({ type: "start" }));
   $("#rematchBtn").addEventListener("click", () => {
     game.hasShownEndStats = false;
