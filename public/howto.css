@@ -56,6 +56,11 @@ body.howto { overflow-y: auto; height: auto; }
   cursor: pointer; user-select: none;
 }
 
+/* Inline tile-state swatches, matching the live board (Hot = the precious). */
+.sw { display:inline-block; width:0.85em; height:0.85em; border-radius:3px; vertical-align:-1px; margin-right:0.15em; }
+.sw-hot { background:linear-gradient(135deg,#ffe7a3,#e9b23d 55%,#a87a1f); box-shadow:0 0 6px rgba(233,178,61,.5),0 0 5px rgba(47,209,122,.35); }
+.sw-warm { background:rgba(216,201,122,.12); border:1px solid #d8c97a; box-shadow:0 0 5px rgba(207,214,227,.5); }
+
 /* Gold earn/lose cards. */
 .howto-cards { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; }
 @media (max-width: 520px) { .howto-cards { grid-template-columns: 1fr; } }
