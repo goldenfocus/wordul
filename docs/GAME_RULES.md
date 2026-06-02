@@ -15,10 +15,11 @@ Last reconciled: 2026-06-01.
 
 - Guess the hidden word. You have **6 tries**.
 - Word length is **variable — 4 to 12 letters** (set per room).
-- After each guess, every tile is colored:
-  - 🟩 **Green** — right letter, right spot.
-  - 🟨 **Yellow** — right letter, wrong spot.
-  - ⬛ **Gray** — that letter isn't in the word (*or* there are no more of it — duplicates count exactly).
+- After each guess, every tile lights up (default "Obsidian" look — names are state-based, not color-based, so they survive any theme):
+  - **Hot** — right letter, right spot. Turns **gold** (a keeper — and it's how you bank gold).
+  - **Warm** — right letter, wrong spot.
+  - **Cold** — that letter isn't in the word (*or* there are no more of it — duplicates count exactly).
+  - *(Internally the states are still `green|yellow|gray` in `color.ts`; only the player-facing names + the default palette changed.)*
 - A guess must be a real word in the dictionary, or it bounces back — **a bounce costs you no guess.**
 
 ## 2. It's a race

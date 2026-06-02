@@ -1025,6 +1025,34 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 /* Dead (absent) letters fade back so the live board pops. Colored keys stay vivid. */
 .key.gray { background: var(--gray); color: white; opacity: 0.45; }
 
+/* ── Default edition — "Obsidian": Hot · Warm · Cold ──────────────────────────
+   The board's identity, decoupled from Wordle's green/yellow/gray. Hot (exact) is
+   the precious gold jewel; Warm (right letter, wrong spot) is a champagne outline;
+   Cold (absent) recedes into the obsidian. Scoped to the default edition so every
+   other edition keeps its own palette + treatment. The internal Color stays
+   green|yellow|gray (color.ts); only the LOOK and the player-facing names change. */
+/* NOTE: glow is a static box-shadow, NOT an animation — the board's flip-on-reveal
+   uses `animation` on .tile.reveal, and a more-specific animation here would clobber
+   it (correct tiles would stop flipping). */
+html[data-edition="default"] .tile.green,
+html[data-edition="default"] .key.green {
+  background: linear-gradient(160deg, #f3d384, #bf9436 65%, #9c7726);
+  border: none; color: #1c1503;
+  box-shadow: 0 0 0 1px rgba(243,211,132,.4), 0 6px 30px rgba(191,148,54,.5);
+}
+html[data-edition="default"] .tile.yellow {
+  background: rgba(185,162,107,.10); border-color: #b9a26b; color: #e9dcb8;
+}
+html[data-edition="default"] .key.yellow {
+  background: rgba(185,162,107,.16); color: #efe4c4;
+}
+html[data-edition="default"] .tile.gray {
+  background: #0d0d0f; border-color: #1f1f23; color: #6f6e74;
+}
+html[data-edition="default"] .key.gray {
+  background: #121214; color: #5a5a60; opacity: 1;
+}
+
 /* ✨ Power-ups: one subtle magic icon, hidden until you can afford the cheapest
    power-up. Tapping opens a popover of currently-affordable power-ups — icons only,
    no price (you learn the cost by watching the balance dip). */
