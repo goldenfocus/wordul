@@ -2,7 +2,7 @@
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
-import { applyEdition, getActiveEditionId, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
+import { applyEdition, getActiveEditionId, resolveEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
 import { pickGuessEvent } from "/roomConfig.js";
 import { speakLine, speakTemplated } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
@@ -1355,9 +1355,8 @@ function render() {
   if (snap.phase === "lobby") {
     lobby.hidden = false;
     endControls.hidden = true;
-    syncLengthSelect(snap);
     syncModePicker(snap);
-    syncLobbyEdition();
+    syncLobbySetup(snap);
     startBtn.hidden = false;
     $("#lobbyHint").textContent = snap.players.length < 2
       ? `Waiting for friends · start solo anytime`
@@ -1573,12 +1572,12 @@ function syncModeChip(snap) {
   chip.hidden = snap.phase === "lobby";
 }
 
+// Word-length picker — now mounted in the Settings "Room" section (out of the lobby).
+// Called when the gear opens in a room. Builds options once, reflects the room's current
+// length (server is source of truth), and disables once the game starts (length is locked).
 function syncLengthSelect(snap) {
-  const wrap = $("#lengthControl");
   const sel = $("#lengthSelect");
-  if (!wrap || !sel) return;
-  wrap.hidden = false;
-  // Build options once.
+  if (!sel || !snap) return;
   if (sel.options.length === 0) {
     for (const n of SUPPORTED_LENGTHS) {
       const opt = document.createElement("option");
@@ -1594,22 +1593,22 @@ function syncLengthSelect(snap) {
       }
     });
   }
+  sel.disabled = snap.phase !== "lobby"; // can't resize the words under a live/finished board
   if (parseInt(sel.value, 10) !== snap.wordLength) sel.value = String(snap.wordLength);
 }
 
-// Theme picker in the lobby — set the room's vibe before you start or invite. Picking
-// sends set_edition so it themes everyone (same path as the Settings picker). The active
-// chip tracks the room's edition because the snapshot handler applies it before we render.
-function syncLobbyEdition() {
-  const wrap = $("#editionControl");
-  const mount = $("#lobbyEditionPicker");
-  if (!wrap || !mount) return;
-  wrap.hidden = false;
-  renderEditionPicker(mount, (id) => {
-    applySettings(getSettings()); // re-layer colorblind/contrast on the new palette
-    send({ type: "set_edition", edition: id });
-    if (game.snapshot) render();
-  });
+// Lobby setup line — a compact "⚙ 5 letters · Theme" button that opens the gear, where
+// length + theme now live. Keeps the lobby minimal while staying discoverable.
+function syncLobbySetup(snap) {
+  const btn = $("#lobbySetup");
+  if (!btn) return;
+  btn.hidden = false;
+  const themeName = resolveEdition(getActiveEditionId())?.name ?? "Theme";
+  $("#lobbySetupText").textContent = `${snap.wordLength} letters · ${themeName}`;
+  if (!btn.dataset.wired) {
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", () => showSettings());
+  }
 }
 
 // Per-room cumulative scoreboard (wins/played across rounds), sorted by wins desc.
@@ -2685,7 +2684,11 @@ function syncAvatar() {
 // settings.js owns the modal chrome (chevron sections, toggle persistence, close);
 // app.js only supplies callbacks for state it owns (game.snapshot, render, stats).
 function showSettings() {
+  const snap = game.snapshot;
   openSettings({
+    inRoom: !!snap,
+    // Mount the room's word-length picker into the gear's "Room" section (in a room only).
+    mountRoomLength: snap ? () => syncLengthSelect(snap) : null,
     onChange: () => { if (game.snapshot) render(); },
     renderEditionPicker,
     // Theme is bound to the room: picking sends set_edition so the server rethemes

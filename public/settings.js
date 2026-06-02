@@ -69,10 +69,18 @@ function wireSectionToggles(modal) {
 //                         picker into the Advanced section — avoids a settings↔keyboard cycle.
 //  - renderEditionPicker(el, onPick) the edition.js theme picker (re-imported by the caller).
 //  - toast(text, opts)    optional feedback channel (app.js owns the toast UI).
-export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker, onEditionPick, editionLocked, toast } = {}) {
+export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker, onEditionPick, editionLocked, toast, inRoom, mountRoomLength } = {}) {
   const modal = document.getElementById("settingsModal");
   if (!modal) return;
   const s = getSettings();
+
+  // Room section (word length) only exists inside a room — the orchestrator owns the
+  // select's options/sync/set_length via mountRoomLength; we just gate its visibility.
+  const roomSection = document.getElementById("roomSettingsSection");
+  if (roomSection) {
+    roomSection.hidden = !inRoom;
+    if (inRoom) mountRoomLength?.();
+  }
   const hm = document.getElementById("setHardMode");
   const cb = document.getElementById("setColorBlind");
   const rm = document.getElementById("setReducedMotion");

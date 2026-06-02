@@ -621,18 +621,7 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 }
 .length-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
 
-/* In-lobby length select (host-only). */
-.length-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.length-control .label {
-  font-size: 11px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
+/* Word-length select — now lives in the Settings "Room" section, not the lobby. */
 .length-select {
   background: var(--bg);
   color: var(--fg);
@@ -681,6 +670,16 @@ body.reduced-motion .tile.cursor::after { animation: none; opacity: 1; }
 .invite-icon { font-size: 14px; line-height: 1; }
 .copy-ok { color: var(--green); font-size: 12px; font-weight: 600; }
 .lobby-controls { display: flex; align-items: center; gap: 10px; }
+/* Compact lobby setup line — opens the gear (where length + theme now live). */
+.lobby-setup {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 5px 12px; cursor: pointer;
+  font-size: 12px; font-weight: 600;
+}
+.lobby-setup:hover { border-color: var(--accent); }
+.lobby-setup-icon { font-size: 13px; line-height: 1; opacity: 0.8; }
 
 /* Boards */
 .boards {
@@ -1536,12 +1535,6 @@ html[data-edition="default"] .key.pressed {
 
 /* Lobby theme control — sits in the lobby bar next to word length. Compact chips so
    the row stays tidy; wraps under the bar on narrow screens. */
-.edition-control { display: inline-flex; align-items: center; gap: 8px; }
-.edition-control .label {
-  font-size: 11px; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.08em;
-}
-.edition-control .edition-chip { padding: 5px 11px; font-size: 12px; }
 
 /* Settings chevron sections (C6) — collapsed/"calm" on open; expand on tap. */
 .settings-section { border-bottom: 1px solid var(--border); }
