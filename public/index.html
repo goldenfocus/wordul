@@ -119,11 +119,17 @@
 
     <!-- Hub shell — shown once the user has a profile; replaces the intro flow. -->
     <div id="hub" class="hub" hidden>
+      <!-- Drifting aurora light orbs — pure decoration, reduced-motion safe. -->
+      <div class="hub-aurora" aria-hidden="true">
+        <span class="hub-orb hub-orb-uv"></span>
+        <span class="hub-orb hub-orb-gold"></span>
+        <span class="hub-orb hub-orb-teal"></span>
+      </div>
       <header class="hub-bar">
         <button id="hubAvatarBtn" class="avatar-btn" type="button" aria-label="Menu" aria-haspopup="true">◆</button>
         <div class="hub-bar-stats">
-          <span class="stat-chip" id="hubGold" title="Gold">◆ <span id="hubGoldVal">0</span></span>
-          <span class="stat-chip" id="hubStreak" title="Streak">🔥 <span id="hubStreakVal">0</span></span>
+          <span class="hub-stat-glyph" id="hubGold" title="Gold">◆ <span id="hubGoldVal">0</span></span>
+          <span class="hub-stat-glyph" id="hubStreak" title="Streak">🔥 <span id="hubStreakVal">0</span></span>
         </div>
       </header>
       <main id="hubContent" class="hub-content"></main>
