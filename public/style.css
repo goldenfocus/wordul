@@ -1155,12 +1155,24 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
 /* Keyboard */
 .keyboard {
   width: 100%;
-  max-width: 520px;
+  max-width: 540px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;        /* letters column + right action rail */
+  align-items: stretch;       /* rail matches the full letter-grid height */
   gap: 6px;
   padding: 8px;
   user-select: none;
+  /* No long-press copy/callout on iOS — the bare user-select above isn't enough;
+     Safari needs the -webkit pair or holding ⌫ pops the text-selection bubbles. */
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.kb-letters {
+  flex: 1 1 auto;
+  min-width: 0;               /* let the rows shrink instead of overflowing the rail */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 /* Equal-fraction grid: every column in a row is an identical 1fr track, so the
    keys within a row are pixel-identical — I and O measure the same (no flexbox
@@ -1178,13 +1190,13 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
 .key {
   flex: 1 1 0;
   min-width: 0;
-  max-width: 46px;
-  min-height: 58px;
+  max-width: 56px;            /* bigger now that actions left the grid */
+  min-height: 62px;
   background: var(--key-bg);
   color: var(--fg);
   border: 0;
   border-radius: 4px;
-  font-size: 19px;
+  font-size: 22px;
   font-weight: 700;
   text-transform: uppercase;
   cursor: pointer;
@@ -1192,14 +1204,29 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
 }
 .key:active,
 .key.pressed { transform: scale(0.95); filter: brightness(1.18); }
-.key.wide {
-  flex: 1.6 1 0;
-  max-width: 70px;
-  font-size: 12px;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  padding: 0 2px;
+/* Right action rail: a tall thumb zone — ⌫ on top, the big Return below it. */
+.kb-rail {
+  flex: 0 0 auto;
+  width: 62px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rail-key {
+  flex: 1 1 0;               /* split the rail's full height between ⌫ and ↵ */
+  max-width: none;
+  width: 100%;
+  font-size: 24px;
+  text-transform: none;
+}
+/* Return is the most-tapped key — the bigger half of the rail, filled with the brand
+   accent so it reads as the primary action. Selector outranks every per-edition
+   `html[data-edition] .key` background rule while keeping that edition's key shape. */
+.rail-key.enter { flex: 1.25 1 0; }
+.keyboard .rail-key.enter {
+  background: var(--accent);
+  color: #15121f;          /* dark ink on the light-purple accent — the app's accent-fill convention */
+  font-size: 30px;
 }
 .key.green { background: var(--green); color: white; }
 .key.yellow { background: var(--yellow); color: white; }

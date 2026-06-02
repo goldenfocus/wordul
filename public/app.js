@@ -1481,12 +1481,17 @@ function syncModePicker(snap) {
   const list = $("#modeList");
   const control = $("#modeControl");
   if (!list || !control) return;
-  control.hidden = false;
   $("#modeHeading").textContent = t("mode.heading");
+
+  // Only show modes that are actually online — no locked "coming soon" teasers cluttering
+  // the lobby. With a single playable mode there's nothing to pick, so hide the whole
+  // control; the picker only earns its space once a second mode ships.
+  const availableIds = Object.keys(MODES).filter(isAvailableMode);
+  control.hidden = availableIds.length <= 1;
 
   // Build rows once.
   if (list.children.length === 0) {
-    for (const id of Object.keys(MODES)) {
+    for (const id of availableIds) {
       const li = document.createElement("li");
       li.className = "mode-row";
       li.dataset.mode = id;
@@ -1506,18 +1511,12 @@ function syncModePicker(snap) {
       tag.className = "mode-row-tag";
       li.append(main, tag);
 
-      if (isAvailableMode(id)) {
-        li.tabIndex = 0;
-        const choose = () => send({ type: "set_mode", mode: id });
-        li.addEventListener("click", choose);
-        li.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(); }
-        });
-      } else {
-        li.classList.add("locked");
-        li.setAttribute("aria-disabled", "true");
-        tag.textContent = `${t("mode.comingSoon")} 🔒`;
-      }
+      li.tabIndex = 0;
+      const choose = () => send({ type: "set_mode", mode: id });
+      li.addEventListener("click", choose);
+      li.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(); }
+      });
       list.appendChild(li);
     }
   }

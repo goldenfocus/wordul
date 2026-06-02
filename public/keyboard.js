@@ -31,52 +31,51 @@ export function buildKeyboard(root, layoutId, handlers) {
   if (!root) return;
   const rows = KEYBOARD_LAYOUTS[activeLayoutId(layoutId)];
   root.innerHTML = "";
-  // Make every LETTER key the same width across ALL rows (not just within a row): give
-  // each row the same total flex "units" by padding the shorter rows with end spacers.
-  // units = letters (1 each) + a wide key (1.5) on the rows that carry an action key.
-  // Deficit vs the widest row is split as a spacer on each end → all letters render at
-  // rowWidth / maxUnits.
-  const WIDE = 1.5;
-  const lastRow = rows.length - 1;
-  const hasWide = (idx) => idx === 0 || idx === lastRow; // ⌫ top row, Enter bottom row
-  const units = rows.map((letters, idx) => letters.length + (hasWide(idx) ? WIDE : 0));
-  const maxUnits = Math.max(...units);
+  // Letters fill a column on the left; the two actions live in a tall right rail. With
+  // ⌫/Return out of the grid, every LETTER key is full-size and identical across rows —
+  // each row is padded to the widest row's unit count with end spacers (deficit split
+  // both ends) so letters render at lettersWidth / maxUnits regardless of row length.
+  const maxUnits = Math.max(...rows.map((r) => r.length));
   const spacer = (flex) => {
     const s = document.createElement("div");
     s.className = "kb-spacer";
     s.style.flex = `${flex} 1 0`;
     return s;
   };
-  rows.forEach((letters, idx) => {
+  const letters = document.createElement("div");
+  letters.className = "kb-letters";
+  rows.forEach((rowLetters) => {
     const row = document.createElement("div");
     row.className = "kb-row";
-    const pad = (maxUnits - units[idx]) / 2; // split the deficit across both ends
+    const pad = (maxUnits - rowLetters.length) / 2; // split the deficit across both ends
     if (pad > 0) row.appendChild(spacer(pad));
-    for (const l of letters) {
+    for (const l of rowLetters) {
       const k = document.createElement("button");
       k.className = "key";
       k.textContent = l;
       k.dataset.key = l;
       row.appendChild(k);
     }
-    // Actions stack on the right edge, thumb-reachable: ⌫ at the end of the TOP row,
-    // Return at the end of the BOTTOM row. The middle row is letters only.
-    if (idx === 0) {
-      const back = document.createElement("button");
-      back.className = "key wide";
-      back.textContent = "⌫";
-      back.dataset.action = "back";
-      row.appendChild(back);
-    } else if (idx === lastRow) {
-      const enter = document.createElement("button");
-      enter.className = "key wide";
-      enter.textContent = "Return";
-      enter.dataset.action = "enter";
-      row.appendChild(enter);
-    }
     if (pad > 0) row.appendChild(spacer(pad));
-    root.appendChild(row);
+    letters.appendChild(row);
   });
+  root.appendChild(letters);
+
+  // Right rail: ⌫ stacked on top, the big Return below — both fall under the right thumb.
+  const rail = document.createElement("div");
+  rail.className = "kb-rail";
+  const back = document.createElement("button");
+  back.className = "key rail-key";
+  back.textContent = "⌫";
+  back.dataset.action = "back";
+  back.setAttribute("aria-label", "Backspace");
+  const enter = document.createElement("button");
+  enter.className = "key rail-key enter";
+  enter.textContent = "↵";
+  enter.dataset.action = "enter";
+  enter.setAttribute("aria-label", "Enter");
+  rail.append(back, enter);
+  root.appendChild(rail);
   if (root.dataset.kbWired !== "1") {
     root.dataset.kbWired = "1";
 

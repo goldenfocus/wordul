@@ -48,11 +48,17 @@ describe("buildKeyboard", () => {
     const letters = Array.from(letterKeys).map((k) => k.dataset.key).sort().join("");
     expect(letters).toBe("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
     expect(root.querySelector('.key[data-action="back"]').textContent).toBe("⌫");
-    expect(root.querySelector('.key[data-action="enter"]').textContent).toBe("Return");
-    // ⌫ lives on the top row, Return on the bottom row (both right-edge).
-    const kbRows = root.querySelectorAll(".kb-row");
-    expect(kbRows[0].querySelector('.key[data-action="back"]')).not.toBeNull();
-    expect(kbRows[kbRows.length - 1].querySelector('.key[data-action="enter"]')).not.toBeNull();
+    expect(root.querySelector('.key[data-action="enter"]').textContent).toBe("↵");
+    // Actions live in the right rail (out of the letter grid), ⌫ stacked above Return.
+    const rail = root.querySelector(".kb-rail");
+    expect(rail).not.toBeNull();
+    const railKeys = rail.querySelectorAll(".key[data-action]");
+    expect(railKeys[0].dataset.action).toBe("back");
+    expect(railKeys[1].dataset.action).toBe("enter");
+    // Letter rows are pure letters now — no action keys mixed in, so every letter is full-size.
+    for (const row of root.querySelectorAll(".kb-row")) {
+      expect(row.querySelector(".key[data-action]")).toBeNull();
+    }
   });
 
   it("reorders keys for azerty (top row starts AZERTY)", () => {
