@@ -13,14 +13,17 @@ let current = null;   // { audio } currently playing
 function isMuted() { return localStorage.getItem(MUTE_LS) === "1"; }
 
 async function loadManifest(editionId) {
-  if (editionId in manifests) return manifests[editionId];
+  // Only ever cache a SUCCESSFUL fetch. A transient failure (offline blip, or a 404/5xx
+  // during a deploy's propagation window) must NOT be memoized — otherwise one bad fetch
+  // strands the whole page session on the empty map, and the cloned voice silently falls
+  // back to TTS until a full reload (the "voice gone until I hard-refresh" bug). On
+  // failure we return a throwaway {} that the next line retries.
+  if (manifests[editionId]) return manifests[editionId];
   try {
     const res = await fetch(`/voice/${editionId}/manifest.json`);
-    manifests[editionId] = res.ok ? await res.json() : {};
-  } catch {
-    manifests[editionId] = {};
-  }
-  return manifests[editionId];
+    if (res.ok) return (manifests[editionId] = (await res.json()) || {});
+  } catch { /* transient — do not memoize the failure */ }
+  return {};
 }
 
 function playClip(url) {
