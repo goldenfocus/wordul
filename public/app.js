@@ -85,44 +85,19 @@ function mount(tplId) {
 
 // --- screens ---
 
-// Cheeky rotating lines under the Start button — a third nudge type-to-start.
-const START_PHRASES = [
-  "The keyboard is already listening. Just start typing.",
-  "No need to click. Type your first guess and go.",
-  "Psst, your keyboard works right now. Try a word.",
-  "Five letters, six tries, infinite bragging rights.",
-  "Just type. We are listening for that first letter.",
-  "Go on, type a word. The board is ready when you are.",
-  "Your fingers know what to do. Start typing.",
-  "Skip the click. Just spell something and watch it light up.",
-  "A fresh word is waiting. Your move, smarty.",
-  "Green is the goal. Yellow is a flirt. Gray is honest feedback.",
-  "One word a day keeps the boredom away.",
-  "Type now, gloat later.",
-  "Trust your gut, then type the word that proves it.",
-  "Warning, mild brilliance may occur.",
-  "Start typing. The keyboard has been waiting all morning.",
-  "Big brain energy starts with one little word.",
-];
-
 function showHome() {
   history.replaceState(null, "", "/");
   mount("tpl-home");
-  const hint = $("#startHint");
-  if (hint) hint.textContent = START_PHRASES[Math.floor(Math.random() * START_PHRASES.length)];
   // No chat available outside a room.
   const topBtn = $("#chatTopBtn");
   if (topBtn) topBtn.hidden = true;
 
   const input = $("#usernameInput");
   input.value = getUsername();
-  buildHomeLengthPills();
 
-  // Both intents land in the lobby (never auto-start) so you can set your theme +
-  // word length before the board goes live — the edition picker locks once playing.
-  // Invite differs only by handing over the share link in the same click gesture.
+  // Start lands in the lobby (never auto-start) so you can set theme + length
+  // before the board goes live — the edition picker locks once playing.
   $("#startPlayingBtn").addEventListener("click", () => enterNewRoom({ autoStart: false }));
-  $("#inviteFriendBtn").addEventListener("click", () => enterNewRoom({ autoStart: false }));
   // Enter in the username field is the spontaneous path → into the lobby.
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") $("#startPlayingBtn").click();
@@ -138,10 +113,6 @@ function showHome() {
       if (i) { i.value = ""; i.focus(); }
     };
   }
-
-  // Filter tabs.
-  $("#roomFilterRecent").addEventListener("click", () => setRoomFilter("recent"));
-  $("#roomFilterYours").addEventListener("click", () => setRoomFilter("yours"));
 
   renderHomeIdentity();
 }
@@ -165,32 +136,6 @@ function renderHomeIdentity() {
     if (rooms) rooms.hidden = true;
     const i = $("#usernameInput");
     if (i) i.focus();
-  }
-}
-
-// Word length as a tap-to-pick segmented control — the whole choice space is
-// visible, one tap commits. Beats a dropdown for a 3-option set.
-function buildHomeLengthPills() {
-  const box = $("#homeLengthPills");
-  if (!box) return;
-  box.textContent = "";
-  const pref = getPreferredLength();
-  for (const n of SUPPORTED_LENGTHS) {
-    const pill = document.createElement("button");
-    pill.type = "button";
-    pill.className = "length-pill" + (n === pref ? " selected" : "");
-    pill.setAttribute("role", "radio");
-    pill.setAttribute("aria-checked", String(n === pref));
-    pill.textContent = String(n);
-    pill.addEventListener("click", () => {
-      setPreferredLength(n);
-      for (const p of box.children) {
-        const on = p === pill;
-        p.classList.toggle("selected", on);
-        p.setAttribute("aria-checked", String(on));
-      }
-    });
-    box.appendChild(pill);
   }
 }
 
@@ -224,7 +169,6 @@ function enterNewRoom({ autoStart }) {
 // --- Home rooms list ---
 
 let homeRoomRows = [];
-let homeRoomFilter = "recent";
 const HOME_ROOMS_PAGE = 6; // show this many at first; "Show more" reveals another page
 let homeRoomVisible = HOME_ROOMS_PAGE;
 
@@ -287,26 +231,15 @@ function buildRoomRows(profile, username) {
   return Array.from(byPath.values()).sort((a, b) => b.ts - a.ts);
 }
 
-function setRoomFilter(filter) {
-  homeRoomFilter = filter;
-  homeRoomVisible = HOME_ROOMS_PAGE; // switching tabs starts the list fresh
-  const recentBtn = $("#roomFilterRecent");
-  const yoursBtn = $("#roomFilterYours");
-  const isRecent = filter === "recent";
-  if (recentBtn) { recentBtn.classList.toggle("selected", isRecent); recentBtn.setAttribute("aria-selected", String(isRecent)); }
-  if (yoursBtn) { yoursBtn.classList.toggle("selected", !isRecent); yoursBtn.setAttribute("aria-selected", String(!isRecent)); }
-  renderRoomList();
-}
-
 function renderRoomList() {
   const list = $("#roomList");
   if (!list) return;
-  const rows = homeRoomFilter === "yours" ? homeRoomRows.filter((r) => r.owned) : homeRoomRows;
+  const rows = homeRoomRows;
   list.textContent = "";
   if (rows.length === 0) {
     const li = document.createElement("li");
     li.className = "room-empty muted small";
-    li.textContent = homeRoomFilter === "yours" ? "You haven't created any rooms yet." : "No rooms yet.";
+    li.textContent = "No rooms yet.";
     list.appendChild(li);
     return;
   }
@@ -403,9 +336,6 @@ function showRoomEntry(owner, slug) {
   $("#homeIntro").hidden = false;
   $(".tagline").textContent = `Join @${owner}'s Wordul room.`;
   $(".sub").textContent = "Pick a username to join.";
-  // Length is decided by the room, so the secondary row is irrelevant here.
-  const secondary = $(".home-secondary");
-  if (secondary) secondary.hidden = true;
 
   const input = $("#usernameInput");
   input.value = getUsername();

@@ -104,25 +104,18 @@
       </label>
     </div>
 
+    <!-- How to play — cleaner, near the top. -->
+    <a href="/how-to-play" class="home-howto link">How to play →</a>
+
     <div class="home-cta">
       <button id="startPlayingBtn" class="btn primary block hero-btn"><span class="hero-btn-label">▶ Start playing</span></button>
-      <p id="startHint" class="start-hint"></p>
-      <div class="home-secondary">
-        <div id="homeLengthPills" class="length-pills" role="radiogroup" aria-label="Word length"></div>
-        <button id="inviteFriendBtn" class="btn ghost invite-btn">＋ Invite</button>
-      </div>
     </div>
 
-    <!-- Returning user: rooms to rejoin. Hidden when empty or for new users. -->
+    <!-- Returning user: recent rooms to rejoin. Hidden when empty or for new users. -->
     <section id="homeRooms" class="home-rooms" hidden>
-      <div class="room-filter" role="tablist" aria-label="Which rooms">
-        <button id="roomFilterRecent" class="room-filter-btn selected" type="button" role="tab" aria-selected="true">Recent</button>
-        <button id="roomFilterYours" class="room-filter-btn" type="button" role="tab" aria-selected="false">Yours</button>
-      </div>
+      <span class="home-rooms-label">Recent</span>
       <ul id="roomList" class="room-list"></ul>
     </section>
-
-    <a href="/how-to-play" class="home-howto link">New here? See how Wordul works →</a>
   </section>
 </template>
 
