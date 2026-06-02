@@ -1950,4 +1950,15 @@ body.playing .room-tabs { display: none; }
 .share-copy.ok { background: var(--green, #9d8bff); }
 .share-native { background: #f0c14b; color: #1a1410; }
 .share-row.no-native .share-native { display: none; }
-.challenge-record { margin-top: 10px; text-align: center; font: 600 15px system-ui; color: var(--muted, #8a8a8f); }
+/* The standing-record line on a challenge end screen — gold, since it's "the precious". */
+.challenge-record { margin-top: 10px; text-align: center; font: 700 15px var(--font-body, system-ui); color: #f0c14b; letter-spacing: 0.2px; }
+
+/* "Challenge a friend" — the headline gauntlet CTA, gold to feel like the precious. */
+.challenge-cta {
+  margin-top: 10px;
+  background: linear-gradient(135deg, #f4cf6a 0%, #e0a92f 100%);
+  color: #1a1410; font-weight: 800; letter-spacing: 0.3px;
+  border: 0; box-shadow: 0 2px 14px rgba(240, 193, 75, 0.28);
+}
+.challenge-cta:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
+.challenge-cta:active:not(:disabled) { transform: translateY(1px); }

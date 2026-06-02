@@ -2470,6 +2470,9 @@ function openStats(opts = {}) {
   }
 
   $("#modalShare").onclick = () => shareResult();
+  // The headline CTA: same share, explicit "throw down the gauntlet" framing.
+  const challengeBtn = $("#modalChallenge");
+  if (challengeBtn) challengeBtn.onclick = () => shareResult();
 
   const urlEl = $("#shareUrl");
   const copyBtn = $("#shareCopy");
