@@ -151,6 +151,18 @@ export const edition = {
         "Even Hamlet returned. Wilt thou not?",
         "Lovely silence. Slightly suspicious, but lovely.",
       ],
+      progress: [
+        "Ooh, something stuck. We're getting warmer.",
+        "There it is, a thread to pull. Keep tugging.",
+        "Progress, my favorite person. The word's nervous now.",
+        "A little color on the board. I like where this goes.",
+        "Yes, that one's talking. Follow it.",
+        "Warmer. The puzzle just blinked first.",
+        "Now we're cooking. Don't lose the scent.",
+        "A clue lands. Quietly thrilling, isn't it?",
+        "That's a real lead. Work it, detective.",
+        "Mmm, movement. The grid is starting to crack.",
+      ],
       greens: {
         "2": [
           "Two greens in one swing, look at you go.",
