@@ -32,6 +32,10 @@
       {
         "name": "CHALLENGE",
         "class_name": "Challenge"
+      },
+      {
+        "name": "DAILY",
+        "class_name": "Daily"
       }
     ]
   },
@@ -72,6 +76,13 @@
       // ctx.storage.get/put API, which is supported on new_sqlite_classes.
       "tag": "v3",
       "new_sqlite_classes": ["Challenge"]
+    },
+    {
+      // New DO namespace on the free plan MUST be SQLite-backed (else deploy fails with
+      // err 10097 — dry-run won't catch it). Daily uses the KV-style ctx.storage.get/put
+      // API, which is supported on new_sqlite_classes.
+      "tag": "v4",
+      "new_sqlite_classes": ["Daily"]
     }
   ],
 

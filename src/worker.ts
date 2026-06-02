@@ -1,10 +1,14 @@
 import { Room } from "./room.ts";
 import { User } from "./user.ts";
 import { Challenge } from "./challenge.ts";
+import { Daily } from "./daily.ts";
 import { makeChallengeId } from "./challenge-core.ts";
 import type { Env } from "./types.ts";
 import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts";
-export { Room, User, Challenge };
+import { activeDate } from "./daily-core.ts";
+import type { World } from "./daily-core.ts";
+import { buildDailyMeta, buildDailyJsonLd, dailyPrevNext, dailyDateFromPathname, dailySitemapUrls } from "./daily-seo.ts";
+export { Room, User, Challenge, Daily };
 
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;

@@ -22,8 +22,10 @@ export interface Env {
   ROOM: DurableObjectNamespace;
   USER: DurableObjectNamespace;
   CHALLENGE: DurableObjectNamespace;
+  DAILY: DurableObjectNamespace;
   DIRECTORY: KVNamespace;
   DESIGNS: R2Bucket;
+  DAILY_ADMIN_TOKEN?: string; // wrangler secret; gates POST /daily/schedule
 }
 
 export type GuessRow = { word: string; mask: Color[] };
