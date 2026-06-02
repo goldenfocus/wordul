@@ -205,7 +205,7 @@ function renderHomeIdentity() {
     if (greeting) greeting.hidden = false;
     if (intro) intro.hidden = true;
     const nameEl = $("#greetingName");
-    if (nameEl) nameEl.textContent = `@${u}`;
+    if (nameEl) { nameEl.textContent = ""; nameEl.appendChild(userLink(u, { at: true })); }
     loadHomeRooms(u);
   } else {
     if (greeting) greeting.hidden = true;
@@ -692,7 +692,8 @@ function renderHeaderIdentity() {
     header.prepend(nameEl);
   }
   const u = getUsername();
-  nameEl.textContent = u ? `@${u}` : "";
+  nameEl.textContent = "";
+  if (u) nameEl.appendChild(userLink(u, { at: true }));
   nameEl.hidden = !u;
 }
 
@@ -786,6 +787,19 @@ function armGiveUpTimer() {
 function navigate(path) {
   history.pushState(null, "", path);
   route();
+}
+
+// Render a username as a clickable link to their public profile (/@username).
+// Single source of truth so every @handle — greeting, chat, scoreboard, player
+// boards, owner byline — is a one-tap hop to that player. The name goes through
+// textContent (XSS-safe); the click stays in the SPA via navigate().
+function userLink(username, { at = false, suffix = "" } = {}) {
+  const a = document.createElement("a");
+  a.className = "userlink";
+  a.href = `/@${username}`;
+  a.textContent = (at ? "@" : "") + username + suffix;
+  a.addEventListener("click", (e) => { e.preventDefault(); navigate(`/@${username}`); });
+  return a;
 }
 
 function wireChat() {
@@ -1405,11 +1419,10 @@ function renderChatRow(entry) {
   } else {
     const mine = entry.from && entry.from === getUsername();
     row.className = "chat-row user" + (mine ? " mine" : "");
-    const from = document.createElement("span");
-    from.className = "from";
-    from.textContent = entry.from + ":";
+    const from = userLink(entry.from);
+    from.classList.add("from");
     row.appendChild(from);
-    row.appendChild(document.createTextNode(entry.text));
+    row.appendChild(document.createTextNode(": " + entry.text));
   }
   return row;
 }
@@ -1560,7 +1573,7 @@ function renderScoreboard(snap) {
     row.className = "score-row" + (e.username === me ? " mine" : "");
     const name = document.createElement("span");
     name.className = "score-name";
-    name.textContent = e.username + (e.username === me ? " (you)" : "");
+    name.appendChild(userLink(e.username, { suffix: e.username === me ? " (you)" : "" }));
     const tally = document.createElement("span");
     tally.className = "score-tally";
     tally.textContent = `${e.wins}W · ${e.played}P`;
@@ -1594,9 +1607,8 @@ function renderBoards(snap, me) {
     board.dataset.player = p.username;
     const name = document.createElement("div");
     name.className = "player-name";
-    const nameSpan = document.createElement("span");
-    if (p.username === getUsername()) nameSpan.className = "me";
-    nameSpan.textContent = p.username + (p.username === getUsername() ? " (you)" : "");
+    const nameSpan = userLink(p.username, { suffix: p.username === getUsername() ? " (you)" : "" });
+    if (p.username === getUsername()) nameSpan.classList.add("me");
     name.appendChild(nameSpan);
 
     if (p.status === "won") {
@@ -2560,6 +2572,9 @@ document.addEventListener("DOMContentLoaded", () => {
     syncAvatar();
     avatarBtn.addEventListener("click", () => showHub(avatarBtn));
   }
+  // Clicking the logo always takes you home — the universal escape hatch.
+  const brandBtn = $("#brandBtn");
+  if (brandBtn) brandBtn.addEventListener("click", () => navigate("/"));
   // Global physical-keyboard handler — drives type-to-start on home/lobby and typing in-game.
   document.addEventListener("keydown", onPhysicalKey);
   route();
@@ -2652,8 +2667,39 @@ function showProfile(username) {
   renderProfile(username, $("#profileMount"));
 }
 
+// Breadcrumb trail under the brand — the one place that always knows "where am I".
+// Home shows nothing (the brand alone is enough); rooms/profiles show a clickable
+// "Home › <here>" so you can never get stranded deep in the app.
+function renderCrumbs(r) {
+  const nav = $("#crumbs");
+  if (!nav) return;
+  if (r.kind === "home") {
+    nav.hidden = true;
+    nav.innerHTML = "";
+    return;
+  }
+  const here = r.kind === "room" ? r.slug.replace(/-/g, " ") : `@${r.username}`;
+  nav.hidden = false;
+  nav.innerHTML = "";
+  const home = document.createElement("button");
+  home.type = "button";
+  home.className = "crumb crumb-link";
+  home.textContent = "Home";
+  home.addEventListener("click", () => navigate("/"));
+  const sep = document.createElement("span");
+  sep.className = "crumb-sep";
+  sep.setAttribute("aria-hidden", "true");
+  sep.textContent = "›";
+  const cur = document.createElement("span");
+  cur.className = "crumb crumb-current";
+  cur.setAttribute("aria-current", "page");
+  cur.textContent = here;
+  nav.append(home, sep, cur);
+}
+
 function route() {
   const r = parseRoute();
+  renderCrumbs(r);
   if (r.kind === "room") {
     if (getUsername()) {
       showRoom(r.owner, r.slug);

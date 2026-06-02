@@ -61,7 +61,10 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">Wordul<span class="brand-dot">.</span></div>
+  <div class="topbar-left">
+    <button id="brandBtn" class="brand" type="button" title="Home" aria-label="Wordul — home">Wordul<span class="brand-dot">.</span></button>
+    <nav id="crumbs" class="crumbs" aria-label="Breadcrumb" hidden></nav>
+  </div>
   <!-- Immersive in-game header (C5): avatar + username + gold only. The avatar IS
        the hub — one tap opens settings / theme / mute / stats (+ share / rename /
        scoreboard in a room), replacing the old scattered ⚙ / 📊 / 🔊 icons. The
