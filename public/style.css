@@ -943,18 +943,20 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
   }
 }
 
-/* When stats modal shows a joke instead of a win banner, scale the wording. */
-.endgame.joke {
-  font-size: 16px;
-  line-height: 1.4;
-  font-weight: 700;
+/* On a loss the modal shows an encouraging quote instead of a win banner —
+   scale the wording and give it a soft, italic, quotable feel. */
+.endgame.inspire {
+  font-size: 15px;
+  line-height: 1.45;
+  font-weight: 600;
   font-style: normal;
   padding: 4px 6px 0;
 }
-.endgame.joke .roast {
+.endgame.inspire .inspire-line {
   color: var(--muted);
   display: block;
   margin-bottom: 6px;
+  font-style: italic;
 }
 
 /* Chat */

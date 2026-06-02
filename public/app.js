@@ -13,6 +13,7 @@ import { getSettings, saveSettings, applySettings, openSettings, openHub } from 
 import { MODES, isAvailableMode } from "/modes.js";
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
+import { pickInspire } from "/inspire.js";
 import { buildShareCardModel, renderShareCard } from "/share-card.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
@@ -1993,61 +1994,10 @@ function celebrateGreens(count) {
 
 // --- End of game ---
 
-// Generic "you ate the L" jokes — when you ran out of guesses on your own.
-const SOLO_LOSE_JOKES = [
-  "Plot twist: the word was inside you all along. ...nope, never mind, it wasn't.",
-  "Five letters. Six guesses. Infinite regret.",
-  "Statistically, this happens to exactly one in one of you.",
-  "Your dictionary called. It wants a refund.",
-  "Even the alphabet feels bad for you right now.",
-  "There are no losers here. Just you, specifically.",
-  "Wordul: 1. You: 0. The scoreboard speaks.",
-  "Take comfort — somewhere, an etymologist is also crying.",
-  "Your guesses formed a strong, structured wall of wrongness.",
-  "An L isn't great. But it IS one of the letters.",
-  "Have you considered just guessing the right word? Wild idea, I know.",
-  "Reminder: crosswords give you the words for free.",
-  "Don't worry, the word also doesn't know how to find you.",
-  "You came so close. Then very, very far.",
-];
-
-// Tease-the-loser jokes — used when someone else won first. {who} = winner nickname.
-const RACE_LOSE_JOKES = [
-  "{who} just smoked you. Like, athletically.",
-  "{who} solved it. Maybe try standing closer to the screen next time.",
-  "{who} got the W. You got the L. The L is for Learning.",
-  "{who} is faster than you at words. And probably other things too.",
-  "{who} cooked. You watched.",
-  "{who} knew the word. You knew vibes.",
-  "{who} found it first. You found out about it.",
-  "Imagine losing to {who}. Couldn't be me. (Wait — it was you.)",
-  "{who} touched grass. The grass spelled the answer.",
-  "{who} is now in your contacts as \"better at worduling\".",
-];
-
-// C4: self-inflicted ends get their own roast. Tapping 💀 to give up…
-const GAVE_UP_JOKES = [
-  "You tapped the skull. The skull respects your honesty.",
-  "Strategic retreat! …is one way to put it.",
-  "Quitting: technically a decision. Bold of you.",
-  "You folded. The word never even broke a sweat.",
-  "Surrender accepted. Your dignity has been refunded in full.",
-  "Some words aren't worth fighting. This one definitely was. Oops.",
-];
-// …and bankrupting yourself in Hard Mode.
-const BANKRUPT_JOKES = [
-  "Bankrupt. You spent gold like it grew on tiles.",
-  "◆ in the red. Hard Mode sends its regards (and an invoice).",
-  "You bought your way to a loss. Truly the premium experience.",
-  "Negative gold, negative result. At least it's consistent.",
-  "The bank called. They'd like their gold back. All of it.",
-  "Hard Mode finally has teeth, and it just ate your wallet.",
-];
-
-function pickJoke(arr, winnerName) {
-  const j = arr[Math.floor(Math.random() * arr.length)];
-  return winnerName ? j.replace("{who}", winnerName) : j;
-}
+// Losing used to summon a skull and a roast. Now every loss — ran out of guesses,
+// beaten in a race, gave up, or went bankrupt — ends on a constructive, encouraging
+// line drawn from the great minds of humanity (and a few AIs). The pool lives in
+// /inspire.js; pickInspire() returns one formatted “quote” — author string.
 
 // C4: forfeit — give-up or bankruptcy ends the game from MY side WITHOUT a server
 // status change. Mirrors handleGameOver's bookkeeping (record the loss, guard
@@ -2121,15 +2071,9 @@ function handleGameOver(snap) {
 
 function triggerLoseSequence(snap, me) {
   game.exploding = true;
-  const winner = snap.winner;
-  const beatenBySomeone = winner && winner !== getUsername();
-  // C4: self-inflicted ends (gave up / went bankrupt) own the roast even in a race —
-  // you ended your own game, so the joke is about you, not the winner.
-  let joke;
-  if (game.finishReason === "gave_up") joke = pickJoke(GAVE_UP_JOKES);
-  else if (game.finishReason === "bankrupt") joke = pickJoke(BANKRUPT_JOKES);
-  else if (beatenBySomeone) joke = pickJoke(RACE_LOSE_JOKES, winner);
-  else joke = pickJoke(SOLO_LOSE_JOKES);
+  // However the round ended, the player gets a lift, not a roast: one random line
+  // from the great-minds pool.
+  const inspire = pickInspire();
 
   // 1. Screen flash.
   const flash = document.createElement("div");
@@ -2184,49 +2128,12 @@ function triggerLoseSequence(snap, me) {
       won: false,
       justFinished: true,
       lastGuessCount: me.guesses.length,
-      joke,
+      inspire,
     });
   }, 1500);
 }
 
 // --- Stats modal ---
-
-// "Your run, line by line." Render the captured replay (game.replay) into the
-// end-screen as a small monospace log — the same structured events the payout typed,
-// now a scannable summary. Skips silently when there's nothing to show.
-function renderReplayInto(parent) {
-  if (!game.replay || game.replay.length === 0) return;
-  // Tuck the per-beat breakdown behind a collapsed disclosure — it's there for the
-  // curious, but the win moment shouldn't open onto a wall of "+100 / +50" lines.
-  const details = document.createElement("details");
-  details.className = "endgame-replay-details";
-  const summary = document.createElement("summary");
-  summary.textContent = t("endscreen.goldBreakdown");
-  details.appendChild(summary);
-  const box = document.createElement("div");
-  box.className = "endgame-replay";
-  for (const turn of game.replay) {
-    for (const ev of turn.events || []) {
-      const line = document.createElement("div");
-      line.className = `endgame-replay-line ${ev.delta >= 0 ? "gain" : "loss"}`;
-      const sign = ev.delta >= 0 ? "+" : "−";
-      // Tile events carry a letter + index; the solve/speed bonuses don't — render them plainly.
-      const label = String(ev.letter || "").toUpperCase();
-      const pos = Number.isInteger(ev.index) ? ` pos ${ev.index + 1}` : "";
-      line.textContent =
-        `${ev.kind}${label ? " " + label : ""}${pos}  ${sign}${Math.abs(ev.delta)}`;
-      box.appendChild(line);
-    }
-    if (turn.combo && turn.combo.discoveries >= 2) {
-      const c = document.createElement("div");
-      c.className = "endgame-replay-line combo";
-      c.textContent = `✦ ${turn.combo.mult}× COMBO  +${turn.combo.bonus}`;
-      box.appendChild(c);
-    }
-  }
-  details.appendChild(box);
-  parent.appendChild(details);
-}
 
 // "The word — and a reason to remember it." Shows the answer big plus a reason to
 // remember it: a definition, a surprising fact, and a quote from a great mind. Pulls
@@ -2388,15 +2295,6 @@ function openStats(opts = {}) {
   const eg = $("#endgameMsg");
   eg.textContent = "";
   eg.className = "endgame";
-  // Your score is your gold. Headline the run's earnings + the running balance.
-  if (opts.justFinished) {
-    const goldLine = document.createElement("div");
-    goldLine.className = "endgame-gold";
-    goldLine.textContent = `◆ +${game.goldThisRound || 0} this game · ◆ ${getGold()} total`;
-    eg.appendChild(goldLine);
-    // Your run, line by line — the captured replay (client-side now; server viewer gated).
-    renderReplayInto(eg);
-  }
   if (opts.justFinished && opts.snap) {
     const snap = opts.snap;
     const winner = snap.winner; // winner username (string) or null
@@ -2404,10 +2302,10 @@ function openStats(opts = {}) {
     // word card below, so we never repeat "the word was X" here.
     const status = document.createElement("span");
     status.className = "endgame-status";
-    if (opts.joke) {
-      eg.classList.add("joke");
-      status.classList.add("roast");
-      status.textContent = `💀 ${opts.joke}`;
+    if (opts.inspire) {
+      eg.classList.add("inspire");
+      status.classList.add("inspire-line");
+      status.textContent = opts.inspire;
     } else if (opts.won && winner && winner === getUsername()) {
       status.textContent = t("endscreen.youWon", { n: opts.lastGuessCount });
     } else if (winner) {
