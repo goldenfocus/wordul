@@ -116,6 +116,24 @@
       <span class="home-rooms-label">Recent</span>
       <ul id="roomList" class="room-list"></ul>
     </section>
+
+    <!-- Hub shell — shown once the user has a profile; replaces the intro flow. -->
+    <div id="hub" class="hub" hidden>
+      <header class="hub-bar">
+        <button id="hubAvatarBtn" class="avatar-btn" type="button" aria-label="Menu" aria-haspopup="true">◆</button>
+        <div class="hub-bar-stats">
+          <span class="stat-chip" id="hubGold" title="Gold">◆ <span id="hubGoldVal">0</span></span>
+          <span class="stat-chip" id="hubStreak" title="Streak">🔥 <span id="hubStreakVal">0</span></span>
+        </div>
+      </header>
+      <main id="hubContent" class="hub-content"></main>
+      <nav class="hub-nav" role="tablist" aria-label="Hub sections">
+        <button class="hub-tab is-active" data-tab="daily"  role="tab" aria-selected="true">🗞️<span>Daily</span></button>
+        <button class="hub-tab"           data-tab="arena"  role="tab" aria-selected="false">⚡<span>Arena</span></button>
+        <button class="hub-tab"           data-tab="floor"  role="tab" aria-selected="false">🃏<span>Floor</span></button>
+        <button class="hub-tab"           data-tab="feed"   role="tab" aria-selected="false">👥<span>Feed</span></button>
+      </nav>
+    </div>
   </section>
 </template>
 
