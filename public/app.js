@@ -13,6 +13,7 @@ import { getSettings, saveSettings, applySettings, openSettings, openHub } from 
 import { MODES, isAvailableMode } from "/modes.js";
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
+import { buildShareCardModel, renderShareCard } from "/share-card.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
 
@@ -2437,7 +2438,7 @@ function openStats(opts = {}) {
 
   // Pre-render the share card now (modal open) so the Share click can fire
   // navigator.share synchronously — iOS rejects share() after an async toBlob.
-  prepareShareCard();
+  void prepareShareCard();
   $("#modalShare").onclick = () => shareResult();
 
   modal.addEventListener("click", onModalClick);
@@ -2458,7 +2459,7 @@ function closeStats() {
 
 // Build the card and cache a PNG File so shareResult() can call navigator.share
 // synchronously inside the click gesture (iOS requirement). Called on modal open.
-function prepareShareCard() {
+async function prepareShareCard() {
   game.shareImage = null;
   const snap = game.snapshot;
   if (!snap || snap.phase !== "finished") return;
@@ -2468,23 +2469,40 @@ function prepareShareCard() {
   const maxG = snap.maxGuesses ?? 6;
   const won = me.status === "won";
   const score = won ? `${me.guesses.length}/${maxG}` : `X/${maxG}`;
-  const roomUrl = `${location.origin}/@${game.owner}/${game.slug}`;
-  const canvas = renderResultCanvas({
-    guesses: me.guesses || [],
-    won,
-    score,
-    cols: snap.wordLength ?? 5,
-    word: (snap.word || "").toUpperCase(),
-    shortUrl: roomUrl.replace(/^https?:\/\//, ""),
+
+  // Mint (or reuse) a challenge for THIS word so the card's CTA is a real replay link.
+  // If we arrived via a challenge link already, reuse that id (don't re-mint the same word).
+  let challengeId = game.challengeId;
+  if (!challengeId) {
+    try {
+      const res = await fetch("/api/challenge", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          word: (snap.word || "").toUpperCase(),
+          wordLength: snap.wordLength ?? 5,
+          owner: getUsername(),
+          ownerScore: score,
+          ownerGrid: (me.guesses || []).map((g) => g.mask),
+        }),
+      });
+      challengeId = (await res.json()).id;
+    } catch { /* offline / mint failed — fall back to the room link below */ }
+  }
+  const cardUrl = challengeId
+    ? `${location.origin}/c/${challengeId}`
+    : `${location.origin}/@${game.owner}/${game.slug}`;
+
+  const model = buildShareCardModel({
+    username: getUsername(), guesses: me.guesses || [], won, score,
+    challengeUrl: cardUrl.replace(/^https?:\/\//, ""),
   });
-  const text = won
-    ? `Solved Wordul in ${score} — beat me?`
-    : `Wordul got me. Your turn?`;
-  // Sync essentials available immediately; the File arrives a tick later.
-  game.shareImage = { file: null, url: roomUrl, text, canvas };
+  const canvas = renderShareCard(model, snap.wordLength ?? 5);
+  const text = won ? `Solved Wordul in ${score} — beat me?` : `Wordul got me. Your turn?`;
+  game.shareImage = { file: null, url: cardUrl, text, canvas };
   canvas.toBlob((blob) => {
     if (blob && game.shareImage && game.shareImage.canvas === canvas) {
-      game.shareImage.file = new File([blob], "wordle-race.png", { type: "image/png" });
+      game.shareImage.file = new File([blob], "wordul.png", { type: "image/png" });
     }
   }, "image/png");
 }
@@ -2540,120 +2558,6 @@ function downloadCanvas(canvas, name) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-}
-
-// Draw the result card. Portrait, dark-themed to match the app; retina-sharp via dpr.
-function renderResultCanvas({ guesses, won, score, cols, word, shortUrl }) {
-  const dpr = 2;
-  const W = 560;
-  const P = 40;
-  const gap = 8;
-  const tile = Math.min(64, Math.floor((W - 2 * P - (cols - 1) * gap) / cols));
-  const gridW = cols * tile + (cols - 1) * gap;
-  const gridX = (W - gridW) / 2;
-  const rows = guesses.length;
-  const gridH = rows > 0 ? rows * tile + (rows - 1) * gap : 0;
-
-  const SEC = { header: 38, score: 46, word: word ? 30 : 0, cta: 64 };
-  const H = P + SEC.header + 22 + SEC.score + 24 + gridH
-    + (word ? 22 + SEC.word : 0) + 26 + SEC.cta + P;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  const ctx = canvas.getContext("2d");
-  ctx.scale(dpr, dpr);
-  ctx.fillStyle = "#121213";
-  ctx.fillRect(0, 0, W, H);
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
-  let cy = P;
-
-  // Header: WORDLE ● RACE
-  drawHeader(ctx, W / 2, cy + SEC.header / 2, FONT);
-  cy += SEC.header + 22;
-
-  // Score line
-  ctx.font = `800 36px ${FONT}`;
-  ctx.fillStyle = won ? "#538d4e" : "#a6a6a8";
-  ctx.fillText(won ? `Solved in ${score}` : `Stumped · ${score}`, W / 2, cy + SEC.score / 2);
-  cy += SEC.score + 24;
-
-  // Grid of guesses
-  const COLORS = { green: "#538d4e", yellow: "#b59f3b", gray: "#565758" };
-  let gy = cy;
-  for (let r = 0; r < rows; r++) {
-    const g = guesses[r];
-    for (let c = 0; c < cols; c++) {
-      const x = gridX + c * (tile + gap);
-      roundRect(ctx, x, gy, tile, tile, 6);
-      ctx.fillStyle = COLORS[g.mask[c]] || "#3a3a3c";
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.font = `800 ${Math.floor(tile * 0.5)}px ${FONT}`;
-      ctx.fillText((g.word[c] || "").toUpperCase(), x + tile / 2, gy + tile / 2 + 1);
-    }
-    gy += tile + gap;
-  }
-  cy += gridH;
-
-  // The word
-  if (word) {
-    cy += 22;
-    ctx.font = `600 23px ${FONT}`;
-    ctx.fillStyle = "#bdbdbf";
-    ctx.fillText(`The word: ${word}`, W / 2, cy + SEC.word / 2);
-    cy += SEC.word;
-  }
-
-  // CTA pill: "Beat my score →" + link
-  cy += 26;
-  roundRect(ctx, P, cy, W - 2 * P, SEC.cta, 12);
-  ctx.fillStyle = "#538d4e";
-  ctx.fill();
-  ctx.fillStyle = "#fff";
-  ctx.font = `800 22px ${FONT}`;
-  ctx.fillText("Beat my score →", W / 2, cy + SEC.cta / 2 - 11);
-  ctx.font = `600 18px ${FONT}`;
-  ctx.fillText(shortUrl, W / 2, cy + SEC.cta / 2 + 13);
-
-  return canvas;
-}
-
-function drawHeader(ctx, cx, cy, font) {
-  ctx.font = `800 30px ${font}`;
-  const left = "WORDLE";
-  const right = "RACE";
-  const lw = ctx.measureText(left).width;
-  const rw = ctx.measureText(right).width;
-  const dot = 14;
-  const sp = 12;
-  const total = lw + sp + dot + sp + rw;
-  let x = cx - total / 2;
-  ctx.textAlign = "left";
-  ctx.fillStyle = "#fff";
-  ctx.fillText(left, x, cy);
-  x += lw + sp;
-  ctx.fillStyle = "#538d4e";
-  ctx.beginPath();
-  ctx.arc(x + dot / 2, cy, dot / 2, 0, Math.PI * 2);
-  ctx.fill();
-  x += dot + sp;
-  ctx.fillStyle = "#fff";
-  ctx.fillText(right, x, cy);
-  ctx.textAlign = "center";
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
 }
 
 // --- top-level UI wiring ---
