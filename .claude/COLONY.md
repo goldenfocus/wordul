@@ -44,6 +44,7 @@ npm run deploy
 | When (UTC) | Agent | Action | Version ID | Released? |
 |------------|-------|--------|------------|-----------|
 | 2026-06-01 23:03 | dad (Yan's session) | brain+body integrated → prod | 7f3c4e44 | ✅ |
+| 2026-06-02 14:31 | claude (voice fix) | voice manifest neg-cache fix + module-graph guard → prod (on top of already-live fdbcc71 challenge) | 92d6a48d | ✅ |
 
 To claim: add a row with `🔒 deploying`, push this file, deploy, then flip to ✅
 with the Version ID from `wrangler deploy` output. Clear stale 🔒 rows older than ~15min.
