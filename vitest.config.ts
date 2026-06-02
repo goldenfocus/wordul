@@ -13,6 +13,7 @@ export default defineConfig({
       { find: /^\/voice-key\.js$/, replacement: new URL("./public/voice-key.js", import.meta.url).pathname },
       { find: /^\/voice\.js$/, replacement: new URL("./public/voice.js", import.meta.url).pathname },
       { find: /^\/companion\.js$/, replacement: new URL("./public/companion.js", import.meta.url).pathname },
+      { find: /^\/roomConfig\.js$/, replacement: new URL("./public/roomConfig.js", import.meta.url).pathname },
       { find: /^\/celebrate\.js$/, replacement: new URL("./public/celebrate.js", import.meta.url).pathname },
       { find: /^\/gold\.js$/, replacement: new URL("./public/gold.js", import.meta.url).pathname },
       { find: /^\/hacklog\.js$/, replacement: new URL("./public/hacklog.js", import.meta.url).pathname },
