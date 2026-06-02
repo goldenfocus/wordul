@@ -27,6 +27,10 @@
       {
         "name": "USER",
         "class_name": "User"
+      },
+      {
+        "name": "CHALLENGE",
+        "class_name": "Challenge"
       }
     ]
   },
@@ -60,6 +64,13 @@
       // grandfathered on new_classes from before this restriction.)
       "tag": "v2",
       "new_sqlite_classes": ["User"]
+    },
+    {
+      // New DO namespace on the free plan MUST be SQLite-backed (else deploy fails
+      // with err 10097 — dry-run won't catch it). Challenge uses the KV-style
+      // ctx.storage.get/put API, which is supported on new_sqlite_classes.
+      "tag": "v3",
+      "new_sqlite_classes": ["Challenge"]
     }
   ],
 
