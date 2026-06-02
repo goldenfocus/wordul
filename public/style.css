@@ -1441,15 +1441,21 @@ html[data-edition="default"] .key.pressed {
   color: var(--fg);
 }
 .modal-actions {
-  display: flex; gap: 12px; align-items: stretch;
-  margin-top: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 18px;
 }
+.modal-actions .btn { flex: none; width: 100%; }
+/* A labelled hairline separating the primary CTAs from the raw-link share row. */
 .modal-divider {
-  width: 1px;
-  background: var(--border);
-  align-self: stretch;
+  display: flex; align-items: center; gap: 12px;
+  margin: 6px 2px 2px;
+  font: 600 11px var(--font-body, system-ui); letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--muted);
 }
-.modal-actions .btn { flex: 1; }
+.modal-divider::before, .modal-divider::after {
+  content: ""; flex: 1; height: 1px;
+  background: color-mix(in srgb, var(--fg) 12%, transparent);
+}
 
 /* Settings */
 .settings-card { max-height: calc(100dvh - 32px); }
@@ -1935,30 +1941,47 @@ body.playing .room-tabs { display: none; }
   background: var(--border, #2a2a2e); color: var(--muted, #8a8a8f);
 }
 
-.share-row { display: flex; gap: 8px; align-items: stretch; margin-top: 14px; }
+.share-row { display: flex; gap: 8px; align-items: stretch; margin-top: 0; }
 .invite-share-row { margin-top: 0; }
 .share-url {
-  flex: 1; min-width: 0; padding: 0 12px; border-radius: 8px;
-  border: 1px solid var(--border); background: var(--bg-card, #17171a);
-  color: var(--fg); font: 600 14px system-ui; overflow: hidden; text-overflow: ellipsis;
+  flex: 1; min-width: 0; padding: 0 14px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--fg) 10%, transparent);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+  color: var(--muted); font: 600 13px var(--font-body, system-ui);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .share-copy, .share-native {
-  padding: 10px 16px; border-radius: 8px; border: 0; cursor: pointer;
-  font: 700 14px system-ui; color: #fff; white-space: nowrap;
+  padding: 11px 18px; border-radius: 10px; border: 0; cursor: pointer;
+  font: 700 13px var(--font-body, system-ui); letter-spacing: 0.02em;
+  color: var(--fg); white-space: nowrap;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  transition: background 0.16s, transform 0.1s;
 }
-.share-copy { background: var(--accent, #9d8bff); }
-.share-copy.ok { background: var(--green, #9d8bff); }
-.share-native { background: #f0c14b; color: #1a1410; }
+.share-copy:hover, .share-native:hover { background: color-mix(in srgb, var(--fg) 14%, transparent); }
+.share-copy:active, .share-native:active { transform: translateY(1px); }
+.share-copy.ok { background: var(--green); color: #fff; }
 .share-row.no-native .share-native { display: none; }
-/* The standing-record line on a challenge end screen — gold, since it's "the precious". */
-.challenge-record { margin-top: 10px; text-align: center; font: 700 15px var(--font-body, system-ui); color: #f0c14b; letter-spacing: 0.2px; }
 
-/* "Challenge a friend" — the headline gauntlet CTA, gold to feel like the precious. */
+/* The standing-record line on a challenge end screen — gold, since it's "the precious". */
+.challenge-record { margin: 2px 0 4px; text-align: center; font: 700 15px var(--font-body, system-ui); color: #f0c14b; letter-spacing: 0.2px; }
+
+/* "Challenge a friend" — THE hero CTA. The single gold "precious" moment on the screen:
+   a brushed-gold gradient with a lit top edge, so it reads as the prize worth chasing. */
 .challenge-cta {
-  margin-top: 10px;
-  background: linear-gradient(135deg, #f4cf6a 0%, #e0a92f 100%);
-  color: #1a1410; font-weight: 800; letter-spacing: 0.3px;
-  border: 0; box-shadow: 0 2px 14px rgba(240, 193, 75, 0.28);
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  background: linear-gradient(165deg, #f9dd86 0%, #efc257 42%, #d99a2f 100%);
+  color: #2a1d05; font-weight: 800; letter-spacing: 0.03em;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow: 0 8px 26px -8px rgba(224, 169, 47, 0.6),
+              inset 0 1px 0 rgba(255, 255, 255, 0.55),
+              inset 0 -1px 0 rgba(120, 80, 10, 0.25);
 }
-.challenge-cta:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
+.challenge-cta:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow: 0 10px 32px -8px rgba(224, 169, 47, 0.72),
+              inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transform: translateY(-1px);
+}
 .challenge-cta:active:not(:disabled) { transform: translateY(1px); }
+.cta-replay { display: inline-block; opacity: 0.7; }
