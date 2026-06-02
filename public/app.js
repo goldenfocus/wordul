@@ -2,7 +2,7 @@
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
-import { applyEdition, getActiveEditionId, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION } from "/edition.js";
+import { applyEdition, getActiveEditionId, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
 import { speakLine, speakTemplated } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
 import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence } from "/gold.js";
@@ -957,6 +957,7 @@ function onServerMessage(msg) {
           goldDrain(penalty, reducedMotion, playChime);
           const log = getHacklog();
           for (const line of penaltyLines) log?.logLine(line, { tone: "loss" });
+          mistakeFx(activeMistakeFx()); // sensory punishment for the sloppy reuse (room-themed)
           checkBankruptcy(powerupsCtx); // C4: a wasted-letter drain may bankrupt Hard Mode
         };
 
@@ -1867,6 +1868,55 @@ function playChime(notes) {
       osc.start(t0 + at); osc.stop(t0 + at + 0.24);
     });
   } catch { /* ignore — audio is a nice-to-have */ }
+}
+
+// A short filtered-noise burst for mistake feedback. "glass" = bright, fast decay;
+// "shock" = a buzzy zap; "buzz" = a low dull thud. WebAudio-only, no asset files.
+function playNoise(kind) {
+  if (localStorage.getItem("wordul.muted") === "1") return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const t0 = audioCtx.currentTime;
+    const dur = kind === "buzz" ? 0.18 : 0.3;
+    const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * dur), audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const filter = audioCtx.createBiquadFilter();
+    if (kind === "glass") { filter.type = "highpass"; filter.frequency.value = 2200; }
+    else if (kind === "shock") { filter.type = "bandpass"; filter.frequency.value = 900; filter.Q.value = 6; }
+    else { filter.type = "lowpass"; filter.frequency.value = 500; }
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.28, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(filter).connect(gain).connect(audioCtx.destination);
+    src.start(t0); src.stop(t0 + dur);
+  } catch { /* ignore — audio is a nice-to-have */ }
+}
+
+// Sensory feedback for a committed sloppy mistake (reused dead letter). Config comes
+// from the active edition (activeMistakeFx); reduced motion suppresses shake + flash
+// but keeps the non-motion cues (sound, haptics). No-ops when the edition opts out.
+function mistakeFx(cfg) {
+  if (!cfg) return;
+  if (cfg.sound) playNoise(cfg.sound);
+  if (cfg.haptics && navigator.vibrate) navigator.vibrate([30, 40, 30]);
+  if (getSettings().reducedMotion) return;
+  const boards = $("#boards");
+  if (cfg.shake && boards) {
+    boards.classList.remove("fx-shake");
+    void boards.offsetWidth; // restart the animation
+    boards.classList.add("fx-shake");
+    setTimeout(() => boards.classList.remove("fx-shake"), 360);
+  }
+  if (cfg.flash) {
+    const flash = document.createElement("div");
+    flash.className = "fx-flash";
+    document.body.appendChild(flash);
+    setTimeout(() => flash.remove(), 320);
+  }
 }
 
 // Yang's scaled green celebration. 1 new green → spark + soft chime; 2+ → confetti

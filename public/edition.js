@@ -55,6 +55,9 @@ let activeId = "default";
 const reactCounters = {};
 
 export function resolveEdition(id) { return getEdition(id); }
+// Sensory feedback config for committing a sloppy mistake (reusing a proven-gray
+// letter). Null when the active edition opts out. See app.js mistakeFx().
+export function activeMistakeFx() { return getEdition(activeId).effects?.mistake ?? null; }
 export function getActiveEditionId() {
   return localStorage.getItem(LS.edition) ?? "default";
 }

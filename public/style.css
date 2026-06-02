@@ -136,6 +136,21 @@ body {
   100% { transform: translateX(0); }
 }
 
+/* Mistake FX: a hard board jolt when a sloppy reuse is committed (room-configurable). */
+.fx-shake { animation: fx-shake 0.36s cubic-bezier(.36,.07,.19,.97); }
+@keyframes fx-shake {
+  10%, 90% { transform: translateX(-3px); }
+  20%, 80% { transform: translateX(5px); }
+  30%, 50%, 70% { transform: translateX(-8px); }
+  40%, 60% { transform: translateX(8px); }
+}
+/* A brief lightning-white flash over the whole screen. */
+.fx-flash {
+  position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  background: rgba(255,255,255,0.85); animation: fx-flash 0.32s ease-out forwards;
+}
+@keyframes fx-flash { from { opacity: 1; } to { opacity: 0; } }
+
 /* Gold raining from the sky on a payout. */
 .gold-coin {
   position: fixed;
