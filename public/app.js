@@ -2946,7 +2946,13 @@ function renderRematchPrompt(who) {
   if (play) { play.hidden = false; play.disabled = false; play.textContent = t("rematch.accept"); play.onclick = () => send({ type: "rematch_accept" }); }
   if (decline) { decline.hidden = false; decline.textContent = t("rematch.decline"); decline.onclick = () => { send({ type: "rematch_decline" }); renderRematchIdle(); }; }
   const eg = document.getElementById("endgameMsg");
-  if (eg) { eg.hidden = false; const line = document.createElement("div"); line.className = "endgame-status"; line.textContent = t("rematch.prompt", { who }); eg.prepend(line); }
+  if (eg && !eg.querySelector(".rematch-prompt")) {
+    eg.hidden = false;
+    const line = document.createElement("div");
+    line.className = "endgame-status rematch-prompt";
+    line.textContent = t("rematch.prompt", { who });
+    eg.prepend(line);
+  }
 }
 
 // A cancelled proposal: one friendly line keyed to reason, then fade Home (~2s).
@@ -2955,7 +2961,11 @@ function settleRematchHome(reason, who) {
   const { play, decline } = rematchControls();
   if (decline) decline.hidden = true;
   if (play) { play.disabled = true; play.textContent = t(key, { who }); }
-  setTimeout(() => { closeStats(); leaveRoom(); showHub(); }, 2000);
+  clearTimeout(game.rematchSettleTimer);
+  game.rematchSettleTimer = setTimeout(() => {
+    game.rematchSettleTimer = null;
+    closeStats(); leaveRoom(); showHub();
+  }, 2000);
 }
 
 function openStats(opts = {}) {
@@ -3271,6 +3281,7 @@ function toggleMute() {
 
 // Tear down any live room connection when leaving a room view.
 function leaveRoom() {
+  if (game.rematchSettleTimer) { clearTimeout(game.rematchSettleTimer); game.rematchSettleTimer = null; }
   stopHeartbeat();
   game.challengeId = null;
   game.challengeMeta = null;
