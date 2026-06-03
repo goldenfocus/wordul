@@ -172,3 +172,36 @@ function dailyHeadline(date: string, word: string, findings: Finding[]): string 
   const tail = sr ? ` ${sr.display} found it.` : "";
   return `${prettyDate(date)}: ${word}.${tail}`.trim();
 }
+
+export function buildWeeklyPost(
+  weekly: ScienceWeeklySummary,
+  notes: BrainNote[],
+  opts: { todayUTC: string; generatedAt?: number },
+): FeedPost {
+  const generatedAt = opts.generatedAt ?? Date.now();
+  const finishes = weekly.totals.playerFinishes;
+  const findings: Finding[] = [];
+  if (finishes > 0) {
+    const sr = pct(weekly.totals.wins, finishes);
+    findings.push({ kind: "solve_rate", value: sr, display: `${sr}%`, text: `${sr}% of plays were solved this week.` });
+    const median = medianFromDistribution(weekly.outcomes.guessDistribution);
+    if (median != null) findings.push({ kind: "median_guesses", value: median, display: String(median), text: `The median solve took ${median} guesses.` });
+    findings.push({ kind: "participation", value: finishes, display: String(finishes), text: `${finishes} finishes across the week.` });
+  }
+  const matched = matchBrainNotes(findings, notes);
+  // Spoiler-safe: never surface a per-day breakdown for the active day.
+  const pastDays = weekly.dates.filter((d) => d < opts.todayUTC);
+  const span = pastDays.length ? `${prettyDate(pastDays[0])} – ${prettyDate(pastDays[pastDays.length - 1])}` : "";
+  return {
+    kind: "weekly-note",
+    slug: `weekly-${opts.todayUTC}`,
+    date: opts.todayUTC,
+    headline: `This week in Wordul${span ? ` — ${span}` : ""}.`,
+    findings,
+    highlights: span ? [{ label: "Span", value: span }] : [],
+    brainNotes: matched,
+    pillars: uniquePillars(matched),
+    published: true,
+    generatedAt,
+  };
+}

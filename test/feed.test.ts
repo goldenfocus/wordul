@@ -1,8 +1,9 @@
 // test/feed.test.ts
 import { describe, expect, it } from "vitest";
-import { buildDailyPost, grayOpenerRate, letterRevealRate, matchBrainNotes } from "../src/feed.ts";
+import { buildDailyPost, buildWeeklyPost, grayOpenerRate, letterRevealRate, matchBrainNotes } from "../src/feed.ts";
 import { BRAIN_NOTES } from "../src/brain-notes.ts";
 import type { SciencePublicDailySummary } from "../src/science.ts";
+import type { ScienceWeeklySummary } from "../src/science.ts";
 import type { World } from "../src/daily-core.ts";
 
 function summary(date: string, over: Partial<SciencePublicDailySummary> = {}): SciencePublicDailySummary {
@@ -124,5 +125,34 @@ describe("editorial overlay", () => {
     expect(withEd.findings).toEqual(plain.findings);     // data block identical
     expect(withEd.highlights).toEqual(plain.highlights);
     expect(withEd.headline).toEqual(plain.headline);
+  });
+});
+
+function weekly(over: Partial<ScienceWeeklySummary> = {}): ScienceWeeklySummary {
+  return {
+    schemaVersion: 1, generatedAt: 0,
+    dates: ["2026-05-28","2026-05-29","2026-05-30","2026-05-31","2026-06-01","2026-06-02","2026-06-03"],
+    totals: { events: 0, roundsStarted: 0, acceptedGuesses: 0, playerFinishes: 700,
+      wins: 420, losses: 240, resigns: 40, powerups: 0, botEvents: 0 },
+    outcomes: { byResult: {}, guessDistribution: { "3": 200, "4": 300, "5": 200 },
+      elapsedMs: { count: 0, sum: 0, min: null, max: null, mean: null },
+      points: { count: 0, sum: 0, min: null, max: null, mean: null } },
+    powerups: { reveal_letter: 0, vowel_count: 0 },
+    daily: [summary("2026-06-02"), summary("2026-06-03")],
+    ...over,
+  };
+}
+
+describe("buildWeeklyPost", () => {
+  it("rolls up the week into an honest, spoiler-safe note (excludes the active day)", () => {
+    const post = buildWeeklyPost(weekly(), BRAIN_NOTES, { todayUTC: "2026-06-03" });
+    expect(post.kind).toBe("weekly-note");
+    expect(post.slug).toBe("weekly-2026-06-03");
+    expect(post.published).toBe(true);
+    const byKind = Object.fromEntries(post.findings.map((f) => [f.kind, f]));
+    expect(byKind.solve_rate.value).toBe(60);   // 420/700
+    expect(byKind.participation.value).toBe(700);
+    // The active day's per-day summary must not contribute a daily breakdown that could spoil today.
+    expect(JSON.stringify(post)).not.toContain("2026-06-03\":{\"word"); // no active-day word block
   });
 });
