@@ -423,6 +423,8 @@ const game = {
   chatCollapsed: false,
   exploding: false,
   reconnectToastTimer: null,
+  reconnectTimer: null, // pending openSocket() after an unintended close
+  socketSession: null,  // { ws, reconnect } — stale close handlers bail when !== this
   heartbeatTimer: null,
   autoStart: false,  // one-shot: "Start playing" auto-begins the solo game on first lobby snapshot
   shareImage: null,  // { file, url, text, canvas } — pre-rendered result card for sharing
@@ -576,11 +578,10 @@ async function showChallenge(id) {
     navigate("/");
     return;
   }
-  game.challengeId = id;
-  game.challengeMeta = meta;
-
   // Stand up the room view (same engine; challenge chrome instead of owner/slug).
   leaveRoom();
+  game.challengeId = id;
+  game.challengeMeta = meta;
   game.owner = meta.owner;
   game.slug = null;
   game.path = null;
@@ -963,9 +964,12 @@ function connect() {
 // challenge path (connectChallenge); reconnect re-opens the SAME url.
 function openSocket(url) {
   const ws = new WebSocket(url);
+  const session = { ws, reconnect: true };
+  game.socketSession = session;
   game.ws = ws;
 
   ws.addEventListener("open", () => {
+    if (game.socketSession !== session) return; // superseded by leaveRoom() / a newer socket
     // Clear any "reconnecting" UI state once we're back.
     clearTimeout(game.reconnectToastTimer);
     game.reconnectToastTimer = null;
@@ -983,6 +987,7 @@ function openSocket(url) {
   });
 
   ws.addEventListener("message", (e) => {
+    if (game.socketSession !== session) return;
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
     if (msg.type === "pong") return; // heartbeat reply — no-op
@@ -990,14 +995,10 @@ function openSocket(url) {
   });
 
   ws.addEventListener("close", () => {
-    // If this socket is no longer the current one, the close was intentional —
-    // leaveRoom() nulled game.ws, or a reconnect/new room already replaced it.
-    // Reconnecting here would resurrect a ZOMBIE socket that streams snapshots
-    // into whatever view is now mounted (home/hub/profile), where the room
-    // scaffold is gone — render() then throws on #lobbyControls. (leaveRoom's
-    // `onclose = null` never stopped this: the reconnect is an addEventListener
-    // listener, not the onclose property.) Bail so leaving a room stays left.
-    if (game.ws !== ws) return;
+    // Stale or intentional close — leaveRoom() cleared socketSession/reconnect, or a
+    // newer socket replaced this one. Reconnecting would resurrect a zombie WS that
+    // streams snapshots into home/hub/profile where the room scaffold is gone.
+    if (game.socketSession !== session || !session.reconnect) return;
     stopHeartbeat();
     setConnectionStatus("reconnecting");
     // Only show the toast if the reconnect actually takes a while. Most close
@@ -1007,7 +1008,11 @@ function openSocket(url) {
       () => toast("Reconnecting…", { duration: 4000 }),
       RECONNECT_TOAST_AFTER_MS,
     );
-    setTimeout(() => openSocket(url), RECONNECT_DELAY_MS);
+    game.reconnectTimer = setTimeout(() => {
+      game.reconnectTimer = null;
+      if (game.socketSession !== session || !session.reconnect) return;
+      openSocket(url);
+    }, RECONNECT_DELAY_MS);
   });
 }
 
@@ -2872,12 +2877,19 @@ function toggleMute() {
 // Tear down any live room connection when leaving a room view.
 function leaveRoom() {
   stopHeartbeat();
-  game.challengeId = null; // drop challenge context (re-set by showChallenge after this)
+  game.challengeId = null;
   game.challengeMeta = null;
   clearPayoutTimers(); // cancel any pending payout/drain so it can't fire off-screen + mutate gold
-  if (game.ws) {
-    try { game.ws.onclose = null; game.ws.close(); } catch {}
+  clearTimeout(game.reconnectToastTimer);
+  game.reconnectToastTimer = null;
+  clearTimeout(game.reconnectTimer);
+  game.reconnectTimer = null;
+  if (game.socketSession) {
+    game.socketSession.reconnect = false;
+    const ws = game.socketSession.ws;
+    game.socketSession = null;
     game.ws = null;
+    try { ws.close(); } catch {}
   }
   clearHeaderIdentity(); // drop the in-room username + gold from the topbar header
   document.body.classList.remove("playing"); // restore full chrome outside a room
