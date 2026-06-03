@@ -67,6 +67,10 @@ export function normalizeWorld(input: unknown): World | null {
   if (!DATE_RE.test(date)) return null;
   const word = typeof o.word === "string" ? o.word.toUpperCase().trim() : "";
   if (!/^[A-Z]+$/.test(word)) return null;
+  // Reject a curator typo / off-board-size word at schedule time so it never produces
+  // an unsolvable day (the word must be a real answer or valid guess for a supported size).
+  const pool = WORDS_BY_SIZE[word.length];
+  if (!pool || !(pool.valid.has(word) || pool.answers.includes(word))) return null;
   const story = (o.story && typeof o.story === "object" ? o.story : {}) as Record<string, unknown>;
   if (typeof story.title !== "string" || typeof story.body !== "string") return null;
   const world: World = {

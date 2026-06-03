@@ -22,7 +22,9 @@ export class Daily extends DurableObject<Env> {
       const date = url.searchParams.get("date") || activeDate(Date.now());
       const state = await this.load();
       const world = resolveWorld(state.schedule, date, Date.now());
-      if (!state.seen.includes(date)) {
+      // Only a date that's reached (≤ today UTC) becomes an archive/sitemap artifact —
+      // a future permalink probe must not pollute the archive (anti gold-farm seeding).
+      if (date <= activeDate(Date.now()) && !state.seen.includes(date)) {
         state.seen.push(date);
         await this.ctx.storage.put("state", state);
       }

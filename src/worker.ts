@@ -112,7 +112,7 @@ export default {
 
     // Dated permalink — the eternal artifact. /daily/<YYYY-MM-DD>
     const dailyDate = dailyDateFromPathname(url.pathname);
-    if (dailyDate) {
+    if (dailyDate && dailyDate <= activeDate(Date.now())) {
       return injectDailyMeta(env, url, dailyDate);
     }
 
@@ -301,7 +301,7 @@ async function injectDailyMeta(env: Env, url: URL, date: string): Promise<Respon
     .on('[data-meta="og:description"]', new AttrSetter("content", meta.description))
     .on('[data-meta="canonical"]', new AttrSetter("href", meta.canonical))
     .on('[data-meta="og:url"]', new AttrSetter("content", meta.canonical))
-    .on('[data-daily-jsonld]', new TextSetter(jsonld))
+    .on('[data-daily-jsonld]', new RawHtmlSetter(jsonld.replace(/</g, "\\u003c")))
     .on('[data-daily-prose]', new RawHtmlSetter(prose))
     .transform(shell);
 }
