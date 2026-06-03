@@ -10,12 +10,15 @@ import { activeDate } from "./daily-core.ts";
 import type { World } from "./daily-core.ts";
 import { buildDailyMeta, buildDailyJsonLd, dailyPrevNext, dailyDateFromPathname, dailySitemapUrls } from "./daily-seo.ts";
 import { buildWeeklyScienceSummary, type SciencePublicDailySummary } from "./science.ts";
+import { buildDailyPost, buildWeeklyPost, type FeedPost } from "./feed.ts";
+import { BRAIN_NOTES } from "./brain-notes.ts";
 export { Room, User, Challenge, Daily, Science };
 
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;
 const CHALLENGE_RE = /^\/c\/([0-9A-Za-z]{5})$/;
 const SCIENCE_DAILY_RE = /^\/api\/science\/daily\/(\d{4}-\d{2}-\d{2})(?:\.json)?$/;
+const FEED_DATE_RE = /^\/feed\/(\d{4}-\d{2}-\d{2})(?:\.json)?$/;
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -138,6 +141,22 @@ export default {
       return scienceWeekly(env);
     }
 
+    // Living Lab Feed — JSON-first (the honest AI/science surface).
+    if (url.pathname === "/feed.json") {
+      const posts = await feedStream(env);
+      return Response.json({ generatedAt: Date.now(), posts }, { headers: { "cache-control": "public, max-age=300" } });
+    }
+    if (url.pathname === "/feed/weekly.json") {
+      return Response.json(await feedWeeklyPost(env), { headers: { "cache-control": "public, max-age=300" } });
+    }
+    const feedJsonMatch = url.pathname.match(FEED_DATE_RE);
+    if (feedJsonMatch && url.pathname.endsWith(".json") && req.method === "GET") {
+      const post = await feedDailyPost(env, feedJsonMatch[1]);
+      // A still-active day's post is not published — return 404 rather than a teaser blob to tools.
+      if (!post.published) return new Response("not yet", { status: 404 });
+      return Response.json(post, { headers: { "cache-control": "public, max-age=300" } });
+    }
+
     // Legacy redirect: /r or /r/<code> -> home (rooms are owner-nested now).
     if (url.pathname === "/r" || url.pathname.startsWith("/r/")) {
       return Response.redirect(url.origin + "/", 301);
@@ -248,6 +267,40 @@ function withJsonCache(res: Response, maxAge: number): Response {
   headers.set("content-type", "application/json; charset=utf-8");
   headers.set("cache-control", `public, max-age=${maxAge}`);
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+async function fetchSummary(env: Env, date: string, today: string): Promise<SciencePublicDailySummary> {
+  const includeWords = date < today;
+  const stub = env.SCIENCE.get(env.SCIENCE.idFromName(date));
+  const res = await stub.fetch(`https://do/summary?date=${date}&includeWords=${includeWords ? "1" : "0"}`);
+  return (await res.json()) as SciencePublicDailySummary;
+}
+
+async function fetchWorld(env: Env, date: string): Promise<World> {
+  const res = await env.DAILY.get(env.DAILY.idFromName("daily")).fetch(`https://do/resolve?date=${date}`);
+  return (await res.json()) as World;
+}
+
+async function feedDailyPost(env: Env, date: string): Promise<FeedPost> {
+  const today = activeDate(Date.now());
+  const [summary, world] = await Promise.all([fetchSummary(env, date, today), fetchWorld(env, date)]);
+  return buildDailyPost(summary, world, BRAIN_NOTES, { todayUTC: today });
+}
+
+async function feedWeeklyPost(env: Env): Promise<FeedPost> {
+  const today = activeDate(Date.now());
+  const dates = Array.from({ length: 7 }, (_, i) => shiftDate(today, -6 + i));
+  const daily = await Promise.all(dates.map((d) => fetchSummary(env, d, today)));
+  const weekly = buildWeeklyScienceSummary(daily, Date.now());
+  return buildWeeklyPost(weekly, BRAIN_NOTES, { todayUTC: today });
+}
+
+/** The published stream: the last `days` PAST days, newest first, published only. */
+async function feedStream(env: Env, days = 14): Promise<FeedPost[]> {
+  const today = activeDate(Date.now());
+  const dates = Array.from({ length: days }, (_, i) => shiftDate(today, -1 - i)); // yesterday backwards
+  const posts = await Promise.all(dates.map((d) => feedDailyPost(env, d).catch(() => null)));
+  return posts.filter((p): p is FeedPost => !!p && p.published);
 }
 
 async function injectMeta(
