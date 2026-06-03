@@ -48,8 +48,13 @@ npm run deploy
 | 2026-06-03 10:08 | claude (daily crash fix) | render()-guard (#boards) + zombie-WS reconnect fix for "leave daily → boom, zero rows" → prod (2b4c872) | 0dd32227 (superseded↓) | ✅ |
 | 2026-06-03 ~10:10 | (concurrent session) | challenge ctx + session-based intentional WS teardown — converged: KEPT my render-guard, replaced my reconnect-guard with `socketSession`/`session.reconnect` → prod (3a07553) | 3a07553 deploy | ✅ |
 | 2026-06-03 15:53 | claude (home redesign) | 🚫 deploy BLOCKED by err 10097 — see alert below. `main` (`8c3ecfc`, home launcher) is **gauntlet-green and waiting**. NOT deployed. | — | ⏸️ held |
+| 2026-06-03 17:11 | claude (living-lab-feed) | 🔒 deploying — Arena v6 now merged to `main` (`f786888`, matches prod). Shipping waiting home launcher + home-hub fix + **Living Lab Feed** on top → prod. Tree = origin/main + 11 feed commits, 326 tests green. | — | 🔒 deploying |
 
 > Benign collision: both sessions fixed the same daily-leave crash within ~2 min. Final prod `3a07553` carries **both** defenses (render `#boards` guard + session teardown). NOTE: local `main` checkout is stale/orphaned at `bde11dd` (never on origin/main) — origin/main + prod are the truth.
+
+## ✅ RESOLVED (2026-06-03 17:11 UTC): Arena merged to `main`; block cleared
+
+Arena was merged to `main` (now `f786888`): `src/arena.ts` + `ARENA` DO binding + the **`v6`** migration tag (`new_sqlite_classes ["Arena"]`) are all on `origin/main`, so `main` now matches prod's migration state — `wrangler deploy` from `main` no longer hits err 10097. The living-lab-feed session is shipping the integrated tree (Arena v6 + held home launcher + Living Lab Feed) in one deploy. Original block below for history.
 
 ## 🚨 OPEN: prod migration state is AHEAD of `main` — every `main` deploy is blocked (2026-06-03)
 
