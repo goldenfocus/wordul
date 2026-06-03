@@ -95,6 +95,22 @@ export function buildDailyPost(
   };
 }
 
+/** Share (%) of opening guesses that hit nothing (all gray), or null if no opener data. */
+export function grayOpenerRate(s: SciencePublicDailySummary): number | null {
+  const g1 = s.guesses["1"];
+  if (!g1 || g1.count <= 0) return null;
+  return Math.round((g1.grayOnly / g1.count) * 100);
+}
+
+/** Share (%) of finishes that revealed a letter, from the reveal-hint histogram, or null. */
+export function letterRevealRate(s: SciencePublicDailySummary): number | null {
+  const hist = s.hintUsage.revealHints;
+  const total = Object.values(hist).reduce((a, b) => a + b, 0);
+  if (total <= 0) return null;
+  const hinted = Object.entries(hist).reduce((a, [k, v]) => (k === "0" ? a : a + v), 0);
+  return Math.round((hinted / total) * 100);
+}
+
 function buildDailyFindings(s: SciencePublicDailySummary): Finding[] {
   const finishes = s.totals.playerFinishes;
   const out: Finding[] = [];
@@ -107,6 +123,16 @@ function buildDailyFindings(s: SciencePublicDailySummary): Finding[] {
   if (median != null) out.push({ kind: "median_guesses", value: median, display: String(median), text: `The middle player solved it in ${median} guesses.` });
 
   out.push({ kind: "participation", value: finishes, display: String(finishes), text: `${finishes} players finished the day.` });
+
+  const firstTry = s.outcomes.guessDistribution["1"] ?? 0;
+  if (firstTry > 0) out.push({ kind: "first_try_solves", value: firstTry, display: String(firstTry), text: `${firstTry} nailed it on the very first guess.` });
+
+  const gray = grayOpenerRate(s);
+  if (gray != null) out.push({ kind: "gray_opener_rate", value: gray, display: `${gray}%`, text: `${gray}% of opening guesses lit up nothing at all.` });
+
+  const reveal = letterRevealRate(s);
+  if (reveal != null) out.push({ kind: "letter_reveal_rate", value: reveal, display: `${reveal}%`, text: `${reveal}% spent gold to reveal a letter.` });
+
   return out;
 }
 
