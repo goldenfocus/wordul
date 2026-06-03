@@ -80,6 +80,48 @@ export default {
       return sitemap(env, url.origin);
     }
 
+    // Bare /daily -> today's dated permalink (the daily lives at the date; "/" is the hub).
+    if (url.pathname === "/daily") {
+      return Response.redirect(url.origin + "/daily/" + activeDate(Date.now()), 302);
+    }
+
+    // Admin seed: POST /daily/schedule (Bearer token; closed/401 when DAILY_ADMIN_TOKEN unset).
+    if (url.pathname === "/daily/schedule" && req.method === "POST") {
+      const auth = req.headers.get("Authorization") ?? "";
+      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+      if (!env.DAILY_ADMIN_TOKEN || token !== env.DAILY_ADMIN_TOKEN) {
+        return new Response("unauthorized", { status: 401 });
+      }
+      const stub = env.DAILY.get(env.DAILY.idFromName("daily"));
+      return stub.fetch(new Request("https://do/schedule", {
+        method: "POST",
+        body: await req.text(),
+        headers: { "content-type": "application/json" },
+      }));
+    }
+
+    // Archive index.
+    if (url.pathname === "/daily/archive") {
+      const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+      return new HTMLRewriter()
+        .on('[data-meta="title"]', new TextSetter("Wordul Daily — Archive"))
+        .on('[data-meta="description"]', new AttrSetter("content", "Every Wordul of the Day — the whole archive, one word at a time."))
+        .on('[data-meta="canonical"]', new AttrSetter("href", url.origin + "/daily/archive"))
+        .transform(shell);
+    }
+
+    // Dated permalink — the eternal artifact. /daily/<YYYY-MM-DD>
+    const dailyDate = dailyDateFromPathname(url.pathname);
+    if (dailyDate) {
+      return injectDailyMeta(env, url, dailyDate);
+    }
+
+    // Public dates list (powers the archive UI).
+    if (url.pathname === "/api/daily/dates") {
+      const stub = env.DAILY.get(env.DAILY.idFromName("daily"));
+      return stub.fetch(new Request("https://do/dates", { method: "GET" }));
+    }
+
     // Legacy redirect: /r or /r/<code> -> home (rooms are owner-nested now).
     if (url.pathname === "/r" || url.pathname.startsWith("/r/")) {
       return Response.redirect(url.origin + "/", 301);
