@@ -3,6 +3,7 @@ import { User } from "./user.ts";
 import { Challenge } from "./challenge.ts";
 import { Daily } from "./daily.ts";
 import { Science } from "./science-object.ts";
+import { Arena } from "./arena.ts";
 import { makeChallengeId } from "./challenge-core.ts";
 import type { Env } from "./types.ts";
 import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts";
@@ -10,7 +11,7 @@ import { activeDate } from "./daily-core.ts";
 import type { World } from "./daily-core.ts";
 import { buildDailyMeta, buildDailyJsonLd, dailyPrevNext, dailyDateFromPathname, dailySitemapUrls } from "./daily-seo.ts";
 import { buildWeeklyScienceSummary, type SciencePublicDailySummary } from "./science.ts";
-export { Room, User, Challenge, Daily, Science };
+export { Room, User, Challenge, Daily, Science, Arena };
 
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;
@@ -49,6 +50,13 @@ export default {
       const upstream = new URL(req.url);
       upstream.searchParams.set("room", canonical);
       return stub.fetch(new Request(upstream.toString(), req));
+    }
+
+    // Arena Open-Games index (public read). Exact-equality match — avoids the endsWith
+    // shadow class. Singleton coordinator DO keyed by idFromName("arena").
+    if (url.pathname === "/api/arena/open" && req.method === "GET") {
+      const stub = env.ARENA.get(env.ARENA.idFromName("arena"));
+      return stub.fetch(new Request("https://do/open", { method: "GET" }));
     }
 
     // Profile JSON API: /api/user/<name>
