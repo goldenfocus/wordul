@@ -330,12 +330,17 @@ async function feedWeeklyPost(env: Env): Promise<FeedPost> {
   return buildWeeklyPost(weekly, BRAIN_NOTES, { todayUTC: today });
 }
 
-/** The published stream: the last `days` PAST days, newest first, published only. */
+/** The published stream: the last `days` PAST days, newest first. Only days that are
+ *  published AND carry at least one finding surface here — a zero-participation past day
+ *  would otherwise show as an empty post in the stream, RSS, and sitemap. A per-day fetch
+ *  failure is logged (not silently dropped) so an outage is distinguishable from "no data". */
 async function feedStream(env: Env, days = 14): Promise<FeedPost[]> {
   const today = activeDate(Date.now());
   const dates = Array.from({ length: days }, (_, i) => shiftDate(today, -1 - i)); // yesterday backwards
-  const posts = await Promise.all(dates.map((d) => feedDailyPost(env, d).catch(() => null)));
-  return posts.filter((p): p is FeedPost => !!p && p.published);
+  const posts = await Promise.all(
+    dates.map((d) => feedDailyPost(env, d).catch((e) => { console.error("feed day failed", d, e); return null; })),
+  );
+  return posts.filter((p): p is FeedPost => !!p && p.published && p.findings.length > 0);
 }
 
 function feedRss(posts: FeedPost[], origin: string): string {
