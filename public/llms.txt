@@ -16,7 +16,17 @@
 - Editions reskin the game (Wordul, Editorial, Yang's Table, Tactile, Arcade, Jackpot, Tin Bot); rules are the same across all.
 - Full guide: https://wordul.com/how-to-play
 
+## Wordul of the Day
+- The home page (`/`) is the hub — it surfaces today's curated puzzle plus your gold, streak, and live rooms.
+- The Wordul of the Day is one curated word for the whole world, rolling over at 00:00 UTC. Today's puzzle lives at `/daily/<today>` (e.g. `/daily/2026-06-02`).
+- Every day has an eternal permalink at `/daily/<YYYY-MM-DD>` — the board, the story behind the word, the leaderboard, and the chat for that day.
+- The full archive of every past day is at `/daily/archive`.
+
 ## Key URLs
+- Home (hub): `/`
+- Wordul of the Day (today): `/daily/<today>`
+- A specific day (eternal permalink): `/daily/<YYYY-MM-DD>` (e.g. `/daily/2026-06-02`)
+- Daily archive (every past day): `/daily/archive`
 - How to play (full guide): `/how-to-play`
 - Profile + lifetime stats: `/@<username>` (e.g. `/@yan`)
 - Game room: `/@<username>/<room-name>` (e.g. `/@yan/friday-night`)

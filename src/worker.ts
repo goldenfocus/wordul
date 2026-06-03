@@ -182,6 +182,16 @@ async function sitemap(env: Env, origin: string): Promise<Response> {
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
 
+  // Daily surface: home, archive, and every known date (best-effort — a DAILY hiccup
+  // must not 500 the sitemap).
+  try {
+    const res = await env.DAILY.get(env.DAILY.idFromName("daily")).fetch("https://do/dates");
+    if (res.ok) {
+      const { dates } = (await res.json()) as { dates: string[] };
+      urls.push(...dailySitemapUrls(dates, origin));
+    }
+  } catch { /* skip daily urls */ }
+
   const body =
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
     urls.map((u) => `  <url><loc>${u}</loc></url>`).join("\n") +
