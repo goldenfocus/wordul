@@ -212,6 +212,52 @@ async function injectMeta(
     .transform(shell);
 }
 
+// Serve the SPA shell themed for a daily date: meta + JSON-LD + crawlable story
+// prose + prev/next links injected. `date` is a validated YYYY-MM-DD.
+async function injectDailyMeta(env: Env, url: URL, date: string): Promise<Response> {
+  let world: World | null = null;
+  try {
+    const res = await env.DAILY.get(env.DAILY.idFromName("daily")).fetch(`https://do/resolve?date=${date}`);
+    if (res.ok) world = (await res.json()) as World;
+  } catch { /* degrade to default meta below */ }
+
+  const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+  if (!world) {
+    // DAILY unavailable — still serve a sane shell with a self canonical.
+    return new HTMLRewriter()
+      .on('[data-meta="title"]', new TextSetter("Wordul of the Day"))
+      .on('[data-meta="canonical"]', new AttrSetter("href", `${url.origin}/daily/${date}`))
+      .transform(shell);
+  }
+
+  const meta = buildDailyMeta(date, world, url.origin);
+  const jsonld = JSON.stringify(buildDailyJsonLd(date, world, url.origin));
+  const { prev, next } = dailyPrevNext(date);
+  const prose =
+    `<h1>${escapeHtml(meta.title)}</h1>` +
+    `<h2>${escapeHtml(world.story.title)}</h2>` +
+    `<p>${escapeHtml(world.story.body)}</p>` +
+    (world.story.tip ? `<p><em>${escapeHtml(world.story.tip)}</em></p>` : "") +
+    `<nav><a href="${url.origin}/daily/${prev}">← ${prev}</a> · ` +
+    `<a href="${url.origin}/daily/archive">archive</a> · ` +
+    `<a href="${url.origin}/daily/${next}">${next} →</a></nav>`;
+
+  return new HTMLRewriter()
+    .on('[data-meta="title"]', new TextSetter(meta.title))
+    .on('[data-meta="og:title"]', new AttrSetter("content", meta.title))
+    .on('[data-meta="description"]', new AttrSetter("content", meta.description))
+    .on('[data-meta="og:description"]', new AttrSetter("content", meta.description))
+    .on('[data-meta="canonical"]', new AttrSetter("href", meta.canonical))
+    .on('[data-meta="og:url"]', new AttrSetter("content", meta.canonical))
+    .on('[data-daily-jsonld]', new TextSetter(jsonld))
+    .on('[data-daily-prose]', new RawHtmlSetter(prose))
+    .transform(shell);
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 class TextSetter {
   constructor(private content: string) {}
   element(el: Element) { el.setInnerContent(this.content); }
@@ -220,4 +266,9 @@ class TextSetter {
 class AttrSetter {
   constructor(private attr: string, private value: string) {}
   element(el: Element) { el.setAttribute(this.attr, this.value); }
+}
+
+class RawHtmlSetter {
+  constructor(private html: string) {}
+  element(el: Element) { el.setInnerContent(this.html, { html: true }); }
 }
