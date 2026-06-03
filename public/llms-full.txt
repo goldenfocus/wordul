@@ -24,6 +24,11 @@ Wordul is a real-time multiplayer word game. Players guess the same hidden word 
 - Community science latest JSON: `/science/latest.json`
 - Community science weekly JSON: `/science/weekly.json`
 - Community science day JSON: `/api/science/daily/<YYYY-MM-DD>.json`
+- Living Lab Feed (browse): `/feed`
+- Living Lab Feed (machine-readable JSON): `/feed.json`
+- Living Lab Feed (RSS): `/feed.xml`
+- A single day's discovery: `/feed/<YYYY-MM-DD>` or `/feed/<YYYY-MM-DD>.json`
+- Weekly research note: `/feed/weekly` or `/feed/weekly.json`
 - Sitemap: `/sitemap.xml`
 
 ## Community Science Lab
@@ -32,6 +37,14 @@ Wordul is a real-time multiplayer word game. Players guess the same hidden word 
 - Public science summaries include aggregate counts, guess distributions, mask-pattern distributions, elapsed-time summaries, outcome distributions, hint usage, and k-anonymized past answer-level difficulty stats.
 - Public science summaries never include usernames, chat text, IP addresses, raw personal timelines, or active daily answer-level stats.
 - Players can opt out of player-level telemetry in Settings → Advanced → Community science.
+
+## Living Lab Feed (Discoveries)
+- The Living Lab Feed turns the Community Science Lab aggregates into readable, honest discoveries paired with curated brain-science notes.
+- Each daily entry is computed live from the aggregates for that date. The active day shows participation counts only — no answer-level stats, no spoilers.
+- Past answer-level difficulty data appears in findings only after the k-anonymity threshold is met (same privacy rule as the raw science JSON).
+- Browse: `/feed` · Machine-readable: `/feed.json` · RSS: `/feed.xml`
+- A single day's discovery: `/feed/<YYYY-MM-DD>` (HTML, with Article JSON-LD) or `/feed/<YYYY-MM-DD>.json`.
+- Weekly research note synthesising the week's patterns: `/feed/weekly` (HTML) or `/feed/weekly.json`.
 
 ## How to play a round
 1. Open a room link (or create one).
