@@ -53,6 +53,10 @@ export type ChatEntry =
   | { kind: "user"; from: string; text: string; t: number }
   | { kind: "system"; text: string; t: number };
 
+// Server-only marker stamped on a seeded (bot-hosted) room. NEVER reaches a client:
+// snapshotFor (Slice C) shadows it with `seed: undefined` on the outbound projection.
+export type SeedMarker = { personaId: string; profile: "noob" };
+
 export type RoomSnapshot = {
   path: string;            // "<owner>/<slug>" — immutable canonical DO key
   owner: string;           // owner username
@@ -77,6 +81,7 @@ export type RoomSnapshot = {
   isDaily?: boolean;       // async one-shot, locked word, no resets, per-player scoring
   story?: { title: string; body: string; tip?: string } | null; // World story for the unlock
   voice?: string;          // World companion voice id (forward-compat; client still defaults)
+  seed?: SeedMarker;       // INTERNAL ONLY — present on seeded bot rooms; stripped outbound (Slice C)
 };
 
 export type ClientMessage =
