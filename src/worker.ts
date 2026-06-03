@@ -255,6 +255,13 @@ async function sitemap(env: Env, origin: string): Promise<Response> {
     }
   } catch { /* skip daily urls */ }
 
+  // Living Lab Feed surface (best-effort — must not 500 the sitemap).
+  urls.push(origin + "/feed", origin + "/feed.xml", origin + "/feed.json", origin + "/feed/weekly");
+  try {
+    const posts = await feedStream(env, 60);
+    for (const p of posts) urls.push(`${origin}/feed/${p.slug}`);
+  } catch { /* skip feed urls */ }
+
   const body =
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
     urls.map((u) => `  <url><loc>${u}</loc></url>`).join("\n") +

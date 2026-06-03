@@ -30,6 +30,11 @@
 - Community science latest JSON: `/science/latest.json`
 - Community science weekly JSON: `/science/weekly.json`
 - Community science day JSON: `/api/science/daily/<YYYY-MM-DD>.json`
+- Living Lab Feed (browse): `/feed`
+- Living Lab Feed (machine-readable JSON): `/feed.json`
+- Living Lab Feed (RSS): `/feed.xml`
+- A single day's discovery: `/feed/<YYYY-MM-DD>` or `/feed/<YYYY-MM-DD>.json`
+- Weekly research note: `/feed/weekly` or `/feed/weekly.json`
 - How to play (full guide): `/how-to-play`
 - Profile + lifetime stats: `/@<username>` (e.g. `/@yan`)
 - Game room: `/@<username>/<room-name>` (e.g. `/@yan/friday-night`)
@@ -40,6 +45,13 @@
 - Public science JSON does not include usernames, chat text, IP addresses, raw personal timelines, or active daily answer-level stats.
 - Past answer-level difficulty stats are released only when k-anonymity is met.
 - Players can disable player-level contribution with the Community science setting.
+
+## Living Lab Feed (Discoveries)
+- The Living Lab Feed turns the science aggregates into readable, honest discoveries paired with curated brain-science notes.
+- Browse: `/feed` · Machine-readable: `/feed.json` · RSS: `/feed.xml`
+- A single day's discovery: `/feed/<YYYY-MM-DD>` (HTML, with Article JSON-LD) or `/feed/<YYYY-MM-DD>.json`.
+- Weekly research note: `/feed/weekly` (HTML) or `/feed/weekly.json`.
+- Every finding is computed live from the aggregates; the active day shows participation only (no answer-level stats, no spoilers).
 
 ## Site
 - Home: https://wordul.com
