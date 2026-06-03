@@ -81,7 +81,10 @@
 
 <main id="app">
   <!-- Screens injected by app.js -->
-  <noscript><div data-daily-prose></div></noscript>
+  <!-- Crawlable daily prose: HTMLRewriter fills this for /daily/<date> (hidden from users;
+       the SPA replaces #app on boot). NOT wrapped in <noscript> — HTMLRewriter parses
+       noscript contents as raw text, so a selector inside it would never match. -->
+  <div data-daily-prose hidden></div>
 </main>
 
 <!-- Templates -->
