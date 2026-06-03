@@ -2521,3 +2521,39 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
   .daily-bridge-btn { animation: none !important; }
   .daily-bridge-btn:hover { transform: none !important; }
 }
+
+/* --- The Living Lab reader (in-app blog-style discoveries) --- */
+.lab-screen { display: flex; flex-direction: column; gap: 14px; padding: 18px 16px 32px; max-width: 680px; margin: 0 auto; width: 100%; }
+.lab-back { align-self: flex-start; }
+.lab-head { display: flex; flex-direction: column; gap: 4px; }
+.lab-title { font-family: var(--font-display); font-size: clamp(1.8rem, 6vw, 2.6rem); margin: 0; }
+.lab-sub { margin: 0; max-width: 46ch; }
+.lab-body { display: flex; flex-direction: column; gap: 14px; }
+.lab-empty { padding: 28px 4px; text-align: center; }
+
+.lab-card { display: flex; flex-direction: column; gap: 8px; padding: 18px 18px 16px; border: 1px solid var(--border); border-radius: 18px; background: var(--bg-card); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); text-decoration: none; color: var(--fg); transition: transform .18s ease, border-color .18s ease; }
+.lab-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+.lab-card-title { font-family: var(--font-display); font-size: 1.25rem; line-height: 1.25; margin: 0; }
+.lab-card-intro { margin: 0; color: var(--muted); line-height: 1.5; }
+.lab-more { font-size: .85rem; color: var(--accent); font-weight: 600; }
+
+.lab-pillars { display: flex; flex-wrap: wrap; gap: 6px; }
+.lab-pillar { font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+.lab-pillar[data-pillar="mind"] { color: #9d8bff; border-color: #9d8bff55; }
+.lab-pillar[data-pillar="body"] { color: #6fcf97; border-color: #6fcf9755; }
+.lab-pillar[data-pillar="spirit"] { color: #d8c97a; border-color: #d8c97a55; }
+.lab-pillar[data-pillar="soul"] { color: #e08bb8; border-color: #e08bb855; }
+
+.lab-post { display: flex; flex-direction: column; gap: 16px; }
+.lab-post-title { font-family: var(--font-display); font-size: clamp(1.5rem, 5vw, 2.1rem); line-height: 1.2; margin: 0; }
+.lab-post-intro { font-size: 1.05rem; line-height: 1.6; color: var(--fg); margin: 0; }
+.lab-findings { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 6px; color: var(--fg); line-height: 1.5; }
+.lab-note { border-left: 3px solid var(--accent); background: var(--bg-card); border-radius: 0 12px 12px 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.lab-note[data-pillar="body"] { border-left-color: #6fcf97; }
+.lab-note[data-pillar="spirit"] { border-left-color: #d8c97a; }
+.lab-note[data-pillar="soul"] { border-left-color: #e08bb8; }
+.lab-note-title { font-family: var(--font-display); font-size: 1rem; margin: 0; }
+.lab-note p { margin: 0; line-height: 1.5; color: var(--fg); }
+.lab-note cite { font-size: .8rem; color: var(--muted); font-style: normal; }
+
+.lab-entry { display: inline-block; margin-top: 8px; color: var(--accent); font-weight: 600; }

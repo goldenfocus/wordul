@@ -14,6 +14,7 @@ import { getSettings, saveSettings, applySettings, openSettings, openHub } from 
 import { buildShareCardModel, renderShareCard } from "/share-card.js";
 import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
 import { computeDailyStatsView } from "/daily-stats.js";
+import { computeFeedStreamView, computeFeedPostView } from "/feed.js";
 import { EDITIONS, getEdition } from "/editions/index.js";
 import { MODES, isAvailableMode } from "/modes.js";
 import { t, initLang } from "/i18n.js";
@@ -82,6 +83,9 @@ function parseRoute() {
   const daily = location.pathname.match(/^\/daily\/(\d{4}-\d{2}-\d{2})$/);
   if (daily) return { kind: "daily", date: daily[1] };
   if (location.pathname === "/daily") return { kind: "daily", date: todayUTC() };
+  if (location.pathname === "/feed") return { kind: "feed" };
+  const feedPost = location.pathname.match(/^\/feed\/(\d{4}-\d{2}-\d{2})$/);
+  if (feedPost) return { kind: "feed-post", date: feedPost[1] };
   const room = location.pathname.match(ROOM_RE);
   if (room) return { kind: "room", owner: room[1], slug: room[2] };
   const prof = location.pathname.match(PROFILE_RE);
@@ -797,9 +801,11 @@ async function showDailyStats(date) {
       <p class="daily-stats-studio">${ed.name} <span class="muted">· from the Studio</span></p>
       <p class="daily-stats-glow">${glow}</p>
     </header>
-    <div class="daily-stats-body" id="dailyStatsBody"><p class="muted small">Loading today's numbers…</p></div>`;
+    <div class="daily-stats-body" id="dailyStatsBody"><p class="muted small">Loading today's numbers…</p></div>
+    <a href="/feed" class="link lab-entry" id="dailyLabLink">🧠 See what the lab learned →</a>`;
   app.appendChild(screen);
   $("#dailyStatsBack").addEventListener("click", (e) => { e.preventDefault(); navigate("/"); });
+  $("#dailyLabLink").addEventListener("click", (e) => { e.preventDefault(); navigate("/feed"); });
   let summary = null;
   try {
     const res = await fetch(`/api/science/daily/${date}`);
@@ -833,6 +839,116 @@ function renderDailyStatsBody(summary) {
     <h2 class="daily-stats-sub">Guess distribution</h2>
     <div class="ddist">${rows || '<p class="muted small">No solves yet.</p>'}</div>
     <p class="daily-stats-foot muted small">Failed today: ${fmt(v.losses)} · Top-10 leaderboard coming soon.</p>`;
+}
+
+// The Living Lab reader — human-readable, blog-style discoveries over the same
+// /feed.json the worker serves crawlers. Built with textContent (XSS-safe), so the
+// admin editorial intro and authored notes can't inject markup. View-models live in
+// feed.js (unit-tested); these functions just fetch + paint into #app.
+function showFeed() {
+  document.title = "Wordul — The Living Lab";
+  const app = $("#app");
+  app.innerHTML = "";
+  document.body.classList.remove("hub-home");
+  const screen = document.createElement("section");
+  screen.className = "screen lab-screen";
+  const back = document.createElement("a");
+  back.href = "/"; back.className = "link lab-back"; back.textContent = "← Home";
+  back.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); });
+  const head = document.createElement("header");
+  head.className = "lab-head";
+  const kicker = document.createElement("span"); kicker.className = "daily-kicker"; kicker.textContent = "The Living Lab";
+  const h1 = document.createElement("h1"); h1.className = "lab-title"; h1.textContent = "Discoveries";
+  const sub = document.createElement("p"); sub.className = "lab-sub muted"; sub.textContent = "Honest, privacy-preserving notes on how we all play — one day at a time.";
+  head.append(kicker, h1, sub);
+  const body = document.createElement("div"); body.className = "lab-body"; body.id = "labBody";
+  const loading = document.createElement("p"); loading.className = "muted small"; loading.textContent = "Loading the latest discoveries…";
+  body.appendChild(loading);
+  screen.append(back, head, body);
+  app.appendChild(screen);
+  loadFeedStream();
+}
+
+async function loadFeedStream() {
+  let feed = null;
+  try { const res = await fetch("/feed.json"); if (res.ok) feed = await res.json(); } catch (_) { /* offline → empty state */ }
+  if (parseRoute().kind !== "feed") return; // navigated away mid-fetch
+  const body = $("#labBody"); if (!body) return;
+  const v = computeFeedStreamView(feed);
+  body.innerHTML = "";
+  if (v.empty) {
+    const empty = document.createElement("p");
+    empty.className = "muted lab-empty";
+    empty.textContent = "The lab hasn't published a discovery yet — play a few days and check back.";
+    body.appendChild(empty);
+    return;
+  }
+  for (const card of v.cards) {
+    const a = document.createElement("a");
+    a.className = "lab-card"; a.href = "/feed/" + card.date;
+    a.addEventListener("click", (e) => { e.preventDefault(); navigate("/feed/" + card.date); });
+    const h = document.createElement("h2"); h.className = "lab-card-title"; h.textContent = card.title; a.appendChild(h);
+    if (card.intro) { const p = document.createElement("p"); p.className = "lab-card-intro"; p.textContent = card.intro; a.appendChild(p); }
+    if (card.pillars && card.pillars.length) {
+      const tags = document.createElement("div"); tags.className = "lab-pillars";
+      for (const pl of card.pillars) { const tg = document.createElement("span"); tg.className = "lab-pillar"; tg.dataset.pillar = pl; tg.textContent = pl; tags.appendChild(tg); }
+      a.appendChild(tags);
+    }
+    const more = document.createElement("span"); more.className = "lab-more"; more.textContent = "Read →"; a.appendChild(more);
+    body.appendChild(a);
+  }
+}
+
+async function showFeedPost(date) {
+  document.title = "Wordul — Lab · " + date;
+  const app = $("#app");
+  app.innerHTML = "";
+  document.body.classList.remove("hub-home");
+  const screen = document.createElement("section");
+  screen.className = "screen lab-screen lab-post-screen";
+  const back = document.createElement("a");
+  back.href = "/feed"; back.className = "link lab-back"; back.textContent = "← The Lab feed";
+  back.addEventListener("click", (e) => { e.preventDefault(); navigate("/feed"); });
+  const body = document.createElement("div"); body.className = "lab-body"; body.id = "labPostBody";
+  const loading = document.createElement("p"); loading.className = "muted small"; loading.textContent = "Loading…";
+  body.appendChild(loading);
+  screen.append(back, body);
+  app.appendChild(screen);
+  let post = null; let status = 0;
+  try { const res = await fetch("/feed/" + date + ".json"); status = res.status; if (res.ok) post = await res.json(); } catch (_) { /* network error → message */ }
+  if (parseRoute().kind !== "feed-post") return; // navigated away mid-fetch
+  renderFeedPostBody(post, status);
+}
+
+function renderFeedPostBody(post, status) {
+  const body = $("#labPostBody"); if (!body) return;
+  body.innerHTML = "";
+  if (!post) {
+    const msg = document.createElement("p");
+    msg.className = "muted lab-empty";
+    msg.textContent = status === 404
+      ? "This day's discovery isn't published yet — today's word is never spoiled. Check back tomorrow."
+      : "Couldn't load this discovery. Please try again in a moment.";
+    body.appendChild(msg);
+    return;
+  }
+  const v = computeFeedPostView(post);
+  const article = document.createElement("article"); article.className = "lab-post";
+  const h1 = document.createElement("h1"); h1.className = "lab-post-title"; h1.textContent = v.title; article.appendChild(h1);
+  if (v.intro) { const intro = document.createElement("p"); intro.className = "lab-post-intro"; intro.textContent = v.intro; article.appendChild(intro); }
+  if (v.findings.length) {
+    const ul = document.createElement("ul"); ul.className = "lab-findings";
+    for (const f of v.findings) { const li = document.createElement("li"); li.textContent = f; ul.appendChild(li); }
+    article.appendChild(ul);
+  }
+  for (const n of v.notes) {
+    const aside = document.createElement("aside"); aside.className = "lab-note"; aside.dataset.pillar = n.pillar || "";
+    const nt = document.createElement("h3"); nt.className = "lab-note-title"; nt.textContent = n.title || ""; aside.appendChild(nt);
+    const np = document.createElement("p"); np.textContent = n.note || ""; aside.appendChild(np);
+    if (n.citation) { const c = document.createElement("cite"); c.textContent = n.citation; aside.appendChild(c); }
+    article.appendChild(aside);
+  }
+  body.appendChild(article);
 }
 
 // Connect the per-player challenge WS — an isolated solo room seeded with the
@@ -3146,6 +3262,8 @@ function renderCrumbs(r) {
     : r.kind === "daily" ? "Daily"
     : r.kind === "daily-stats" ? "Stats"
     : r.kind === "daily-archive" ? "Archive"
+    : r.kind === "feed" ? "Lab"
+    : r.kind === "feed-post" ? "Lab · " + r.date
     : `@${r.username}`;
   nav.hidden = false;
   nav.innerHTML = "";
@@ -3175,6 +3293,8 @@ function route() {
   if (r.kind === "daily") { showDaily(r.date); return; }
   if (r.kind === "daily-stats") { showDailyStats(r.date); return; }
   if (r.kind === "daily-archive") { showDailyArchive(); return; }
+  if (r.kind === "feed") { showFeed(); return; }
+  if (r.kind === "feed-post") { showFeedPost(r.date); return; }
   if (r.kind === "room") {
     if (getUsername()) {
       showRoom(r.owner, r.slug);
