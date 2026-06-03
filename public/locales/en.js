@@ -14,6 +14,7 @@ export const en = {
   "endscreen.goldBreakdown": "Gold breakdown",
   "endscreen.youWon": "🎉 You got it in {n}!",
   "endscreen.someoneWon": "{who} got it first.",
+  "endscreen.outpaced": "{who} beat you to it.",
   "endscreen.nobodyWon": "Nobody got it this time.",
   "endscreen.didYouKnow": "Did you know",
 

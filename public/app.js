@@ -20,6 +20,7 @@ import { MODES, isAvailableMode } from "/modes.js";
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
 import { pickInspire } from "/inspire.js";
+import { lossKind } from "/race-copy.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
 
@@ -2915,7 +2916,17 @@ function openStats(opts = {}) {
     } else if (opts.won && winner && winner === getUsername()) {
       status.textContent = t("endscreen.youWon", { n: opts.lastGuessCount });
     } else if (winner) {
-      status.textContent = t("endscreen.someoneWon", { who: winner });
+      const me = snap.players.find((p) => p.username === getUsername());
+      const kind = me ? lossKind({
+        status: me.status,
+        guessCount: me.guesses?.length ?? 0,
+        maxGuesses: snap.maxGuesses,
+        winner,
+        me: getUsername(),
+      }) : "exhausted";
+      status.textContent = kind === "outpaced"
+        ? t("endscreen.outpaced", { who: winner })
+        : t("endscreen.someoneWon", { who: winner });
     } else {
       status.textContent = t("endscreen.nobodyWon");
     }
