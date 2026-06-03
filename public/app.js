@@ -94,6 +94,8 @@ function mount(tplId) {
   const app = $("#app");
   app.innerHTML = "";
   app.appendChild(tpl.content.cloneNode(true));
+  // Every screen change drops the home-only topbar stats; renderHub re-adds it.
+  document.body.classList.remove("hub-home");
 }
 
 // --- screens ---
@@ -157,9 +159,10 @@ function renderHomeIdentity() {
         return lines[Math.floor(Date.now() / 86400000) % lines.length];
       },
       onPlay: (editionId) => { applyEdition(editionId); navigate("/daily/" + todayUTC()); },
-      renderRecentRooms: (mountEl) => renderRecentRoomsInto(mountEl),
-      onInvite: () => enterNewRoom({ autoStart: false }),
-      openMenu: (anchor) => openHub({ anchor }),
+      onViewDay: () => navigate("/daily/" + todayUTC()),
+      onSolo: () => enterNewRoom({ autoStart: true }),
+      onPvP: () => enterNewRoom({ autoStart: false }),
+      renderRecentRooms: (mountEl) => renderRecentRoomsInto(mountEl, 3),
     };
     fetch(`/api/user/${encodeURIComponent(u)}`)
       .then((r) => (r.ok ? r.json() : {}))
@@ -268,11 +271,11 @@ function buildRoomRows(profile, username) {
 
 // Render homeRoomRows into an arbitrary <ul> mount element (defaults to #roomList).
 // The hub calls this with #hubRoomList so it can embed the list in The Daily panel.
-function renderRecentRoomsInto(mountEl) {
-  renderRoomList(mountEl);
+function renderRecentRoomsInto(mountEl, limit) {
+  renderRoomList(mountEl, limit);
 }
 
-function renderRoomList(mountEl) {
+function renderRoomList(mountEl, limit) {
   const list = mountEl || $("#roomList");
   if (!list) return;
   const rows = homeRoomRows;
@@ -284,7 +287,9 @@ function renderRoomList(mountEl) {
     list.appendChild(li);
     return;
   }
-  const shown = rows.slice(0, homeRoomVisible);
+  // A hard `limit` (the hub) shows exactly N with no "Show more"; the legacy paged
+  // list (#roomList) falls back to homeRoomVisible and keeps its reveal control.
+  const shown = rows.slice(0, limit || homeRoomVisible);
   for (const row of shown) {
     const li = document.createElement("li");
     li.className = "room-row";
@@ -317,8 +322,9 @@ function renderRoomList(mountEl) {
     list.appendChild(li);
   }
   // "Show more" — reveal the next page rather than scrolling a wall of rooms.
+  // Suppressed when a hard `limit` is set (the hub shows exactly N, no reveal).
   const remaining = rows.length - shown.length;
-  if (remaining > 0) {
+  if (!limit && remaining > 0) {
     const more = document.createElement("li");
     more.className = "room-row room-more";
     more.tabIndex = 0;

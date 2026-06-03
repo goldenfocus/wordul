@@ -1,5 +1,6 @@
-// public/hub.js — the Wordul home hub: shell + bottom nav + The Daily landing.
-// Other tabs (Arena/Floor/Feed) are honest stubs in Phase A. Pure helpers live here too.
+// public/hub.js — the Wordul home: identity bar + The Daily launcher.
+// One landing: play today's word, view the day's page, or jump into Solo / Head-to-head.
+// (No tabs — the old Arena/Floor/Feed sections weren't real yet, so we don't tease them.)
 
 // Deterministic featured edition for a given date: rotates through the non-default
 // editions so every day has a "theme of the day" with no server. Same date -> same
@@ -12,47 +13,18 @@ export function dayTheme(date, editionIds) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TASK 3 — Shell render + tab switching + stub panels
+// Shell render — identity bar + The Daily launcher
 // ─────────────────────────────────────────────────────────────────────────────
 
-let activeTab = "daily";
 let hubCallbacks = {};
 
-// Shared, hub-wide state the panels read (set on mount from the profile).
+// Shared, hub-wide state the launcher reads (set on mount from the profile).
 export const hubState = { gold: 0, streak: 0, username: "" };
 
-export function setTab(tab) {
-  activeTab = tab;
-  const content = document.getElementById("hubContent");
-  if (!content) return;
-  content.innerHTML = PANELS[tab] ? PANELS[tab]() : "";
-  document.querySelectorAll(".hub-tab").forEach((b) => {
-    const on = b.dataset.tab === tab;
-    b.classList.toggle("is-active", on);
-    b.setAttribute("aria-selected", on ? "true" : "false");
-  });
-  if (tab === "daily") wireDaily();
-}
-
-function stubPanel(emoji, title, line, extra = "") {
-  return `<section class="hub-panel hub-stub">
-    <div class="stub-emoji">${emoji}</div>
-    <h2 class="stub-title">${title}</h2>
-    <p class="stub-line muted">${line}</p>${extra}
-  </section>`;
-}
-
-const PANELS = {
-  daily: () => renderDaily(),
-  arena: () => stubPanel("⚡", "The Arena", "Live games to join — coming soon."),
-  floor: () => stubPanel("🃏", "The Floor", "Stake tables &amp; buy-ins — coming soon.",
-    `<p class="stub-bankroll">Your bankroll: ◆ <span id="floorGold">${hubState.gold}</span></p>`),
-  feed:  () => stubPanel("👥", "The Feed", "Your friends' games — coming soon.",
-    `<button id="feedInvite" class="btn ghost">＋ Invite friends</button>`),
-};
-
 // callbacks: { username, editions, editionName(id), companionIdleLine(), onPlay(editionId),
-//              renderRecentRooms(mountEl), onInvite(), openMenu(anchor) }
+//              onViewDay(), onSolo(), onPvP(), renderRecentRooms(mountEl) }
+// The avatar/menu is the one persistent topbar avatar (#avatarBtn → showHub), already
+// wired on load — the hub no longer carries its own bar or avatar.
 export function renderHub(profile, callbacks) {
   hubState.gold = (profile && typeof profile.gold === "number") ? profile.gold : 0;
   hubState.streak = profile?.stats?.currentStreak ?? 0;
@@ -61,22 +33,22 @@ export function renderHub(profile, callbacks) {
 
   const hub = document.getElementById("hub");
   if (hub) hub.hidden = false;
+  // Reveal the home-only gold + streak in the persistent topbar (mount() cleared it).
+  document.body.classList.add("hub-home");
   const g = document.getElementById("hubGoldVal");
   const s = document.getElementById("hubStreakVal");
   if (g) g.textContent = String(hubState.gold);
   if (s) s.textContent = String(hubState.streak);
+  // Streak only shows when there IS one — no cold flame sitting at 0.
+  const streakEl = document.getElementById("hubStreak");
+  if (streakEl) streakEl.hidden = hubState.streak <= 0;
 
-  document.querySelectorAll(".hub-tab").forEach((b) =>
-    b.addEventListener("click", () => setTab(b.dataset.tab)));
-  // Note: global topbar has #avatarBtn; hub uses #hubAvatarBtn to avoid duplicate ids.
-  const avatar = document.getElementById("avatarBtn") || document.getElementById("hubAvatarBtn");
-  if (avatar && callbacks.openMenu) avatar.addEventListener("click", () => callbacks.openMenu(avatar));
-
-  setTab("daily");
+  const content = document.getElementById("hubContent");
+  if (content) { content.innerHTML = renderDaily(); wireDaily(); }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TASK 4 — The Daily panel
+// The Daily launcher
 // ─────────────────────────────────────────────────────────────────────────────
 
 function renderDaily() {
@@ -90,16 +62,21 @@ function renderDaily() {
       <h1 class="daily-theme-name">${themeName}</h1>
       <p class="daily-quip muted">${quip}</p>
       <button id="dailyPlay" class="btn primary block hero-btn">▶ Play today's word</button>
+      <button id="dailyView" class="hub-textlink" type="button">View today's page →</button>
     </article>
-    <div class="daily-stats">
-      <span class="stat-card">◆ <strong>${hubState.gold}</strong><span class="muted">Gold</span></span>
-      <span class="stat-card">🔥 <strong>${hubState.streak}</strong><span class="muted">Streak</span></span>
-    </div>
-    <section class="daily-challenges">
-      <span class="section-label">Challenges</span>
-      <div class="challenge-rail">
-        <div class="challenge-card soon">Speed Round<span class="soon-badge">soon</span></div>
-        <div class="challenge-card soon">6-Letter Friday<span class="soon-badge">soon</span></div>
+    <section class="hub-modes">
+      <span class="section-label">Jump in</span>
+      <div class="mode-grid">
+        <button id="modeSolo" class="mode-tile" type="button">
+          <span class="mode-emoji" aria-hidden="true">⚡</span>
+          <span class="mode-name">Solo</span>
+          <span class="mode-sub muted">A fresh word, right now</span>
+        </button>
+        <button id="modePvP" class="mode-tile" type="button">
+          <span class="mode-emoji" aria-hidden="true">👥</span>
+          <span class="mode-name">Head-to-head</span>
+          <span class="mode-sub muted">Race a friend</span>
+        </button>
       </div>
     </section>
     <section class="daily-recent" id="dailyRecent" hidden>
@@ -114,22 +91,16 @@ function wireDaily() {
   const themeId = dayTheme(new Date(), ids.length ? ids : ["default"]);
   const play = document.getElementById("dailyPlay");
   if (play && hubCallbacks.onPlay) play.addEventListener("click", () => hubCallbacks.onPlay(themeId));
+  const view = document.getElementById("dailyView");
+  if (view && hubCallbacks.onViewDay) view.addEventListener("click", () => hubCallbacks.onViewDay());
+  const solo = document.getElementById("modeSolo");
+  if (solo && hubCallbacks.onSolo) solo.addEventListener("click", () => hubCallbacks.onSolo());
+  const pvp = document.getElementById("modePvP");
+  if (pvp && hubCallbacks.onPvP) pvp.addEventListener("click", () => hubCallbacks.onPvP());
   const recent = document.getElementById("dailyRecent");
   const list = document.getElementById("hubRoomList");
   if (recent && list && hubCallbacks.renderRecentRooms) {
     hubCallbacks.renderRecentRooms(list);
     if (list.children.length > 0) recent.hidden = false;
   }
-  const goldEl = document.querySelector("#dailyPanel .stat-card strong");
-  if (goldEl && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) countUp(goldEl, hubState.gold);
-}
-
-function countUp(el, to) {
-  const start = performance.now(), dur = 600, from = 0;
-  function step(now) {
-    const t = Math.min(1, (now - start) / dur);
-    el.textContent = String(Math.round(from + (to - from) * t));
-    if (t < 1) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
 }

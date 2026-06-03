@@ -2114,16 +2114,10 @@ body.playing .room-tabs { display: none; }
 .hub > *:not(.hub-aurora) { position: relative; z-index: 1; }
 
 /* Top bar — glass strip */
-.hub-bar {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 16px;
-  background: rgba(10, 8, 18, 0.45);
-  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-  /* dissolve bottom edge */
-  mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-}
-.hub-bar-stats { display: flex; gap: 16px; align-items: center; }
+/* Home-only identity in the persistent topbar — gold + streak beside the avatar.
+   Hidden by default; body.hub-home reveals it (the hub is up, not in a room). */
+.topbar-stats { display: none; gap: 12px; align-items: center; margin-right: 2px; }
+body.hub-home .topbar-stats { display: flex; }
 
 /* Glowing numerals — NOT chips, NOT pills */
 .hub-stat-glyph {
@@ -2136,46 +2130,8 @@ body.playing .room-tabs { display: none; }
 }
 #hubStreak { color: #ff9a3c; text-shadow: 0 0 12px rgba(255, 154, 60, 0.7), 0 0 28px rgba(255, 154, 60, 0.35); }
 
-/* Hub content area */
-.hub-content { flex: 1; padding: 8px 14px 96px; }
-
-/* Floating glowing nav — NOT a pill bar */
-.hub-nav {
-  position: fixed; left: 0; right: 0; bottom: 0;
-  display: flex;
-  background: rgba(10, 8, 22, 0.55);
-  backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
-  border-top: 1px solid rgba(124, 58, 237, 0.18);
-  /* dissolve top edge into aurora */
-  mask-image: linear-gradient(to top, black 55%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to top, black 55%, transparent 100%);
-  z-index: 5;
-}
-.hub-tab {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
-  background: none; border: 0;
-  color: rgba(255,255,255,0.35);
-  font-size: 11px; padding: 10px 0 14px; cursor: pointer;
-  transition: color 0.2s, text-shadow 0.2s;
-}
-.hub-tab span { font-family: var(--font-body); letter-spacing: 0.03em; }
-.hub-tab.is-active {
-  color: #a78bfa;
-  text-shadow: 0 0 10px rgba(167, 139, 250, 0.8), 0 0 24px rgba(167, 139, 250, 0.4);
-}
-@media (min-width: 720px) {
-  .hub-nav {
-    position: sticky; bottom: 16px;
-    max-width: 480px; margin: 0 auto;
-    /* dissolve all edges on desktop for floating feel */
-    mask-image: radial-gradient(ellipse 90% 100% at 50% 50%, black 55%, transparent 100%);
-    -webkit-mask-image: radial-gradient(ellipse 90% 100% at 50% 50%, black 55%, transparent 100%);
-    border-top: none;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .hub-tab { transition: none !important; }
-}
+/* Hub content area — no fixed nav to clear anymore, so a calm bottom gutter. */
+.hub-content { flex: 1; padding: 8px 14px 40px; }
 
 /* Daily hero — frosted glass panel with dissolved edges */
 .daily-hero {
@@ -2222,22 +2178,16 @@ body.playing .room-tabs { display: none; }
   #dailyPlay { transition: none !important; }
 }
 
-/* Stats row — glowing numerals, NO chips, NO outlines */
-.daily-stats { display: flex; gap: 28px; margin: 18px 0 10px; }
-.stat-card {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
-  /* no background, no border — glowing numerals stand alone */
+/* Secondary hero action — a quiet text link under Play. NOT a second button/pill. */
+.hub-textlink {
+  display: inline-block; margin-top: 12px;
+  background: none; border: 0; padding: 4px 0; cursor: pointer;
+  font-family: var(--font-body); font-size: 13px; letter-spacing: 0.03em;
+  color: rgba(167,139,250,0.85);
+  text-shadow: 0 0 10px rgba(167,139,250,0.35);
+  transition: color 0.18s, text-shadow 0.18s;
 }
-.stat-card strong {
-  font-family: var(--font-display); font-size: 32px; line-height: 1;
-  color: #f0c14b;
-  text-shadow: 0 0 16px rgba(240,193,75,0.8), 0 0 40px rgba(240,193,75,0.35);
-}
-.stat-card:nth-child(2) strong {
-  color: #ff9a3c;
-  text-shadow: 0 0 16px rgba(255,154,60,0.8), 0 0 40px rgba(255,154,60,0.35);
-}
-.stat-card .muted { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: 0.5; }
+.hub-textlink:hover { color: #c4b5fd; text-shadow: 0 0 14px rgba(167,139,250,0.6); }
 
 /* Section labels */
 .section-label {
@@ -2245,40 +2195,32 @@ body.playing .room-tabs { display: none; }
   color: rgba(167,139,250,0.6);
 }
 
-/* Challenges */
-.daily-challenges, .daily-recent { margin-top: 22px; display: block; }
-.challenge-rail { display: flex; gap: 10px; overflow-x: auto; padding: 8px 0; }
-.challenge-card {
-  position: relative; min-width: 130px; padding: 16px;
-  border-radius: 16px;
+/* "Jump in" modes + Recent share the same vertical rhythm. */
+.hub-modes, .daily-recent { margin-top: 24px; display: block; }
+.mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+/* Glass tiles — dissolved edges, soft radius. NOT pills, NOT hard chips. */
+.mode-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 16px 16px 18px; text-align: left; cursor: pointer;
+  border-radius: 14px;
   background: rgba(20, 14, 40, 0.5);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(124,58,237,0.18);
-  /* dissolve edges */
-  mask-image: radial-gradient(ellipse 85% 85% at 50% 50%, black 55%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse 85% 85% at 50% 50%, black 55%, transparent 100%);
-  transition: border-color 0.2s;
+  mask-image: radial-gradient(ellipse 92% 92% at 50% 45%, black 60%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 92% 92% at 50% 45%, black 60%, transparent 100%);
+  transition: border-color 0.2s, transform 0.12s, box-shadow 0.2s;
 }
-.challenge-card.soon { opacity: .6; }
-/* soon label — text only, no capsule outline */
-.soon-badge {
-  position: absolute; top: 8px; right: 8px;
-  font-size: 9px; text-transform: uppercase; letter-spacing: .08em;
-  color: rgba(167,139,250,0.55);
+.mode-tile:hover {
+  border-color: rgba(167,139,250,0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 0 30px -12px rgba(167,139,250,0.7);
 }
-
-/* Stub panels */
-.hub-stub { text-align: center; padding: 60px 16px; }
-.stub-emoji { font-size: 40px; }
-.stub-title { font-family: var(--font-display); font-size: 26px; margin: 8px 0 4px; }
-.stub-bankroll {
-  margin-top: 12px;
-  font-family: var(--font-display); font-size: 18px;
-  color: #f0c14b;
-  text-shadow: 0 0 12px rgba(240,193,75,0.6);
-}
+.mode-tile:active { transform: translateY(0); }
+.mode-emoji { font-size: 22px; }
+.mode-name { font-family: var(--font-display); font-size: 18px; }
+.mode-sub { font-size: 12px; color: rgba(255,255,255,0.5); }
 @media (prefers-reduced-motion: reduce) {
-  .challenge-card { transition: none !important; }
+  .mode-tile { transition: none !important; }
 }
 
 /* ─── Daily completion reveal — "the veil lifts off the board" ─────────────────

@@ -75,6 +75,12 @@
       💬<span id="chatTopBadge" class="topbar-chat-badge" hidden>0</span>
     </button>
     <div class="room-header" id="roomHeader"></div>
+    <!-- Home-only identity: gold + streak. Revealed by body.hub-home (the hub is up);
+         hidden in rooms, where #goldHud after #roomHeader owns the in-room gold. -->
+    <div class="topbar-stats" id="topbarStats">
+      <span class="hub-stat-glyph" id="hubGold" title="Gold">◆ <span id="hubGoldVal">0</span></span>
+      <span class="hub-stat-glyph" id="hubStreak" title="Streak" hidden>🔥 <span id="hubStreakVal">0</span></span>
+    </div>
     <button id="avatarBtn" class="avatar-btn" type="button" title="Menu" aria-label="Menu" aria-haspopup="true">◆</button>
   </div>
 </header>
@@ -130,20 +136,7 @@
         <span class="hub-orb hub-orb-gold"></span>
         <span class="hub-orb hub-orb-teal"></span>
       </div>
-      <header class="hub-bar">
-        <button id="hubAvatarBtn" class="avatar-btn" type="button" aria-label="Menu" aria-haspopup="true">◆</button>
-        <div class="hub-bar-stats">
-          <span class="hub-stat-glyph" id="hubGold" title="Gold">◆ <span id="hubGoldVal">0</span></span>
-          <span class="hub-stat-glyph" id="hubStreak" title="Streak">🔥 <span id="hubStreakVal">0</span></span>
-        </div>
-      </header>
       <main id="hubContent" class="hub-content"></main>
-      <nav class="hub-nav" role="tablist" aria-label="Hub sections">
-        <button class="hub-tab is-active" data-tab="daily"  role="tab" aria-selected="true">🗞️<span>Daily</span></button>
-        <button class="hub-tab"           data-tab="arena"  role="tab" aria-selected="false">⚡<span>Arena</span></button>
-        <button class="hub-tab"           data-tab="floor"  role="tab" aria-selected="false">🃏<span>Floor</span></button>
-        <button class="hub-tab"           data-tab="feed"   role="tab" aria-selected="false">👥<span>Feed</span></button>
-      </nav>
     </div>
   </section>
 </template>
