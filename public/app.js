@@ -71,9 +71,14 @@ function clearUsername() {
 // Owner-nested rooms (/@owner/<slug>) and public profiles (/@username).
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;
+function todayUTC() { return new Date().toISOString().slice(0, 10); }
 function parseRoute() {
   const challenge = location.pathname.match(/^\/c\/([0-9A-Za-z]{5})$/);
   if (challenge) return { kind: "challenge", id: challenge[1] };
+  if (location.pathname === "/daily/archive") return { kind: "daily-archive" };
+  const daily = location.pathname.match(/^\/daily\/(\d{4}-\d{2}-\d{2})$/);
+  if (daily) return { kind: "daily", date: daily[1] };
+  if (location.pathname === "/daily") return { kind: "daily", date: todayUTC() };
   const room = location.pathname.match(ROOM_RE);
   if (room) return { kind: "room", owner: room[1], slug: room[2] };
   const prof = location.pathname.match(PROFILE_RE);
@@ -151,7 +156,7 @@ function renderHomeIdentity() {
         const lines = getEdition(getActiveEditionId()).companion?.lines?.idle ?? ["The board is waiting."];
         return lines[Math.floor(Date.now() / 86400000) % lines.length];
       },
-      onPlay: (editionId) => { applyEdition(editionId); enterNewRoom({ autoStart: true }); },
+      onPlay: (editionId) => { applyEdition(editionId); navigate("/daily/" + todayUTC()); },
       renderRecentRooms: (mountEl) => renderRecentRoomsInto(mountEl),
       onInvite: () => enterNewRoom({ autoStart: false }),
       openMenu: (anchor) => openHub({ anchor }),
@@ -400,6 +405,8 @@ const game = {
   ws: null,
   challengeId: null,   // /c/<id> solo-replay: the challenge being raced (null in normal rooms)
   challengeMeta: null, // cached { owner, ownerScore, record, ... } from /api/challenge/<id>/meta
+  isDaily: false,      // /daily/<date>: async one-shot, gated "underneath"
+  dailyDate: null,
   owner: null,
   slug: null,
   path: null,
@@ -635,6 +642,36 @@ function showChallengeEntry(id) {
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") go();
   });
+}
+
+// The Wordul of the Day: a SHARED room at daily/<date> (everyone joins the same DO).
+// Reuses the room engine; daily chrome + the gated unlock are render()-driven.
+function showDaily(date) {
+  if (!getUsername()) { showDailyEntry(date); return; }
+  document.title = `Wordul of the Day — ${date}`;
+  showRoom("daily", date);                       // connects to /ws?room=daily/<date>
+  game.isDaily = true; game.dailyDate = date;    // AFTER showRoom resets state (mirrors enterNewRoom's autoStart)
+}
+
+// Username gate for a cold deep-link to /daily/<date> (the hub path already has a username).
+function showDailyEntry(date) {
+  mount("tpl-home");
+  const hub = $("#hub"); if (hub) hub.hidden = true;
+  $("#homeGreeting").hidden = true; $("#homeRooms").hidden = true;
+  $("#homeIntro").hidden = false;
+  $(".tagline").textContent = t("daily.entryTitle");
+  $(".sub").textContent = t("daily.entrySub");
+  const cta = $(".home-cta"); if (cta) cta.hidden = false;
+  const input = $("#usernameInput"); input.value = getUsername(); input.focus();
+  const btn = $("#startPlayingBtn"); const label = btn.querySelector(".hero-btn-label") || btn;
+  label.textContent = t("daily.entryCta");
+  const play = () => {
+    const u = setUsername(input.value);
+    if (u.length < 3) { input.focus(); toast("Pick a username — at least 3 letters", { error: true, duration: 1800 }); return; }
+    showDaily(date);
+  };
+  btn.addEventListener("click", play);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") play(); });
 }
 
 // Connect the per-player challenge WS — an isolated solo room seeded with the
@@ -1018,10 +1055,10 @@ function onServerMessage(msg) {
     // The room owns the theme: adopt it whenever it differs from what's applied. This is
     // how invitees inherit the host's theme and how a live change reaches everyone. applyEdition
     // also persists it locally, so your last room's vibe sticks into your next solo game.
-    if (msg.room.edition && msg.room.edition !== getActiveEditionId()) {
-      applyEdition(msg.room.edition);
-      applySettings(getSettings()); // re-layer colorblind/contrast on the new palette
-    }
+    const wantEd = game.isDaily
+      ? (msg.room.edition && msg.room.edition !== "default" ? msg.room.edition : getActiveEditionId())
+      : msg.room.edition;
+    if (wantEd && wantEd !== getActiveEditionId()) { applyEdition(wantEd); applySettings(getSettings()); }
     // EZ-mode hints belong to a single round — wipe them on any new round (start,
     // rematch, or reconnecting into a different round).
     if (msg.room.phase === "playing" && msg.room.round !== game.ezRound) {
@@ -1168,6 +1205,10 @@ function onServerMessage(msg) {
       handleGameOver(msg.room);
     }
     if (msg.room.phase === "finished") refreshGold(); // reconcile persistent balance after cash-out
+    // Daily rooms never globally "finish" (per-player async scoring) — so reconcile the
+    // gold HUD the moment YOU personally complete, the same way the race path does on
+    // finish, so the daily goody mint actually shows up in the HUD.
+    if (game.isDaily && (personallyWon || personallyLost)) refreshGold();
     render();
   } else if (msg.type === "invalid_guess") {
     // Letters are still in game.pending — we never cleared them. Shake the row and
@@ -1247,6 +1288,36 @@ function applyTabVisibility(playing) {
   players.hidden = game.roomTab !== "players";
 }
 
+// The "underneath", revealed once you finish today's word: a goody line, the story behind
+// the word, and a one-tap bridge back to the hub. Idempotent per snapshot.
+// snap.story may be null (house day / World fetch failed) — goody + bridge still render.
+function renderDailyUnlock(snap, me) {
+  const box = $("#dailyUnlock");
+  if (!box) return;
+  const done = me && me.status !== "playing";
+  box.hidden = !done;
+  if (!done) return;
+  const goody = $("#dailyGoody");
+  if (goody && !goody.dataset.filled) {
+    goody.textContent = me.status === "won"
+      ? t("daily.goodySolved", { word: snap.word || "" })
+      : t("daily.goodyMissed", { word: snap.word || "" });
+    goody.dataset.filled = "1";
+  }
+  const story = $("#dailyStory");
+  if (story && snap.story && !story.dataset.filled) {
+    const h = document.createElement("h3"); h.textContent = snap.story.title || t("daily.storyFallbackTitle");
+    const p = document.createElement("p"); p.textContent = snap.story.body || "";
+    story.append(h, p);
+    if (snap.story.tip) { const tip = document.createElement("p"); tip.className = "daily-tip"; tip.textContent = "💡 " + snap.story.tip; story.appendChild(tip); }
+    story.dataset.filled = "1";
+  }
+  const bridge = $("#dailyBridgeBtn");
+  if (bridge && !bridge.dataset.wired) { bridge.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); }); bridge.dataset.wired = "1"; }
+  const arch = $("#dailyArchiveLink");
+  if (arch && !arch.dataset.wired) { arch.addEventListener("click", (e) => { e.preventDefault(); navigate("/daily/archive"); }); arch.dataset.wired = "1"; }
+}
+
 function renderGames(snap) {
   const panel = $("#gamesPanel");
   if (!panel) return;
@@ -1317,6 +1388,16 @@ function render() {
   const snap = game.snapshot;
   const me = snap.players.find((p) => p.username === getUsername());
 
+  // Daily hard-gate: until YOU finish (win/give up), only your board is visible.
+  // me.status flips to won/lost on completion → the whole "underneath" unlocks.
+  const dailyLocked = game.isDaily && (!me || me.status === "playing");
+  if (game.isDaily) {
+    document.body.classList.add("daily");
+    const tabs = $("#roomTabs"); if (tabs) tabs.hidden = dailyLocked; // no leaderboard/games until done
+    const nameBtn = $("#roomName"); if (nameBtn) nameBtn.textContent = t("daily.boardTitle", { date: game.dailyDate });
+  }
+  if (game.isDaily) renderDailyUnlock(snap, me);
+
   // Keep the header name (and tab title) in sync with server renames.
   if (snap.name && snap.name !== game.name) {
     game.name = snap.name;
@@ -1363,11 +1444,12 @@ function render() {
   // surface it (inline on desktop, 💬 button on mobile) once someone else is in
   // the room. `me` is always in snap.players, so >= 2 means real company.
   const hasCompany = snap.players.length >= 2;
+  const showSocial = game.isDaily ? !dailyLocked : hasCompany;
   const chatPanel = $("#chatPanel");
   const chatTopBtn = $("#chatTopBtn");
-  if (chatPanel) chatPanel.hidden = !hasCompany;
-  if (chatTopBtn) chatTopBtn.hidden = !hasCompany;
-  if (!hasCompany) closeChatSheet();
+  if (chatPanel) chatPanel.hidden = !showSocial;
+  if (chatTopBtn) chatTopBtn.hidden = !showSocial;
+  if (!showSocial) closeChatSheet();
 
   // Immersive UI (C5): mid-play, the in-game header collapses to just avatar +
   // username + gold. Room name, ✎ rename, Share ↗, and the scoreboard hide while
@@ -2732,6 +2814,29 @@ function leaveRoom() {
   }
   clearHeaderIdentity(); // drop the in-room username + gold from the topbar header
   document.body.classList.remove("playing"); // restore full chrome outside a room
+  document.body.classList.remove("daily");
+  game.isDaily = false; game.dailyDate = null;
+}
+
+// The archive: every past day as a clickable list (data from /api/daily/dates).
+async function showDailyArchive() {
+  leaveRoom();
+  mount("tpl-profile");
+  const back = $("#profileBack"); if (back) back.onclick = (e) => { e.preventDefault(); navigate("/"); };
+  document.title = "Wordul Daily — Archive";
+  const mountEl = $("#profileMount");
+  if (mountEl) mountEl.innerHTML = `<h1>${t("daily.archiveTitle")}</h1><ul class="daily-archive-list" id="dailyArchiveList"></ul>`;
+  try {
+    const res = await fetch("/api/daily/dates");
+    const { dates } = res.ok ? await res.json() : { dates: [] };
+    const list = $("#dailyArchiveList");
+    if (list) for (const d of dates.slice().reverse()) {
+      const li = document.createElement("li");
+      const a = document.createElement("a"); a.href = `/daily/${d}`; a.textContent = d; a.className = "link";
+      a.addEventListener("click", (e) => { e.preventDefault(); navigate(`/daily/${d}`); });
+      li.appendChild(a); list.appendChild(li);
+    }
+  } catch { /* empty archive degrades to just the heading */ }
 }
 
 function showProfile(username) {
@@ -2782,6 +2887,8 @@ function route() {
     showChallenge(r.id);
     return;
   }
+  if (r.kind === "daily") { showDaily(r.date); return; }
+  if (r.kind === "daily-archive") { showDailyArchive(); return; }
   if (r.kind === "room") {
     if (getUsername()) {
       showRoom(r.owner, r.slug);
