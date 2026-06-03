@@ -1044,7 +1044,7 @@ function refreshGold() {
   if (!name) return;
   fetch(`/api/user/${encodeURIComponent(name)}`)
     .then((r) => (r.ok ? r.json() : null))
-    .then((p) => { if (p && typeof p.gold === "number") setGold(p.gold); })
+    .then((p) => { if (p && typeof p.gold === "number") { setGold(p.gold); renderGoldHud(); } })
     .catch(() => {});
 }
 
@@ -1201,7 +1201,10 @@ function onServerMessage(msg) {
     const phaseEnded = prev && prev.phase !== "finished" && msg.room.phase === "finished";
     const personallyLost = prevMe?.status === "playing" && me?.status === "lost";
     const personallyWon = prevMe?.status === "playing" && me?.status === "won";
-    if ((phaseEnded || personallyLost || personallyWon) && !game.hasShownEndStats) {
+    // Daily owns its OWN reveal (#dailyUnlock: goody + curated story + bridge), so the
+    // generic stats/challenge/share modal must NOT also fire for daily — it would stack
+    // over and bury the curated reveal.
+    if ((phaseEnded || personallyLost || personallyWon) && !game.hasShownEndStats && !game.isDaily) {
       handleGameOver(msg.room);
     }
     if (msg.room.phase === "finished") refreshGold(); // reconcile persistent balance after cash-out
@@ -1432,6 +1435,9 @@ function render() {
     document.body.classList.add("daily");
     const tabs = $("#roomTabs"); if (tabs) tabs.hidden = dailyLocked; // no leaderboard/games until done
     const nameBtn = $("#roomName"); if (nameBtn) nameBtn.textContent = t("daily.boardTitle", { date: game.dailyDate });
+    // The lobby bar's controls (choose-mode / start / play-again) are all meaningless for
+    // the daily (it auto-starts, never resets) — hide the otherwise-empty bar entirely.
+    const lobbyBar = $(".lobby-bar"); if (lobbyBar) lobbyBar.hidden = true;
   }
   if (game.isDaily) renderDailyUnlock(snap, me);
 
@@ -1670,6 +1676,7 @@ function syncModePicker(snap) {
 function syncModeChip(snap) {
   const chip = $("#modeChip");
   if (!chip) return;
+  if (game.isDaily) { chip.hidden = true; return; } // daily has its own title; no mode chip
   chip.textContent = t(`mode.${snap.mode}.label`);
   // Read-only chip shows whenever the interactive picker is hidden (playing /
   // finished) — late-joiners mid-play still see the mode.
@@ -1746,10 +1753,15 @@ function renderScoreboard(snap) {
 
 function renderBoards(snap, me) {
   const root = $("#boards");
-  const ordered = [
-    ...(me ? [me] : []),
-    ...snap.players.filter((p) => p.username !== getUsername()),
-  ];
+  // The daily is a focused, personal puzzle (the whole world plays the same word, but
+  // you see only YOUR board) — the shared standings live in the gated leaderboard, not
+  // a wall of strangers' boards. Live race rooms still show everyone.
+  const ordered = game.isDaily
+    ? (me ? [me] : [])
+    : [
+        ...(me ? [me] : []),
+        ...snap.players.filter((p) => p.username !== getUsername()),
+      ];
   // While my board's tiles are mid-explosion OR mid-payout (glow/floater anchored to
   // them), preserve the existing DOM so the animations don't get nuked by a snapshot
   // from another player's guess. Update everyone else's boards as normal.
@@ -2898,7 +2910,12 @@ function renderCrumbs(r) {
     nav.innerHTML = "";
     return;
   }
-  const here = r.kind === "room" ? r.slug.replace(/-/g, " ") : r.kind === "challenge" ? "challenge" : `@${r.username}`;
+  const here =
+    r.kind === "room" ? r.slug.replace(/-/g, " ")
+    : r.kind === "challenge" ? "challenge"
+    : r.kind === "daily" ? "Daily"
+    : r.kind === "daily-archive" ? "Archive"
+    : `@${r.username}`;
   nav.hidden = false;
   nav.innerHTML = "";
   const home = document.createElement("button");
