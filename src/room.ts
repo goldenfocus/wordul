@@ -218,6 +218,13 @@ export class Room extends DurableObject<Env> {
         p.connected = false;
         this.pushSystem(`${p.username} left`);
       }
+      // A pending rematch dies if either participant drops; the survivor (the
+      // proposer, if it was the recipient who left) is settled Home via cancelled{left}.
+      if (this.state.rematch && this.state.phase === "finished") {
+        const { rematch, effects } = rematchReduce(this.state.rematch, { kind: "left" });
+        this.state.rematch = rematch;
+        await this.applyRematchEffects(effects);
+      }
       await this.persistAndBroadcast();
     }
   }
