@@ -15,6 +15,7 @@ import {
   outpacedLosers,
   rematchReduce,
   nextAlarmAt,
+  botAccepts,
   REMATCH_TIMEOUT_MS,
   BOT_REMATCH_MIN_MS,
   BOT_REMATCH_MAX_MS,
@@ -727,9 +728,15 @@ export class Room extends DurableObject<Env> {
     void this.ctx.storage.setAlarm(Date.now() + delay);
   }
 
-  // DO alarm: the robot's heartbeat. Wakes, plays ONE guess through the same path a human
-  // guess takes, then reschedules until it has won or run out of rows. Hibernation-safe.
+  // DO alarm: the room's single heartbeat. In the PLAYING phase it paces the bot's
+  // guesses (unchanged). In the FINISHED phase it drives the rematch handshake's
+  // delayed wakes (bot decision + proposal timeout). The two phases are mutually
+  // exclusive, so they never contend for the one alarm.
   async alarm(): Promise<void> {
+    if (this.state.phase === "finished") {
+      await this.handleRematchAlarm(Date.now());
+      return;
+    }
     if (this.state.phase !== "playing" || !this.state.word) return;
     const bot = this.state.players.find((p) => p.isBot && p.status === "playing");
     if (!bot) return;
@@ -743,6 +750,36 @@ export class Room extends DurableObject<Env> {
     await this.persistAndBroadcast();
     const stillGoing = this.state.players.some((p) => p.isBot && p.status === "playing");
     if (stillGoing && this.state.phase === "playing") this.scheduleBotTick();
+  }
+
+  // Process whichever rematch deadlines are due, then re-arm for any that remain.
+  // Order matters: a fired timeout cancels the proposal, after which the bot
+  // decision finds no pending state and safely no-ops (no double resolution).
+  private async handleRematchAlarm(now: number): Promise<void> {
+    let changed = false;
+    if (this.state.rematchTimeoutAt && now >= this.state.rematchTimeoutAt) {
+      this.state.rematchTimeoutAt = null;
+      const { rematch, effects } = rematchReduce(this.state.rematch ?? null, { kind: "timeout" });
+      this.state.rematch = rematch;
+      await this.applyRematchEffects(effects);
+      changed = true;
+    }
+    if (this.state.phase === "finished" && this.state.botRematchAt && now >= this.state.botRematchAt) {
+      this.state.botRematchAt = null;
+      const bot = this.state.players.find((p) => p.isBot);
+      if (bot) {
+        const { rematch, effects } = rematchReduce(this.state.rematch ?? null, {
+          kind: "bot_decision", accept: botAccepts(Math.random()), bot: bot.username,
+        });
+        this.state.rematch = rematch;
+        await this.applyRematchEffects(effects);
+        changed = true;
+      }
+    }
+    // If accept→start fired, phase is now "playing" and runStart armed the bot tick;
+    // don't re-arm rematch. Otherwise re-arm any still-future rematch deadline.
+    if (this.state.phase === "finished") this.armRematchAlarm();
+    if (changed) await this.persistAndBroadcast();
   }
 
   // Finish the round once every connected player is done — NOT the instant someone wins.
