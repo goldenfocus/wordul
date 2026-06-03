@@ -21,12 +21,12 @@ export function outpacedLosers(players: PlayerState[], winner: string): string[]
 }
 
 // --- Slices 2–3: the rematch handshake reducer -------------------------------
-export type RematchState = { proposer: string; deadline: number } | null;
+export type RematchState = { proposer: string; deadline: number } | null; // deadline: DO alarm enforces expiry; reducer never re-reads it
 
 export type RematchInput =
   | { kind: "propose"; from: string; opponentIsBot: boolean; now: number }
   | { kind: "accept"; from: string }
-  | { kind: "decline"; from: string }
+  | { kind: "decline" }
   | { kind: "left" }
   | { kind: "bot_decision"; accept: boolean; bot: string }
   | { kind: "timeout" };
@@ -77,6 +77,11 @@ export function rematchReduce(state: RematchState, input: RematchInput): Rematch
       if (!state) return { rematch: null, effects: [] };
       if (input.accept) return { rematch: null, effects: [{ kind: "accepted", by: input.bot }, { kind: "start" }] };
       return { rematch: null, effects: [{ kind: "cancelled", reason: "declined" }, { kind: "bot_leaves" }] };
+    default: {
+      const _exhaustive: never = input;
+      void _exhaustive;
+      return { rematch: state, effects: [] };
+    }
   }
 }
 

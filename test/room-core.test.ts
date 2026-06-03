@@ -67,7 +67,7 @@ describe("rematchReduce", () => {
   });
 
   it("decline ⇒ cancelled{declined}", () => {
-    const r = rematchReduce({ proposer: "yan", deadline: NOW }, { kind: "decline", from: "alex" });
+    const r = rematchReduce({ proposer: "yan", deadline: NOW }, { kind: "decline" });
     expect(r.rematch).toBe(null);
     expect(r.effects).toEqual([{ kind: "cancelled", reason: "declined" }]);
   });
@@ -95,7 +95,7 @@ describe("rematchReduce", () => {
 
   it("any input with no pending proposal is a safe no-op", () => {
     for (const input of [
-      { kind: "accept", from: "x" }, { kind: "decline", from: "x" },
+      { kind: "accept", from: "x" }, { kind: "decline" },
       { kind: "timeout" }, { kind: "left" }, { kind: "bot_decision", accept: true, bot: "m" },
     ] as const) {
       expect(rematchReduce(null, input)).toEqual({ rematch: null, effects: [] });
