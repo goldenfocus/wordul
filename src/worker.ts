@@ -124,6 +124,19 @@ export default {
         .transform(shell);
     }
 
+    // Daily stats sub-page — client-rendered; serve the SPA shell so hard-loads,
+    // refreshes, and shares of /daily/<YYYY-MM-DD>/stats resolve (the SPA then
+    // client-routes it). Without this the route falls through to a 404.
+    const dailyStatsDate = url.pathname.match(/^\/daily\/(\d{4}-\d{2}-\d{2})\/stats$/);
+    if (dailyStatsDate) {
+      const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+      return new HTMLRewriter()
+        .on('[data-meta="title"]', new TextSetter(`Wordul of the Day — Stats · ${dailyStatsDate[1]}`))
+        .on('[data-meta="description"]', new AttrSetter("content", "How the world played today's Wordul — solve rate, averages, and the day's Studio theme."))
+        .on('[data-meta="canonical"]', new AttrSetter("href", url.origin + url.pathname))
+        .transform(shell);
+    }
+
     // Dated permalink — the eternal artifact. /daily/<YYYY-MM-DD>
     const dailyDate = dailyDateFromPathname(url.pathname);
     if (dailyDate && dailyDate <= activeDate(Date.now())) {
