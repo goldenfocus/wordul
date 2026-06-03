@@ -1730,6 +1730,25 @@ body.reduced-motion .gold-floater { display: none !important; }
   color: var(--muted, #888); margin-top: 2px;
 }
 
+/* Arena open-games list (bots-in-PvP). Glass rows, no pills — tap to join a waiting
+   worduler. Mount-agnostic: styled here so arena-panel.js drops into the PvP surface. */
+.arena-list { display: flex; flex-direction: column; gap: 8px; }
+.arena-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 12px 14px; border: 1px solid var(--border, rgba(255,255,255,0.1));
+  border-radius: 14px; background: var(--surface, rgba(255,255,255,0.04));
+  color: var(--fg); cursor: pointer; text-align: left;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+.arena-row:hover { background: var(--surface-hover, rgba(255,255,255,0.08)); border-color: var(--accent, #6cf); }
+.arena-row:active { transform: scale(0.99); }
+.arena-row-avatar { font-size: 24px; line-height: 1; }
+.arena-row-body { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.arena-row-host { font-weight: 700; text-transform: capitalize; }
+.arena-row-meta { font-size: 12px; }
+.arena-row-seats { font-variant-numeric: tabular-nums; font-weight: 600; opacity: 0.8; }
+.arena-state { padding: 16px; text-align: center; color: var(--muted, #888); font-size: 14px; }
+
 /* --- Per-room scoreboard --- */
 .scoreboard {
   width: 100%; max-width: 420px;
