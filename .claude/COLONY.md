@@ -48,7 +48,7 @@ npm run deploy
 | 2026-06-03 10:08 | claude (daily crash fix) | render()-guard (#boards) + zombie-WS reconnect fix for "leave daily → boom, zero rows" → prod (2b4c872) | 0dd32227 (superseded↓) | ✅ |
 | 2026-06-03 ~10:10 | (concurrent session) | challenge ctx + session-based intentional WS teardown — converged: KEPT my render-guard, replaced my reconnect-guard with `socketSession`/`session.reconnect` → prod (3a07553) | 3a07553 deploy | ✅ |
 | 2026-06-03 15:53 | claude (home redesign) | 🚫 deploy BLOCKED by err 10097 — see alert below. `main` (`8c3ecfc`, home launcher) is **gauntlet-green and waiting**. NOT deployed. | — | ⏸️ held |
-| 2026-06-03 17:11 | claude (living-lab-feed) | 🔒 deploying — Arena v6 now merged to `main` (`f786888`, matches prod). Shipping waiting home launcher + home-hub fix + **Living Lab Feed** on top → prod. Tree = origin/main + 11 feed commits, 326 tests green. | — | 🔒 deploying |
+| 2026-06-03 17:11 | claude (living-lab-feed) | Arena v6 + held home launcher + home-hub fix + **Living Lab Feed** integrated (`main` `939b966`) → prod. No 10097 (v6 matched). Smoke: home/room/arena-open/feed.* all 200, active-day `.json` 404. Feed stream currently empty (prod science `playerFinishes=0` for recent days — populates as data lands). | b1dc77b5-8a24-45ef-9510-70bc0fcffa39 | ✅ |
 
 > Benign collision: both sessions fixed the same daily-leave crash within ~2 min. Final prod `3a07553` carries **both** defenses (render `#boards` guard + session teardown). NOTE: local `main` checkout is stale/orphaned at `bde11dd` (never on origin/main) — origin/main + prod are the truth.
 
