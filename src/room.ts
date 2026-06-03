@@ -33,6 +33,16 @@ const CHAT_THROTTLE_MS = 800;
 const ROBOT_SLUG = "robots";
 const BOT_NAME = "clanker";
 
+// ARENA → ROOM POST /seed body (canonical contract). `path` is the DO-key form
+// "arena/<personaId>-<seedCount>"; the persona is injected with a human-looking username.
+type SeedBody = {
+  path: string;
+  persona: { id: string; name: string; avatar: string };
+  profile: "noob";
+  edition: string;
+  wordLength: number;
+};
+
 // Wordul of the Day: a flat gold goody on completion, on top of the score-based mint.
 const DAILY_GOLD_BONUS = 100; // ← tune to taste (1 gold ≈ 100 points)
 
@@ -113,6 +123,11 @@ export class Room extends DurableObject<Env> {
 
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
+    // Server-to-server seed: ARENA mints a room BEFORE any human connects. POST-only and
+    // matched before /ws so a seeded room exists, registered + waiting, on first GET /ws.
+    if (req.method === "POST" && url.pathname.endsWith("/seed")) {
+      return this.handleSeed(req);
+    }
     if (url.pathname.endsWith("/ws")) {
       const path = url.searchParams.get("room") ?? "";
       const challengeId = url.searchParams.get("challenge");
@@ -130,6 +145,33 @@ export class Room extends DurableObject<Env> {
       return this.handleUpgrade(req);
     }
     return new Response("not found", { status: 404 });
+  }
+
+  // Initialize a seeded (bot-hosted) room: stamp identity exactly as the /ws block does,
+  // mark it seeded, and inject the persona as a silent waiting player. Idempotent — a
+  // re-seed of an already-seeded room just acks. The room auto-starts when a human joins.
+  private async handleSeed(req: Request): Promise<Response> {
+    const b = (await req.json().catch(() => null)) as SeedBody | null;
+    if (!b?.path || !b.persona?.id || b.profile !== "noob") {
+      return new Response("bad request", { status: 400 });
+    }
+    if (this.state.seed) return Response.json({ ok: true }); // already seeded
+    if (this.state.path === "") {
+      this.state.path = b.path;
+      const [owner, slug] = b.path.split("/");
+      this.state.owner = owner ?? "";
+      this.state.slug = slug ?? "";
+      this.state.name = `${b.persona.name}'s room`;
+    }
+    this.state.seed = { personaId: b.persona.id, profile: b.profile };
+    this.state.edition = sanitizeEdition(b.edition);
+    if (isSupportedSize(b.wordLength)) {
+      this.state.wordLength = b.wordLength;
+      this.state.maxGuesses = guessesFor(b.wordLength);
+    }
+    this.ensureBot(b.persona);
+    await this.persistAndBroadcast();
+    return Response.json({ ok: true });
   }
 
   private async handleUpgrade(req: Request): Promise<Response> {
@@ -237,6 +279,13 @@ export class Room extends DurableObject<Env> {
       this.send(ws, { type: "error", message: "bad username" });
       return;
     }
+    // Seeded room: a human must not claim the persona's username (it === seed.personaId),
+    // else the `existing` lookup below would treat them as the bot reconnecting. Reject
+    // before that lookup. (Review fix, defect 19.)
+    if (this.state.seed && this.state.seed.personaId === username) {
+      this.send(ws, { type: "error", message: "room full" });
+      return;
+    }
     ws.serializeAttachment({ username });
 
     const existing = this.state.players.find((p) => p.username === username);
@@ -246,6 +295,11 @@ export class Room extends DurableObject<Env> {
       existing.scienceOptOut = !!scienceOptOut;
       if (wasOffline) this.pushSystem(`${username} reconnected`);
     } else {
+      // Seeded room = exactly 1 persona (bot) + 1 human. Reject a 2nd distinct human.
+      if (this.state.seed && this.state.players.some((p) => !p.isBot)) {
+        this.send(ws, { type: "error", message: "room full" });
+        return;
+      }
       if (!this.state.isDaily && this.state.players.length >= MAX_PLAYERS) {
         this.send(ws, { type: "error", message: "room full" });
         return;
@@ -316,6 +370,18 @@ export class Room extends DurableObject<Env> {
       if (p && p.status !== "playing" && !p.scored) await this.afterPlayerStatus(p);
     }
     this.ensureBot();
+    // Seeded Arena room: auto-start the instant the first human is connected (no host
+    // "start" click), then close the room out of ARENA's open index — a human committed,
+    // so it's no longer joinable by anyone else (the 2-cap already rejects a 2nd human).
+    if (
+      this.state.seed &&
+      this.state.phase === "lobby" &&
+      this.state.players.some((p) => !p.isBot && p.connected)
+    ) {
+      const persona = this.state.players.find((p) => p.isBot);
+      const started = await this.runStart(persona?.username ?? "arena");
+      if (started) this.closeArena();
+    }
     await this.persistAndBroadcast();
   }
 
@@ -465,14 +531,23 @@ export class Room extends DurableObject<Env> {
   }
 
   private async onStart(ws: WebSocket): Promise<void> {
-    if (this.state.phase === "playing") return;
-    if (this.state.isDaily) return; // daily auto-starts on seed; no manual start
+    // Thin wrapper: the manual-start path keeps error feedback via the optional ws.
+    await this.runStart(this.userFor(ws) ?? "someone", ws);
+  }
+
+  // The single startable core. Owns ALL start guards so both the human "start" message and
+  // the seeded auto-start (onHello) go through exactly one path. When `ws` is present, guard
+  // failures send an error to that socket; otherwise (auto-start) they log and return false.
+  private async runStart(who: string, ws?: WebSocket): Promise<boolean> {
+    if (this.state.phase === "playing") return false;
+    if (this.state.isDaily) return false; // daily auto-starts on seed; no manual start
     this.ensureBot();
-    if (this.state.players.length < 1) return;
+    if (this.state.players.length < 1) return false;
     const pool = WORDS_BY_SIZE[this.state.wordLength];
     if (!pool || pool.answers.length === 0) {
-      this.send(ws, { type: "error", message: "no words available for that length" });
-      return;
+      if (ws) this.send(ws, { type: "error", message: "no words available for that length" });
+      else console.error("runStart: no words for length", this.state.wordLength);
+      return false;
     }
     if (this.state.challengeId) {
       // Challenge room: ALWAYS play the pinned word (even on rematch), fetched
@@ -485,13 +560,14 @@ export class Room extends DurableObject<Env> {
         this.state.wordLength = wordLength ?? this.state.wordLength;
         this.state.maxGuesses = guessesFor(this.state.wordLength);
       } else {
-        this.send(ws, { type: "error", message: "challenge unavailable" });
-        return;
+        if (ws) this.send(ws, { type: "error", message: "challenge unavailable" });
+        else console.error("runStart: challenge unavailable", this.state.challengeId);
+        return false;
       }
     } else {
       this.state.word = pool.answers[Math.floor(Math.random() * pool.answers.length)] ?? null;
     }
-    if (!this.state.word) return;
+    if (!this.state.word) return false;
     this.state.phase = "playing";
     this.state.winner = null;
     this.state.startedAt = Date.now();
@@ -505,11 +581,11 @@ export class Room extends DurableObject<Env> {
       p.revealHints = 0;
       p.vowelHints = 0;
     }
-    const who = this.userFor(ws) ?? "someone";
     this.pushSystem(`${who} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
     this.emitRoundStarted();
     if (this.state.players.some((p) => p.isBot && p.status === "playing")) this.scheduleBotTick();
     await this.persistAndBroadcast();
+    return true;
   }
 
   private async onGuess(ws: WebSocket, wordRaw: string): Promise<void> {
@@ -583,13 +659,15 @@ export class Room extends DurableObject<Env> {
     return this.state.slug === ROBOT_SLUG;
   }
 
-  private ensureBot(): void {
-    if (!this.isRobotRoom()) return;
+  private ensureBot(persona?: { id: string; name: string; avatar: string }): void {
     if (this.state.isDaily) return; // no worduler in the daily room
+    // Fires for the labeled /robots room OR a seeded Arena room. A seeded room injects its
+    // persona (human-looking username); the /robots room uses BOT_NAME (clanker).
+    if (!this.isRobotRoom() && !this.state.seed) return;
     if (this.state.players.some((p) => p.isBot)) return;
     if (this.state.players.length >= MAX_PLAYERS) return;
     this.state.players.push({
-      username: BOT_NAME,
+      username: persona ? persona.id : BOT_NAME,
       connected: true,
       guesses: [],
       status: "playing",
@@ -852,6 +930,24 @@ export class Room extends DurableObject<Env> {
         }
         return calls;
       }),
+    );
+    // Backstop: ensure a finished seeded room is gone from the open index (close-on-join
+    // already removed it; close is idempotent in arena-core).
+    this.closeArena();
+  }
+
+  // Best-effort close of a seeded room in ARENA's open index. No-op for non-seeded rooms.
+  private closeArena(): void {
+    if (!this.state.seed) return;
+    const arena = this.env.ARENA.get(this.env.ARENA.idFromName("arena"));
+    this.ctx.waitUntil(
+      arena
+        .fetch(new Request("https://do/close", {
+          method: "POST",
+          body: JSON.stringify({ path: this.state.path }),
+          headers: { "content-type": "application/json" },
+        }))
+        .catch((e) => console.error("arena close failed", this.state.path, (e as Error).message)),
     );
   }
 

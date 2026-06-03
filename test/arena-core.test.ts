@@ -5,6 +5,7 @@ import {
   prune,
   openGames,
   liveCount,
+  seedPaths,
   STALE_MS,
   MAX_OPEN_MS,
   type SeedRec,
@@ -129,5 +130,21 @@ describe("prune", () => {
     s = apply(s, { type: "close", path: "arena/a-0" }); // now closed
     s = prune(s, 1);
     expect(s.seeded["arena/a-0"]).toBeUndefined();
+  });
+});
+
+describe("seedPaths + monotonic counter (D1)", () => {
+  it("builds DO-key + routable forms from personaId + seedCount", () => {
+    expect(seedPaths("maya", 3)).toEqual({ path: "arena/maya-3", routePath: "/@arena/maya-3" });
+  });
+
+  it("two mints at distinct seedCounts produce distinct paths", () => {
+    let s = emptyArenaState();
+    const a = seedPaths("maya", s.seedCount); // seedCount 0
+    s = apply(s, { type: "mint", rec: rec({ path: a.path, routePath: a.routePath }) });
+    const b = seedPaths("maya", s.seedCount); // seedCount 1 after the bump
+    s = apply(s, { type: "mint", rec: rec({ path: b.path, routePath: b.routePath }) });
+    expect(a.path).not.toBe(b.path);
+    expect(Object.keys(s.seeded)).toHaveLength(2);
   });
 });
