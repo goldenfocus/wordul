@@ -653,11 +653,7 @@ function showRoom(owner, slug) {
   mount("tpl-room");
   renderRoomHeader();
   $("#startBtn").addEventListener("click", () => send({ type: "start" }));
-  $("#rematchBtn").addEventListener("click", () => {
-    game.hasShownEndStats = false;
-    closeStats();
-    send({ type: "rematch" });
-  });
+  $("#rematchBtn").addEventListener("click", () => { proposeRematch(); });
   wireChat();
   wireRoomTabs();
   buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
@@ -1571,6 +1567,14 @@ function onServerMessage(msg) {
     checkBankruptcy(powerupsCtx);
   } else if (msg.type === "revealed_letter" || msg.type === "vowels") {
     handlePowerupMessage(powerupsCtx, msg);
+  } else if (msg.type === "rematch_proposed") {
+    if (msg.proposer !== getUsername()) renderRematchPrompt(msg.proposer);
+  } else if (msg.type === "rematch_accepted") {
+    game.hasShownEndStats = false;
+    renderRematchIdle();
+    closeStats();
+  } else if (msg.type === "rematch_cancelled") {
+    settleRematchHome(msg.reason, opponentName());
   } else if (msg.type === "error") {
     toast(msg.message || "Error", { error: true });
   }
@@ -2890,6 +2894,70 @@ async function fillStatsPanel(opts = {}) {
   renderDist(stats.guessDistribution || {}, opts.justFinished && opts.won ? opts.lastGuessCount : null);
 }
 
+// --- Rematch handshake (client) ---------------------------------------------
+// One source of truth for proposing + rendering the four end-screen states.
+function opponentName() {
+  const snap = game.snapshot;
+  const me = getUsername();
+  const other = snap?.players.find((p) => p.username !== me);
+  return other?.username ?? "your opponent";
+}
+
+// Propose a rematch and morph the action into a cancellable waiting state.
+function proposeRematch() {
+  send({ type: "rematch_propose" });
+  renderRematchWaiting(opponentName());
+}
+
+// Render helpers operate on the stats-modal action row (#modalPlayAgain) so the
+// handshake lives where the player already is post-game. The button is reused;
+// a sibling #rematchDecline is created on demand for the recipient prompt.
+function rematchControls() {
+  const play = document.getElementById("modalPlayAgain");
+  let decline = document.getElementById("rematchDecline");
+  if (!decline && play) {
+    decline = document.createElement("button");
+    decline.id = "rematchDecline";
+    decline.className = play.className;
+    play.parentNode.insertBefore(decline, play.nextSibling);
+  }
+  return { play, decline };
+}
+
+function renderRematchIdle() {
+  const { play, decline } = rematchControls();
+  if (decline) decline.hidden = true;
+  if (play) { play.hidden = false; play.disabled = false; play.textContent = t("endscreen.playAgain"); play.onclick = proposeRematch; }
+}
+
+function renderRematchWaiting(who) {
+  const { play, decline } = rematchControls();
+  if (decline) decline.hidden = true;
+  if (play) {
+    play.hidden = false;
+    play.disabled = false;
+    play.textContent = t("rematch.waiting", { who });
+    play.onclick = () => { send({ type: "rematch_decline" }); renderRematchIdle(); }; // ✕ cancels my own
+  }
+}
+
+function renderRematchPrompt(who) {
+  const { play, decline } = rematchControls();
+  if (play) { play.hidden = false; play.disabled = false; play.textContent = t("rematch.accept"); play.onclick = () => send({ type: "rematch_accept" }); }
+  if (decline) { decline.hidden = false; decline.textContent = t("rematch.decline"); decline.onclick = () => { send({ type: "rematch_decline" }); renderRematchIdle(); }; }
+  const eg = document.getElementById("endgameMsg");
+  if (eg) { eg.hidden = false; const line = document.createElement("div"); line.className = "endgame-status"; line.textContent = t("rematch.prompt", { who }); eg.prepend(line); }
+}
+
+// A cancelled proposal: one friendly line keyed to reason, then fade Home (~2s).
+function settleRematchHome(reason, who) {
+  const key = reason === "timeout" ? "rematch.timeout" : reason === "left" ? "rematch.left" : "rematch.declined";
+  const { play, decline } = rematchControls();
+  if (decline) decline.hidden = true;
+  if (play) { play.disabled = true; play.textContent = t(key, { who }); }
+  setTimeout(() => { closeStats(); leaveRoom(); showHub(); }, 2000);
+}
+
 function openStats(opts = {}) {
   const modal = $("#statsModal");
   modal.hidden = false;
@@ -2939,14 +3007,14 @@ function openStats(opts = {}) {
   }
 
   const playAgain = $("#modalPlayAgain");
-  const snap = game.snapshot;
-  if (snap && snap.phase === "finished") {
+  if (game.snapshot && game.snapshot.phase === "finished") {
     playAgain.hidden = false;
-    playAgain.onclick = () => {
-      game.hasShownEndStats = false;
-      closeStats();
-      send({ type: "rematch" });
-    };
+    playAgain.onclick = proposeRematch;
+    // Reset to the plain "Play again" state; hide any stale decline button from a prior prompt.
+    const stale = document.getElementById("rematchDecline");
+    if (stale) stale.hidden = true;
+    playAgain.textContent = t("endscreen.playAgain");
+    playAgain.disabled = false;
   } else {
     playAgain.hidden = true;
   }
