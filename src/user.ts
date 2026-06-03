@@ -41,7 +41,10 @@ export class User extends DurableObject<Env> {
       return Response.json({ ...profile, gold: profile.balances.gold ?? 0 });
     }
 
-    if (req.method === "POST" && url.pathname.endsWith("/append")) {
+    // NOTE: must exclude "/ledger/append" — it also endsWith("/append"), so without this
+    // guard every gold mint was being swallowed here and parsed as a (junk) game record,
+    // silently crediting zero gold. (Affected races + daily alike.)
+    if (req.method === "POST" && url.pathname.endsWith("/append") && !url.pathname.endsWith("/ledger/append")) {
       const record = (await req.json()) as GameRecord;
       const profile = await this.load(username);
       profile.stats = applyGame(profile.stats, { result: record.result, guesses: record.guesses });
