@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { outpacedLosers } from "../src/room-core.ts";
 import type { PlayerState } from "../src/types.ts";
 import { rematchReduce, botAccepts, nextAlarmAt, REMATCH_TIMEOUT_MS } from "../src/room-core.ts";
@@ -117,5 +118,14 @@ describe("nextAlarmAt", () => {
     expect(nextAlarmAt([null, 500, undefined, 200])).toBe(200);
     expect(nextAlarmAt([null, undefined])).toBe(null);
     expect(nextAlarmAt([])).toBe(null);
+  });
+});
+
+describe("snapshot strips internal rematch fields (matrix #11)", () => {
+  it("snapshotFor sets rematch/botRematchAt/rematchTimeoutAt to undefined outbound", () => {
+    const src = readFileSync(new URL("../src/room.ts", import.meta.url), "utf8");
+    for (const field of ["rematch: undefined", "botRematchAt: undefined", "rematchTimeoutAt: undefined"]) {
+      expect(src).toContain(field);
+    }
   });
 });
