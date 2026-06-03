@@ -1,8 +1,15 @@
 # Arena Liquidity Bots — Design (v1: Living Arena + Characters)
 
-**Date:** 2026-06-02
+**Date:** 2026-06-02 (revised 2026-06-03 after a code-grounded review)
 **Status:** Approved (brainstorm) → ready for implementation plan
 **Scope:** v1 only. v2/v3 sketched at the end, explicitly out of scope here.
+
+> **Revision 2026-06-03:** reconciled against live code before planning. Fixes: migration tag
+> `v4`→`v5` (Daily already took v4); added the missing `Room` server-side seed route (rooms are
+> connect-triggered today and cannot exist eagerly without it); reordered the build sequence so the
+> disguise projection + noob land *before* the Arena tab is publicly reachable (prod-is-dev);
+> collapsed the index to one status-carrying list; pinned the seed-count / restock / persona-
+> uniqueness rules. Search "▶ rev" for every inline change.
 
 ---
 
@@ -84,8 +91,16 @@ Two product decisions set by Yan that the design must honor:
 human taps and finds empty is the core failure mode). A single `ARENA` DO is the one authoritative
 owner of the full lifecycle of every bot-room it mints (create → register → sweep), so the list
 can't drift from reality. KV is eventually-consistent and would invite exactly that drift. The
-`ARENA` DO also reuses the **alarm heartbeat** the bot already runs (`room.ts:488–512`) for its
-seeding tick — no new concurrency primitive.
+`ARENA` DO also reuses the **alarm heartbeat** the bot already runs (`scheduleBotTick`
+`room.ts:558–567`, `alarm()` `571–582`) for its seeding tick — no new concurrency primitive.
+
+> **▶ rev — the real new primitive is the *eager* room.** Today a Room is inert until a WebSocket
+> wakes it: it learns its own `path` from the WS query param (`room.ts:108–116`) and only adds its
+> bot inside the connect path (`ensureBot`, `room.ts:549–556`). A seeded Arena room must exist, hold
+> a waiting persona, and be *listed* with **zero humans connected**. That requires a new
+> server-to-server init on the Room (§5, `POST /seed`) — this, not the coordinator DO, is the piece
+> with no precedent in the codebase. Daily is *not* a precedent: it seeds inside the WS hello path
+> (`seedDailyIfNeeded`), still connect-triggered.
 
 ---
 
@@ -98,9 +113,15 @@ seeding tick — no new concurrency primitive.
   - `GET /open` → `OpenGame[]` (the list the Arena UI renders).
   - `POST /open` `{ path, name, edition, wordLength, seats }` → register/refresh a waiting room.
   - `POST /close` `{ path }` → remove a room from the index (room filled, started, or swept).
-  - `alarm()` → seeding tick: count open bot-rooms; if `< TARGET_OPEN`, mint more; prune stale.
+  - `alarm()` → seeding tick: reconcile lifecycle (§2), count **live seeds** (`status !== "closed"`);
+    if `< TARGET_OPEN`, mint more (capped at `MAX_SEEDED`); prune stale; reschedule the next tick.
+  - **▶ rev — lazy bootstrap:** every `GET /open` ensures an alarm is pending and, if below target,
+    kicks a best-effort seed (`waitUntil`, non-blocking). Without this, a cold or just-deployed ARENA
+    DO has no pending alarm and serves an **empty** Arena until the first timer fires — breaking the
+    "never empty" promise. Reading the index self-heals it.
 - **State (single KV-style blob, matching the codebase convention):**
-  `{ open: Record<path, OpenGame>, seededPaths: string[] }`.
+  `{ seeded: Record<path, SeedRec>, seedCount: number }` (▶ rev — one status-carrying list, not two;
+  see §2 for why).
 - **Singleton addressing:** `env.ARENA.idFromName("arena")` — one instance, the global coordinator.
 - **Depends on:** `ROOM` namespace (to mint/seed rooms), the bot roster, `DIRECTORY` (optional, for
   naming uniqueness).
@@ -108,20 +129,38 @@ seeding tick — no new concurrency primitive.
 ### 2. Open-Games index (data, lives inside `ARENA` DO storage)
 
 - **Purpose:** the authoritative "what's joinable right now."
-- **`OpenGame`** shape:
+- **▶ rev — one list with a status, not two.** The original `{ open, seededPaths }` split forces a
+  reconciliation race: a room is minted (in `seededPaths`) but has not `POST /open`'d yet (not in
+  `open`), so the seed count is ambiguous — count `open` and you over-mint past `TARGET_OPEN`; count
+  `seededPaths` and a silently-failed mint never retries. Collapsing to a single record keyed by
+  path, carrying a `status`, removes the ambiguity:
   ```ts
-  type OpenGame = {
-    path: string;        // "<owner>/<slug>" room key to join
+  type SeedRec = {
+    path: string;        // "<owner>/<slug>" — UNIQUE per mint (see §5)
     name: string;        // display name of the room
-    host: string;        // the waiting player's username (a persona name — looks human)
+    host: string;        // persona display name — looks human
+    personaId: string;   // stable key: persona uniqueness + H2H attribution
+    personaIcon: string; // avatar (human, never robotic)
     edition: string;     // theme id (for a themed row)
-    wordLength: number;  // 4–12
+    wordLength: number;  // v1: pinned to 5 (see §6)
     seats: string;       // "1/2"
-    seededAt: number;    // for staleness pruning
+    mintedAt: number;    // set when ARENA mints the room
+    status: "minted" | "registered" | "closed";
   };
+  // ARENA state: { seeded: Record<path, SeedRec>, seedCount: number }
   ```
-- **Staleness rule:** the seeding alarm prunes any seeded entry older than `STALE_MS` that the
-  room never confirmed as live — belt-and-suspenders against a room that crashed before reporting.
+  - **`GET /open`** returns the records filtered to `status === "registered"` (a room that has
+    confirmed itself live via `POST /open`). The browser-facing `OpenGame` is that projection.
+  - **Seed count** (drives mint) = records with `status !== "closed"`. Minted-but-not-yet-registered
+    rooms ARE counted, so we never over-mint while a fresh room is still waking.
+- **Lifecycle + prune (every tick):**
+  - `minted` → room exists, expected to register. Still `minted` after `STALE_MS` (crashed before
+    reporting) → drop it; the count then triggers a clean re-mint.
+  - `registered` → joinable, shown in the Arena. The room flips it to `closed` on join/start/finish.
+  - `closed` → removed after a short grace (a racing client gets a clean "gone"), then GC'd.
+  - Belt-and-suspenders: a `registered` entry older than a generous `MAX_OPEN_MS` with no close
+    report (the close POST was lost) is pruned by age. This staleness sweep — not the happy-path
+    report — is the load-bearing truth guard (see Testing).
 - **v1 index = bot-seeded rooms only.** Real human-created waiting rooms registering into the same
   index (humans finding humans) is a cheap, room-source-agnostic extension — but it's **v2**. v1's
   only join path is human-joins-bot, matching the intended first-run experience.
@@ -129,7 +168,8 @@ seeding tick — no new concurrency primitive.
 ### 3. Worker routes (`src/worker.ts`)
 
 - **Purpose:** expose the index to the browser and nothing more.
-- `GET /api/arena/open` → proxies `ARENA./open`, returns `OpenGame[]` JSON.
+- `GET /api/arena/open` → proxies `ARENA./open`, returns `OpenGame[]` JSON. (The proxied `/open`
+  also triggers ARENA's lazy bootstrap — §1 — so the first hit after a deploy fills the Arena.)
 - Join needs **no new route**: a row's `path` is an ordinary `<owner>/<slug>`; tapping it navigates
   to the existing room URL and the normal WebSocket join runs. (This is why the disguise is free at
   join time — the client experiences a plain room.)
@@ -142,18 +182,38 @@ seeding tick — no new concurrency primitive.
 - Tap → navigate to `path`. Empty/loading/error states handled (never a blank panel).
 - Light polling/refresh while the tab is open (e.g. every few seconds) so rows appear/disappear live.
 
-### 5. Bot rooms — generalize the existing bot (`src/room.ts`)
+### 5. Bot rooms — generalize the bot + add a server-side seed route (`src/room.ts`)
 
-Today `ensureBot()` only fires for `slug === ROBOT_SLUG`. v1 generalizes:
+Today `ensureBot()` only fires for `slug === ROBOT_SLUG` (`room.ts:549–556`) and a Room learns its
+identity / adds its bot only via the WebSocket connect path. v1 needs rooms that exist *before* any
+human connects, so:
 
-- **Seed marker:** rooms minted by `ARENA` carry a flag (e.g. `seed: { persona, profile }` on room
-  state, set at init). `ensureBot()` fires for seeded rooms too, adding **that persona** as the
-  waiting player (human name, not "clanker").
-- **Auto-start:** a seeded room has no human host to click *Start*. When the human joins (2/2), the
-  room transitions `lobby → playing` automatically (existing word-pick path).
-- **Report to ARENA:** on entering lobby as a seeded waiting room → `POST ARENA./open`. On the human
-  joining / starting / finishing → `POST ARENA./close`. Room owns its own index truthfulness.
-- The existing **`robots` room keeps working unchanged** (labeled clanker, not disguised).
+- **▶ rev — new `POST /seed` route on the Room DO (the missing primitive).** `ARENA` calls
+  `roomStub.fetch("https://do/seed", { method: "POST", body: { path, persona, profile, edition,
+  wordLength } })`. The handler sets `state.path/owner/slug` (no `?room=` query exists at seed time —
+  this is where a seeded room's identity comes from), stamps the **seed marker**
+  `seed: { personaId, profile }`, injects the persona as a waiting player via the generalized
+  `ensureBot`, leaves `phase: "lobby"`, persists, then `POST ARENA./open` to register itself
+  (`status: registered`). Mirrors how `seedDailyIfNeeded` initializes server-side, but triggered by
+  ARENA instead of a client connect.
+- **Generalized `ensureBot`:** fires for seeded rooms too (gate on the seed marker, not just
+  `ROBOT_SLUG`), adding **the persona** as the waiting player (human name + avatar, not "clanker")
+  and emitting **no** `🤖 powered on` system line (`room.ts:555` is a disguise tell — see §Disguise).
+- **Auto-start on human join:** a seeded room has no human host to click *Start*. When the human's
+  `hello` brings it to 2/2, the room runs the existing start path (`onStart` word-pick →
+  `lobby → playing` → `scheduleBotTick`) automatically. `onStart` (`room.ts:439`) currently takes a
+  `ws` for its "who started" line + error sends — factor the startable core out so the seeded path
+  can call it without a socket.
+- **Report to ARENA:** on seed → `POST ARENA./open`; on the human joining/starting → `POST
+  ARENA./close`; on finish → `POST ARENA./close` (idempotent). The room owns its own index
+  truthfulness; ARENA's staleness sweep (§2) is the backstop if a report is lost.
+- **▶ rev — unique path per mint.** `idFromName(path)` is deterministic, so reusing a synthetic path
+  on restock returns the *same* DO instance, still holding the finished game's state/chat. Seeded
+  paths therefore embed `seedCount` (e.g. `arena/maya-7`) so every mint is a fresh DO. Trade-off:
+  finished seeded DOs accumulate (ties into the existing junk-record cleanup TODO) — the leaner
+  correctness choice over reset-in-place, which risks stale chat/state leaking into a "new" game.
+- The existing **`robots` room keeps working unchanged** (labeled clanker, not disguised; still
+  calls `computeNextGuess` directly).
 
 ### 6. Bot roster (`src/bots.ts` — **new**, pure data + selection)
 
@@ -171,8 +231,19 @@ Today `ensureBot()` only fires for `slug === ROBOT_SLUG`. v1 generalizes:
 - v1: ~6–8 personas. **Soul = reuse the existing edition/companion/voice system**
   (`public/edition.js`, `companion.js`, `voice/`) — a persona is bound to an edition and speaks its
   lines. No new voice work in v1.
-- Pure `pickPersona()` selection (deterministic-testable; vary by seed/index, never `Math.random`
-  at module load).
+- **▶ rev — `pickPersona(seedCount, openPersonaIds)` is pure and uniqueness-aware:** it varies by
+  ARENA's monotonic `seedCount` (deterministic + unit-testable — not `Math.random`) AND excludes any
+  persona already hosting an open room. Two simultaneous "Maya" rooms would be a visible tell *and*
+  collide on the H2H key (`h2h[maya]`); excluding open personas prevents both. (Runtime `Math.random`
+  for *timing jitter* stays fine — already used at `room.ts:565`; the determinism rule is about
+  selection logic, not pacing.)
+- **▶ rev — v1 seeds are 5-letter.** `wordLength` is free 4–12 in the data, but a "beatable noob" at
+  10–12 letters can still crush most humans and the first-run win wobbles. Pin v1 seeds to the
+  friendly 5-letter default so the magic moment lands; length variety is a v2 knob.
+- **▶ rev — free win:** because a persona wears an edition, every Arena room showcases a theme from
+  the library — reinforcing the "grow the edition library / beat NYT" direction at zero extra cost.
+  Caveat: the room has one shared edition (`types.ts:69`), so joining a persona overrides the human's
+  theme for that game — intended.
 
 ### 7. Noob skill profile (`src/noob.ts` — **new**, and it stays BLIND)
 
@@ -216,8 +287,8 @@ The opponent must read as a person across **every** channel. v1 must close all c
 
 | Channel | Tell today | v1 fix |
 |---|---|---|
-| Snapshot | `PlayerState.isBot` is sent to clients (`types.ts:36`, in `RoomSnapshot.players`) | **Strip `isBot`** (and any seed metadata) from the outbound snapshot. Keep it server-side only. |
-| Chat | `🤖 clanker powered on…` system line (`room.ts:485`) | Seeded rooms emit **no** bot-announcement; persona joins look like a normal player join. |
+| Snapshot | `PlayerState.isBot` is sent to clients (`types.ts:38`, in `RoomSnapshot.players`) | **Strip `isBot`** (and any seed metadata) from the outbound snapshot. Keep it server-side only. |
+| Chat | `🤖 clanker powered on…` system line (`room.ts:555`) | Seeded rooms emit **no** bot-announcement; persona joins look like a normal player join. |
 | Name | `clanker` is obviously a robot | Seeded bots use **persona names** (human). `clanker` stays only in the labeled `robots` room. |
 | Avatar | n/a | Persona avatars are human, never robotic. |
 | Skill/timing | near-perfect, instant | **Noob profile**: mistakes + slow pacing (§7). |
@@ -225,6 +296,11 @@ The opponent must read as a person across **every** channel. v1 must close all c
 > Implementation note: this means a **client-facing snapshot projection** — the server's internal
 > `RoomSnapshot` keeps `isBot`/seed data; what's serialized to the socket omits it. This is the
 > single most security-sensitive correctness item in v1: a leaked `isBot` breaks the whole premise.
+
+> **▶ rev — accepted soft tell:** in v1 only bots accumulate H2H (human-human tracking is v2), so the
+> *presence* of a "You vs X" record technically reveals X is a bot to a savvy user. We accept this:
+> the "You vs Maya: 1–0" moment IS the product, and the inference requires a player who both notices
+> the record and reasons about it. Closing it (seed human-human H2H) is a v2 follow-up, not a v1 gate.
 
 ## Fairness invariant (unchanged, load-bearing)
 
@@ -236,16 +312,19 @@ documents at its top, and it stays test-guarded.
 
 ## Data flow (end to end)
 
-1. **Seed:** `ARENA.alarm()` sees `open < TARGET_OPEN` → picks a persona + edition + length, mints a
-   `ROOM` (`idFromName(syntheticPath)`), initializes it as a seeded lobby with the persona waiting,
-   records it in the index.
+1. **Seed:** `ARENA.alarm()` sees live seeds `< TARGET_OPEN` → `pickPersona(seedCount, openPersonas)`
+   picks a fresh persona (5-letter, edition from the persona), mints a `ROOM` at a **unique** path
+   (`idFromName("arena/<persona>-<seedCount>")`), calls `Room POST /seed` to initialize the seeded
+   lobby with the persona waiting (`status: minted`). The room then `POST ARENA./open`
+   (`status: registered`).
 2. **Browse:** human opens Arena → `GET /api/arena/open` → rows render, including this waiting game.
 3. **Join:** human taps the row → navigates to `path` → normal WebSocket `hello` → room now 2/2.
 4. **Auto-start:** seeded room flips `lobby → playing`, picks the word (existing path), bot begins
    its noob heartbeat. Room `POST ARENA./close` (no longer joinable).
 5. **Play:** human vs noob bot. Bot guesses via `noobGuess` (blind, fallible, slow).
 6. **Finish:** existing finish flow. Human's game record `→ USER ./append`; H2H `→ USER ./h2h`.
-7. **Restock:** the closed slot drops `open` below target; next `ARENA.alarm()` mints a replacement.
+7. **Restock:** the `closed` record drops the live-seed count below target; the next `ARENA.alarm()`
+   mints a replacement at a **new** unique path (never the closed one — §5).
 
 ---
 
@@ -268,32 +347,51 @@ documents at its top, and it stays test-guarded.
   + the module imports nothing that exposes it).
 - `bots.ts`: `pickPersona()` is deterministic and covers the roster.
 - Snapshot projection: client-facing serialization omits `isBot` / seed fields (disguise guard).
-- Index ops (pure where possible): add/refresh/close/prune transitions on the `OpenGame` map.
+- **▶ rev — index lifecycle as a pure, fully-tested reducer:** the truthful seam (the cross-DO
+  open/close report) is the *least* unit-testable part in a pure-Vitest setup, so model the index as
+  a pure `(state, event) → state` reducer and cover every transition — `minted→registered→closed`,
+  stale-`minted` drop, aged-`registered` prune, count = `status !== "closed"`. The prune logic is the
+  load-bearing truth guard; cover it exhaustively even though the happy-path report is only smoke-tested.
 - Integration (manual smoke): seed → Arena lists it → join → auto-start → beat the bot → H2H shows.
+  ▶ rev — also smoke the failure the sweep guards: kill a room mid-wait, confirm its row drops from
+  `/open` within `MAX_OPEN_MS` rather than becoming a ghost.
 
 ---
 
 ## Deploy / migration (known gotcha, baked in)
 
-- New DO namespace `ARENA` → add wrangler migration **`v4` with `new_sqlite_classes: ["Arena"]`**
-  (v2/v3 already use `new_sqlite_classes` for `User`/`Challenge` — the established pattern for any
-  new DO on the free plan). Using `new_classes` here would deploy-fail with **err 10097**, and a
-  **dry-run won't catch it** — only a real deploy does. The `Arena` DO uses the KV-style
-  `ctx.storage.get/put` API, which is supported on `new_sqlite_classes`.
+- **▶ rev — New DO namespace `ARENA` → wrangler migration `v5` with `new_sqlite_classes: ["Arena"]`.**
+  The spec originally said `v4`, but **`v4` already shipped as `Daily`** (`wrangler.jsonc`: v1 Room ·
+  v2 User · v3 Challenge · v4 Daily) — a duplicate tag is the exact version-collision incident class.
+  **Read the current max tag at implementation time; today that's `v5`.** v2/v3/v4 all use
+  `new_sqlite_classes` for new free-plan DOs — the established pattern. Using `new_classes` here would
+  deploy-fail with **err 10097**, and a **dry-run won't catch it** — only a real deploy does. The
+  `Arena` DO uses the KV-style `ctx.storage.get/put` API, supported on `new_sqlite_classes`.
 - Add the `ARENA` binding to `Env` (`types.ts`) and `wrangler.toml` `durable_objects.bindings`.
 
 ---
 
 ## Suggested build sequence (for the plan)
 
-1. `ARENA` DO + binding + `v4` migration + `GET /api/arena/open` (returns empty list) — deploys clean.
-2. Generalize `ensureBot` + seed marker + auto-start; ARENA seeding alarm mints 1 room. Verify a
-   seeded waiting game appears via the API.
-3. Arena tab UI renders the list + join. Verify the magic-moment join works against a sharp bot.
-4. `noob.ts` + wire into seeded rooms. Verify the bot is now slow and beatable.
-5. Bot roster (`bots.ts`) + human names/avatars + disguise projection (strip `isBot`, no robot chat).
-   Verify no tell leaks to the client.
-6. H2H memory (USER DO field + endpoint + write + UI surface). Verify "You vs Maya" persists.
+> **▶ rev — prod-is-dev reorder.** This project ships each green step to prod, so the Arena tab must
+> not become publicly reachable until the disguise projection AND the noob profile are in — otherwise
+> a live window exposes `isBot`, the `🤖 powered on` line, and an *unbeatable* sharp bot to real
+> users. Everything before the tab is server-side and invisible; the tab flips on **last**.
+
+1. `ARENA` DO + binding + **`v5`** migration + `GET /api/arena/open` (returns empty list) — deploys
+   clean. No UI yet.
+2. `Room POST /seed` + generalized `ensureBot` + seed marker + auto-start-on-join; ARENA seeding
+   alarm (single-list lifecycle + lazy bootstrap) mints 1 room. Verify a seeded waiting game appears
+   **via the API** (still no public tab).
+3. `noob.ts` + wire into seeded rooms (seeded → `noobGuess`; `robots` → `computeNextGuess`). Verify
+   via the API / a test room that the bot is now slow and beatable.
+4. Bot roster (`bots.ts`) + persona names/avatars + **disguise projection** (strip `isBot`/seed from
+   the outbound snapshot, suppress the robot chat line). Verify no tell leaks to the client.
+5. H2H memory (USER DO `/h2h` field + endpoint + write + in-room surface). Verify "You vs Maya"
+   persists across games.
+6. **Arena tab UI goes live** (`hub.js:47` stub → real list + join + light poll). Only now is the
+   feature publicly reachable — by which point bots are beatable and disguised. Verify the full
+   magic moment end-to-end.
 
 ---
 
