@@ -29,6 +29,15 @@ const CHAT_THROTTLE_MS = 800;
 const ROBOT_SLUG = "robots";
 const BOT_NAME = "clanker";
 
+// Wordul of the Day: a flat gold goody on completion, on top of the score-based mint.
+const DAILY_GOLD_BONUS = 100; // ← tune to taste (1 gold ≈ 100 points)
+
+// A room whose canonical path is daily/<YYYY-MM-DD> is the day's puzzle.
+function dailyDateOf(path: string): string | null {
+  const m = /^daily\/(\d{4}-\d{2}-\d{2})$/.exec(path ?? "");
+  return m ? m[1] : null;
+}
+
 // Normalize a client-supplied edition id to the charset edition ids use (lowercase
 // kebab). Empty/garbage collapses to "default". Not a whitelist — the client falls
 // back to the default theme for any id it doesn't recognize.
@@ -270,11 +279,46 @@ export class Room extends DurableObject<Env> {
     if (username === this.state.owner) {
       void this.registerRoom();
     }
+    await this.seedDailyIfNeeded();
     this.ensureBot();
     await this.persistAndBroadcast();
   }
 
+  // A daily room (path daily/<date>) pulls its World from the DAILY DO on first
+  // contact and locks to it: the word never changes, the board goes straight to
+  // "playing" (no host start), and the theme/story come from the World. Server→server
+  // so the word never reaches a still-playing client. Idempotent — seeds once.
+  private async seedDailyIfNeeded(): Promise<void> {
+    const date = dailyDateOf(this.state.path);
+    if (!date) return;                 // not a daily room
+    if (this.state.isDaily && this.state.word) return; // already seeded
+    try {
+      const res = await this.env.DAILY.get(this.env.DAILY.idFromName("daily"))
+        .fetch(`https://do/resolve?date=${date}`);
+      if (!res.ok) return;
+      const world = (await res.json()) as {
+        word: string; edition: string; voice: string;
+        story: { title: string; body: string; tip?: string };
+      };
+      const word = (world.word ?? "").toUpperCase();
+      if (!/^[A-Z]+$/.test(word)) return;
+      this.state.isDaily = true;
+      this.state.word = word;
+      this.state.wordLength = word.length;
+      this.state.maxGuesses = guessesFor(word.length);
+      this.state.edition = world.edition || "default";
+      this.state.voice = world.voice || "yang";
+      this.state.story = world.story ?? null;
+      this.state.phase = "playing";    // async one-shot: always live, no lobby
+      this.state.round = 1;
+      this.state.startedAt = this.state.startedAt ?? Date.now();
+    } catch (e) {
+      console.error("seedDaily failed", this.state.path, (e as Error).message);
+    }
+  }
+
   private async registerRoom(): Promise<void> {
+    if (this.state.isDaily) return; // daily rooms are NOT directory-discoverable
     const [owner, slug] = this.state.path.split("/");
     if (!owner || !slug) return;
     try {
@@ -322,6 +366,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private async onSetLength(ws: WebSocket, length: number): Promise<void> {
+    if (this.state.isDaily) return; // daily word/theme are locked by the World
     if (this.state.phase !== "lobby") {
       this.send(ws, { type: "error", message: "can't change length mid-game" });
       return;
@@ -343,6 +388,7 @@ export class Room extends DurableObject<Env> {
   // The id is only sanitized, not whitelisted — an unknown id renders the default theme
   // client-side (getEdition falls back), matching the game's passwordless "kindness model".
   private async onSetEdition(ws: WebSocket, editionRaw: string): Promise<void> {
+    if (this.state.isDaily) return; // daily word/theme are locked by the World
     if (this.state.phase === "playing") {
       this.send(ws, { type: "error", message: "can't change theme mid-game" });
       return;
@@ -356,6 +402,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private async onSetMode(ws: WebSocket, mode: RoomMode): Promise<void> {
+    if (this.state.isDaily) return; // daily word/theme are locked by the World
     if (this.state.phase !== "lobby") {
       this.send(ws, { type: "error", message: "can't change mode mid-game" });
       return;
@@ -373,6 +420,7 @@ export class Room extends DurableObject<Env> {
 
   private async onStart(ws: WebSocket): Promise<void> {
     if (this.state.phase === "playing") return;
+    if (this.state.isDaily) return; // daily auto-starts on seed; no manual start
     this.ensureBot();
     if (this.state.players.length < 1) return;
     const pool = WORDS_BY_SIZE[this.state.wordLength];
@@ -482,6 +530,7 @@ export class Room extends DurableObject<Env> {
 
   private ensureBot(): void {
     if (!this.isRobotRoom()) return;
+    if (this.state.isDaily) return; // no worduler in the daily room
     if (this.state.players.some((p) => p.isBot)) return;
     if (this.state.players.length >= MAX_PLAYERS) return;
     this.state.players.push({ username: BOT_NAME, connected: true, guesses: [], status: "playing", isBot: true, points: 0, pointsSpent: 0 });
@@ -629,6 +678,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private async onRematch(ws: WebSocket): Promise<void> {
+    if (this.state.isDaily) return; // daily never resets — one attempt per day
     if (this.state.phase !== "finished") return;
     this.state.phase = "lobby";
     this.state.word = null;
