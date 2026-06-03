@@ -15,6 +15,7 @@ export type UserProfile = {
   ownedRooms: OwnedRoom[];
   ledger: LedgerTx[];   // append-only token transactions; capped audit log (last 500)
   balances: Record<string, number>;  // running per-token balance; authoritative (ledger is a capped audit log)
+  h2h?: Record<string, { w: number; l: number }>; // per-(human, persona) record, keyed by persona id
 };
 
 export interface Env {

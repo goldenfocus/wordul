@@ -1723,6 +1723,13 @@ body.reduced-motion .gold-floater { display: none !important; }
 .room-name:hover { color: var(--accent); }
 .room-name:hover::after { opacity: 0.8; }
 
+/* Head-to-head record vs the current opponent — "You vs Maya 1–0". The opponent name is
+   already title-cased in JS; this is just a quiet sub-label under the room name. */
+.room-h2h {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--muted, #888); margin-top: 2px;
+}
+
 /* --- Per-room scoreboard --- */
 .scoreboard {
   width: 100%; max-width: 420px;

@@ -729,6 +729,7 @@ function renderRoomHeader() {
   }
   renderHeaderIdentity();
   renderGoldHud();
+  renderH2HBadge();
 }
 
 // Copy the room link with a subtle confirmation. The whole share/copy surface
@@ -1064,8 +1065,45 @@ function refreshGold() {
   if (!name) return;
   fetch(`/api/user/${encodeURIComponent(name)}`)
     .then((r) => (r.ok ? r.json() : null))
-    .then((p) => { if (p && typeof p.gold === "number") { setGold(p.gold); renderGoldHud(); } })
+    .then((p) => {
+      if (!p) return;
+      if (typeof p.gold === "number") { setGold(p.gold); renderGoldHud(); }
+      // Cache the head-to-head map so the in-room badge can show "You vs <opp> W–L".
+      // It only ever contains personas (the server writes h2h for seeded rooms only), so
+      // looking up a live opponent's username naturally scopes the badge to bot rooms.
+      game.myH2H = p.h2h || {};
+      renderH2HBadge();
+    })
     .catch(() => {});
+}
+
+// In-room head-to-head record against the current opponent, shown beside the room name.
+// Keyed off the opponent's VISIBLE username (no bot-only field on the wire) — present in
+// game.myH2H only for personas the player has faced before.
+function renderH2HBadge() {
+  const nameEl = $("#roomName");
+  if (!nameEl) return;
+  let badge = $("#roomH2H");
+  const snap = game.snapshot;
+  const me = getUsername();
+  const h2h = game.myH2H || {};
+  let text = "";
+  if (snap && me) {
+    const opp = (snap.players || []).find((p) => p.username !== me);
+    const rec = opp && h2h[opp.username];
+    if (rec) {
+      const oppName = opp.username.charAt(0).toUpperCase() + opp.username.slice(1);
+      text = `You vs ${oppName} ${rec.w}–${rec.l}`;
+    }
+  }
+  if (!text) { if (badge) badge.remove(); return; }
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.id = "roomH2H";
+    badge.className = "room-h2h";
+    nameEl.insertAdjacentElement("afterend", badge);
+  }
+  badge.textContent = text;
 }
 
 function onServerMessage(msg) {
@@ -1101,6 +1139,7 @@ function onServerMessage(msg) {
     }
     const me = msg.room.players.find((p) => p.username === getUsername());
     const prevMe = prev?.players.find((p) => p.username === getUsername());
+    renderH2HBadge(); // opponent may have just joined; refresh the "You vs X W–L" badge
     // Server accepted our guess → clear pending letters.
     if (me && prevMe && me.guesses.length > prevMe.guesses.length) {
       game.pending = "";
