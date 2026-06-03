@@ -70,6 +70,8 @@ export class Room extends DurableObject<Env> {
       scoreboard: [],
       history: [],
       edition: "default",
+      isDaily: false,
+      story: null,
       challengeId: null,
     };
     // Async restore — DO ctor can't await, so we kick it off and gate writes via blockConcurrencyWhile.
@@ -83,6 +85,7 @@ export class Room extends DurableObject<Env> {
         if (!restored.maxGuesses) restored.maxGuesses = guessesFor(restored.wordLength);
         if (!restored.mode) restored.mode = DEFAULT_MODE;
         if (!restored.edition) restored.edition = "default"; // pre-theme rooms
+        if (restored.isDaily === undefined) restored.isDaily = false;
         for (const p of restored.players) { if (typeof p.points !== "number") p.points = 0; if (typeof p.pointsSpent !== "number") p.pointsSpent = 0; }
         this.state = restored;
       }

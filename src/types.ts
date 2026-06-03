@@ -38,6 +38,7 @@ export type PlayerState = {
   isBot?: boolean;         // a worduler — born in Wordul, plays from public masks only
   points: number;        // live in-game points (earned − spent); reset each round
   pointsSpent: number;   // running power-up spend this round (internal accumulator)
+  scored?: boolean;        // daily: this player's one result has been recorded (mint once)
 };
 
 export type RoomPhase = "lobby" | "playing" | "finished";
@@ -66,6 +67,10 @@ export type RoomSnapshot = {
   history: RoomGame[];     // finished games in this room, newest last (capped)
   edition: string;         // theme/edition id bound to the room — everyone in it sees this theme
   challengeId?: string | null; // set when this room plays a pinned challenge word
+  // Daily-mode (Wordul of the Day). Absent/false on normal race rooms.
+  isDaily?: boolean;       // async one-shot, locked word, no resets, per-player scoring
+  story?: { title: string; body: string; tip?: string } | null; // World story for the unlock
+  voice?: string;          // World companion voice id (forward-compat; client still defaults)
 };
 
 export type ClientMessage =
