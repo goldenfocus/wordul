@@ -178,6 +178,13 @@ export default {
     const feedHtmlMatch = url.pathname.match(FEED_DATE_RE);
     if (feedHtmlMatch && !url.pathname.endsWith(".json")) return renderFeedPost(env, url, feedHtmlMatch[1]);
 
+    if (url.pathname === "/feed.xml") {
+      const posts = await feedStream(env);
+      return new Response(feedRss(posts, url.origin), {
+        headers: { "content-type": "application/rss+xml; charset=utf-8", "cache-control": "public, max-age=600" },
+      });
+    }
+
     // Legacy redirect: /r or /r/<code> -> home (rooms are owner-nested now).
     if (url.pathname === "/r" || url.pathname.startsWith("/r/")) {
       return Response.redirect(url.origin + "/", 301);
@@ -322,6 +329,17 @@ async function feedStream(env: Env, days = 14): Promise<FeedPost[]> {
   const dates = Array.from({ length: days }, (_, i) => shiftDate(today, -1 - i)); // yesterday backwards
   const posts = await Promise.all(dates.map((d) => feedDailyPost(env, d).catch(() => null)));
   return posts.filter((p): p is FeedPost => !!p && p.published);
+}
+
+function feedRss(posts: FeedPost[], origin: string): string {
+  const items = posts.map((p) =>
+    `<item><title>${escapeHtml(p.headline)}</title>` +
+    `<link>${origin}/feed/${p.slug}</link><guid>${origin}/feed/${p.slug}</guid>` +
+    `<description>${escapeHtml(p.findings.map((f) => f.text).join(" "))}</description></item>`).join("");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0"><channel>` +
+    `<title>The Wordul Living Lab</title><link>${origin}/feed</link>` +
+    `<description>Honest, privacy-preserving discoveries from the Wordul of the Day.</description>` +
+    `${items}</channel></rss>`;
 }
 
 function feedPostProse(post: FeedPost, origin: string): string {
