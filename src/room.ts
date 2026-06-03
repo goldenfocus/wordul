@@ -766,6 +766,7 @@ export class Room extends DurableObject<Env> {
     }
     if (this.state.phase === "finished" && this.state.botRematchAt && now >= this.state.botRematchAt) {
       this.state.botRematchAt = null;
+      changed = true;
       const bot = this.state.players.find((p) => p.isBot);
       if (bot) {
         const { rematch, effects } = rematchReduce(this.state.rematch ?? null, {
@@ -773,7 +774,6 @@ export class Room extends DurableObject<Env> {
         });
         this.state.rematch = rematch;
         await this.applyRematchEffects(effects);
-        changed = true;
       }
     }
     // If accept→start fired, phase is now "playing" and runStart armed the bot tick;
