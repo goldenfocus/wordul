@@ -30,4 +30,14 @@ export const en = {
   "mode.longgame.blurb": "Turn-based. 3-day clock. Play a row, then wait.",
   "mode.challenge.label": "Open Challenge",
   "mode.challenge.blurb": "One word, always open. Beat the standing record.",
+
+  // Wordul of the Day
+  "daily.entryTitle": "Today's Wordul.",
+  "daily.entrySub": "One word. The whole world. Pick a username to play.",
+  "daily.entryCta": "Play today →",
+  "daily.boardTitle": "Wordul of the Day · {date}",
+  "daily.goodySolved": "🎁 Solved it! The word was {word}. Here's your gold.",
+  "daily.goodyMissed": "The word was {word}. A little gold for trying — come back tomorrow.",
+  "daily.storyFallbackTitle": "The story behind the word",
+  "daily.archiveTitle": "Every Wordul of the Day",
 };
