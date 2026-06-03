@@ -32,9 +32,8 @@ export type FeedPost = {
   generatedAt: number;
 };
 
-// Re-exported from brain-notes in Task 3; declared here so types compile in isolation.
-// @ts-expect-error brain-notes.ts is created in Task 3
-export type BrainNote = import("./brain-notes.ts").BrainNote;
+export type { BrainNote, BrainNoteTrigger } from "./brain-notes.ts";
+import type { BrainNote } from "./brain-notes.ts";
 export type FeedEditorial = {
   title?: string; intro?: string; body?: string;
   media?: { images: string[]; video?: string };
@@ -62,6 +61,30 @@ export function medianFromDistribution(dist: Record<string, number>): number | n
   return pairs[pairs.length - 1][0];
 }
 
+export function matchBrainNotes(findings: Finding[], notes: BrainNote[]): BrainNote[] {
+  const byKind = new Map(findings.map((f) => [f.kind, f.value]));
+  return notes.filter((n) => {
+    const v = byKind.get(n.trigger.kind);
+    if (v == null) return false;
+    if (n.trigger.min != null && v < n.trigger.min) return false;
+    if (n.trigger.max != null && v > n.trigger.max) return false;
+    return true;
+  });
+}
+
+function uniquePillars(notes: BrainNote[]): Pillar[] {
+  const order: Pillar[] = ["mind", "body", "spirit", "soul"];
+  const present = new Set(notes.map((n) => n.pillar));
+  return order.filter((p) => present.has(p));
+}
+
+function buildHighlights(s: SciencePublicDailySummary, world: World): Highlight[] {
+  const out: Highlight[] = [{ label: "Word", value: world.word }];
+  const sr = pct(s.totals.wins, s.totals.playerFinishes);
+  if (s.totals.playerFinishes > 0) out.push({ label: "Solve rate", value: `${sr}%` });
+  return out;
+}
+
 export function buildDailyPost(
   summary: SciencePublicDailySummary,
   world: World,
@@ -84,14 +107,18 @@ export function buildDailyPost(
   }
 
   const findings = buildDailyFindings(summary);
+  const matched = matchBrainNotes(findings, notes);
+  // NOTE: cast shim — World.feedEditorial is added in Task 5, which removes this cast.
+  const editorial = (world as World & { feedEditorial?: FeedEditorial }).feedEditorial;
   return {
     ...base,
     headline: dailyHeadline(summary.date, world.word, findings),
     findings,
-    highlights: [],
-    brainNotes: [],
-    pillars: [],
+    highlights: buildHighlights(summary, world),
+    brainNotes: matched,
+    pillars: uniquePillars(matched),
     published: true,
+    ...(editorial ? { editorial } : {}),
   };
 }
 
