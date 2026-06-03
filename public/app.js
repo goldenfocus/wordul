@@ -1297,25 +1297,62 @@ function renderDailyUnlock(snap, me) {
   const done = me && me.status !== "playing";
   box.hidden = !done;
   if (!done) return;
+  const won = me.status === "won";
   const goody = $("#dailyGoody");
   if (goody && !goody.dataset.filled) {
-    goody.textContent = me.status === "won"
+    goody.textContent = won
       ? t("daily.goodySolved", { word: snap.word || "" })
       : t("daily.goodyMissed", { word: snap.word || "" });
+    if (won) goody.classList.add("is-win"); // gold halo (CSS) — solve only
     goody.dataset.filled = "1";
+    // GOLD-FLIGHT: celebrate a solve once — bump the HUD + send a few floaters
+    // rising toward it. Reuses the existing .gold-floater / gold-bump system; skip
+    // entirely under reduced motion (the calm CSS appear covers that case).
+    if (won && !getSettings().reducedMotion) celebrateDailyUnlock();
   }
   const story = $("#dailyStory");
   if (story && snap.story && !story.dataset.filled) {
+    const kicker = document.createElement("span"); kicker.className = "daily-story-kicker"; kicker.textContent = t("daily.storyKicker");
     const h = document.createElement("h3"); h.textContent = snap.story.title || t("daily.storyFallbackTitle");
     const p = document.createElement("p"); p.textContent = snap.story.body || "";
-    story.append(h, p);
+    story.append(kicker, h, p);
     if (snap.story.tip) { const tip = document.createElement("p"); tip.className = "daily-tip"; tip.textContent = "💡 " + snap.story.tip; story.appendChild(tip); }
     story.dataset.filled = "1";
   }
   const bridge = $("#dailyBridgeBtn");
-  if (bridge && !bridge.dataset.wired) { bridge.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); }); bridge.dataset.wired = "1"; }
+  if (bridge && !bridge.dataset.wired) {
+    bridge.textContent = "▶ " + t("daily.keepPlaying");
+    bridge.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); }); bridge.dataset.wired = "1";
+  }
   const arch = $("#dailyArchiveLink");
-  if (arch && !arch.dataset.wired) { arch.addEventListener("click", (e) => { e.preventDefault(); navigate("/daily/archive"); }); arch.dataset.wired = "1"; }
+  if (arch && !arch.dataset.wired) {
+    arch.textContent = t("daily.browsePast");
+    arch.addEventListener("click", (e) => { e.preventDefault(); navigate("/daily/archive"); }); arch.dataset.wired = "1";
+  }
+}
+
+// The daily solve's gold-flight: pulse the gold HUD and float a few coins from the
+// goody line up toward it. Pure presentation, reuses the room's existing gold-motion
+// vocabulary (.gold-floater + .gold-hud.gold-bump). Caller guards reduced-motion.
+function celebrateDailyUnlock() {
+  const hud = $("#goldHud");
+  if (hud) { hud.classList.remove("gold-bump"); void hud.offsetWidth; hud.classList.add("gold-bump"); }
+  const goody = $("#dailyGoody");
+  const origin = (goody || $("#dailyUnlock"))?.getBoundingClientRect();
+  if (!origin) return;
+  // a small, intentional flight — 5 coins, staggered, drifting up (the .gold-floater
+  // keyframe rises and fades; that reads as coins lifting toward the HUD).
+  for (let i = 0; i < 5; i++) {
+    setTimeout(() => {
+      const f = document.createElement("div");
+      f.className = "gold-floater";
+      f.textContent = "◆";
+      f.style.left = `${origin.left + origin.width * (0.3 + Math.random() * 0.4)}px`;
+      f.style.top = `${origin.top + origin.height * 0.5}px`;
+      document.body.appendChild(f);
+      setTimeout(() => f.remove(), 800);
+    }, i * 90);
+  }
 }
 
 function renderGames(snap) {

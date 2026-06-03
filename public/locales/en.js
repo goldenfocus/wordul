@@ -39,5 +39,8 @@ export const en = {
   "daily.goodySolved": "🎁 Solved it! The word was {word}. Here's your gold.",
   "daily.goodyMissed": "The word was {word}. A little gold for trying — come back tomorrow.",
   "daily.storyFallbackTitle": "The story behind the word",
+  "daily.storyKicker": "Why this word",
+  "daily.keepPlaying": "Keep playing",
+  "daily.browsePast": "Browse past days →",
   "daily.archiveTitle": "Every Wordul of the Day",
 };

@@ -2280,3 +2280,151 @@ body.playing .room-tabs { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .challenge-card { transition: none !important; }
 }
+
+/* ─── Daily completion reveal — "the veil lifts off the board" ─────────────────
+   The single most important surface of the daily. When you finish today's word
+   the board's hard-gate drops and THIS panel lifts in, native to the hub's Glass
+   Aurora language: a frosted glass veil (echoing .daily-hero) whose children
+   rise + fade in sequence — goody → story → bridge — like a curtain coming up.
+   Reuses tokens only (--accent ultraviolet, the hub's #f0c14b gold, .daily-kicker
+   scale). NO pills. All motion has a calm reduced-motion fallback below. */
+
+/* The veil: frosted glass that RISES off the board (echoes .daily-hero + home-rise). */
+.daily-unlock {
+  position: relative;
+  max-width: 520px;
+  margin: 14px auto 8px;
+  padding: 24px 22px 20px;
+  background: rgba(20, 14, 40, 0.55);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(124, 58, 237, 0.22);
+  border-radius: 22px;
+  overflow: hidden;
+  /* dissolve the bottom edge into the page, like the hero */
+  mask-image: linear-gradient(to bottom, black 80%, rgba(0,0,0,0.75) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 80%, rgba(0,0,0,0.75) 100%);
+  /* the veil lifts: same easing/feel as home-rise, a touch longer for ceremony */
+  animation: daily-veil-rise 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* a soft ultraviolet rim-glow blooming from the top, matching .daily-hero::before */
+.daily-unlock::before {
+  content: ""; position: absolute; inset: 0; border-radius: 22px; pointer-events: none;
+  background: radial-gradient(ellipse 85% 55% at 50% 0%, rgba(124,58,237,0.20) 0%, transparent 70%);
+}
+@keyframes daily-veil-rise {
+  from { opacity: 0; transform: translateY(22px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Children rise in, gently staggered — goody, story, bridge — so the reveal reads
+   as one lifting gesture, not a stack popping in. Echoes the .home child stagger. */
+.daily-unlock > * {
+  position: relative; z-index: 1;
+  animation: daily-child-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.daily-unlock > .daily-goody  { animation-delay: 0.10s; }
+.daily-unlock > .daily-story  { animation-delay: 0.20s; }
+.daily-unlock > .daily-bridge { animation-delay: 0.32s; }
+@keyframes daily-child-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The goody line — the gold moment. Display serif, with a warm gold halo that
+   pulses ONCE as the gold coins fly to the HUD (the .is-win hook is added by JS on
+   a solve, not a loss). Gold here = the hub's #f0c14b, same as the daily stats. */
+.daily-goody {
+  font-family: var(--font-display);
+  font-size: 19px; line-height: 1.4;
+  text-align: center;
+  margin: 0 0 18px;
+  color: var(--fg);
+}
+.daily-goody.is-win {
+  color: #f0c14b;
+  text-shadow: 0 0 16px rgba(240,193,75,0.55), 0 0 44px rgba(240,193,75,0.22);
+  animation: daily-goody-glow 1.1s ease-out 0.32s both;
+}
+@keyframes daily-goody-glow {
+  0%   { text-shadow: 0 0 0 rgba(240,193,75,0); }
+  35%  { text-shadow: 0 0 26px rgba(240,193,75,0.85), 0 0 64px rgba(240,193,75,0.4); }
+  100% { text-shadow: 0 0 16px rgba(240,193,75,0.55), 0 0 44px rgba(240,193,75,0.22); }
+}
+
+/* The story, beautifully set: a kicker label, a display title, muted body at a
+   comfortable measure, and the tip as a quiet aside with an --accent left-rule. */
+.daily-story { margin: 0 0 20px; }
+/* the "WHY THIS WORD" kicker — same scale/treatment as the hub's .daily-kicker */
+.daily-story-kicker {
+  display: block;
+  font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  color: #a78bfa;
+  text-shadow: 0 0 8px rgba(167,139,250,0.5);
+  margin-bottom: 6px;
+}
+.daily-story h3 {
+  /* match the hub's .daily-theme-name title scale, sized down for the body context */
+  font-family: var(--font-display);
+  font-size: 22px; line-height: 1.2;
+  margin: 0 0 8px;
+  color: var(--fg);
+}
+.daily-story p {
+  margin: 0 0 10px;
+  color: rgba(255,255,255,0.62);
+  font-size: 15px; line-height: 1.62;
+  max-width: 46ch; /* an elegant reading measure */
+}
+/* the tip — a quiet aside set off by a subtle ultraviolet left-rule */
+.daily-tip {
+  margin: 14px 0 0 !important;
+  padding-left: 14px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: rgba(255,255,255,0.5) !important;
+  font-size: 13.5px !important; line-height: 1.55 !important;
+  font-style: italic;
+}
+
+/* The bridge: a primary "Keep playing" that GLOWS (the hub's hero-btn treatment,
+   breathing softly), and a quiet "Browse past days" link beneath it. */
+.daily-bridge {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  margin-top: 4px;
+}
+.daily-bridge-btn {
+  text-decoration: none; text-align: center;
+  /* a softly breathing glow, echoing .hero-btn / #dailyPlay */
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent) inset,
+              0 0 28px -8px color-mix(in srgb, var(--accent) 90%, transparent);
+  animation: daily-bridge-breathe 4.5s ease-in-out infinite;
+}
+.daily-bridge-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent) inset,
+              0 0 44px -6px color-mix(in srgb, var(--accent) 100%, transparent);
+}
+@keyframes daily-bridge-breathe {
+  0%,100% { box-shadow: 0 0 0 1px color-mix(in srgb,var(--accent) 12%,transparent) inset, 0 0 24px -10px color-mix(in srgb,var(--accent) 80%,transparent); }
+  50%     { box-shadow: 0 0 0 1px color-mix(in srgb,var(--accent) 20%,transparent) inset, 0 0 46px -6px color-mix(in srgb,var(--accent) 100%,transparent); }
+}
+.daily-bridge-link { color: rgba(167,139,250,0.7); text-decoration: none; }
+.daily-bridge-link:hover { color: #a78bfa; text-decoration: underline; }
+
+/* Reduced motion: no curtain, no rain, no breathing — everything just appears,
+   calm and legible. (gold-coin/gold-floater rain is suppressed in JS too.) */
+body.reduced-motion .daily-unlock,
+body.reduced-motion .daily-unlock > *,
+body.reduced-motion .daily-goody.is-win,
+body.reduced-motion .daily-bridge-btn {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .daily-unlock,
+  .daily-unlock > *,
+  .daily-goody.is-win,
+  .daily-bridge-btn { animation: none !important; }
+  .daily-bridge-btn:hover { transform: none !important; }
+}
