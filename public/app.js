@@ -12,7 +12,8 @@ import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, 
 import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, detectLayout } from "/keyboard.js";
 import { getSettings, saveSettings, applySettings, openSettings, openHub } from "/settings.js";
 import { buildShareCardModel, renderShareCard } from "/share-card.js";
-import { renderHub } from "/hub.js";
+import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
+import { computeDailyStatsView } from "/daily-stats.js";
 import { EDITIONS, getEdition } from "/editions/index.js";
 import { MODES, isAvailableMode } from "/modes.js";
 import { t, initLang } from "/i18n.js";
@@ -76,6 +77,8 @@ function parseRoute() {
   const challenge = location.pathname.match(/^\/c\/([0-9A-Za-z]{5})$/);
   if (challenge) return { kind: "challenge", id: challenge[1] };
   if (location.pathname === "/daily/archive") return { kind: "daily-archive" };
+  const dailyStats = location.pathname.match(/^\/daily\/(\d{4}-\d{2}-\d{2})\/stats$/);
+  if (dailyStats) return { kind: "daily-stats", date: dailyStats[1] };
   const daily = location.pathname.match(/^\/daily\/(\d{4}-\d{2}-\d{2})$/);
   if (daily) return { kind: "daily", date: daily[1] };
   if (location.pathname === "/daily") return { kind: "daily", date: todayUTC() };
@@ -96,6 +99,37 @@ function mount(tplId) {
   app.appendChild(tpl.content.cloneNode(true));
   // Every screen change drops the home-only topbar stats; renderHub re-adds it.
   document.body.classList.remove("hub-home");
+}
+
+// Type-to-play: a bare letter pressed on the home (hub up, nothing focused) carries
+// into today's board as a seed. Held here between the home keypress and the daily
+// board becoming interactive; applied once by seedDailyOnce, then cleared.
+let pendingDailySeed = null;
+
+// One persistent listener: while the home screen is up and no field is focused, a
+// letter key starts today's word seeded with it (the card's own keydown handles
+// Enter/Space). Guarded so it never steals typing from the username field or rooms.
+document.addEventListener("keydown", (e) => {
+  if (parseRoute().kind !== "home") return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const el = document.activeElement;
+  if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+  if (/^[a-zA-Z]$/.test(e.key)) homeTypeLetter(e.key.toUpperCase());
+});
+
+// Best-effort seed of the daily board with the letter typed on the home. Self-
+// contained and harmless: it only types through the real input path once an input
+// row exists, and gives up quietly after a couple of seconds (e.g. slow WS).
+function seedDailyOnce(letter) {
+  if (!/^[A-Za-z]$/.test(letter || "")) return;
+  let tries = 0;
+  const tick = () => {
+    if (parseRoute().kind !== "daily") return; // navigated away — abandon
+    const ready = document.querySelector("#boards .input-row");
+    if (ready) { try { typeLetter(letter.toUpperCase()); } catch (_) {} return; }
+    if (++tries < 20) setTimeout(tick, 120);
+  };
+  setTimeout(tick, 120);
 }
 
 // --- screens ---
@@ -157,14 +191,16 @@ function renderHomeIdentity() {
       username: u,
       editions: EDITIONS,
       editionName: (id) => getEdition(id).name,
-      companionIdleLine: () => {
-        const lines = getEdition(getActiveEditionId()).companion?.lines?.idle ?? ["The board is waiting."];
-        return lines[Math.floor(Date.now() / 86400000) % lines.length];
-      },
-      onPlay: (editionId) => { applyEdition(editionId); navigate("/daily/" + todayUTC()); },
-      onViewDay: () => navigate("/daily/" + todayUTC()),
+      // Tap or type-to-play: drop into today's board (client-side, no reload). A
+      // typed letter is carried as a seed so "start playing right here" feels real.
+      onPlay: (editionId, seed) => { applyEdition(editionId); pendingDailySeed = seed || null; navigate("/daily/" + todayUTC()); },
       onSolo: () => enterNewRoom({ autoStart: true }),
       onPvP: () => enterNewRoom({ autoStart: false }),
+      onStats: () => navigate("/daily/" + todayUTC() + "/stats"),
+      // Real "N played" for the day from public aggregates — never a fake number.
+      fetchPlayed: () => fetch("/api/science/today")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((s) => s?.totals?.roundsStarted ?? s?.totals?.playerFinishes ?? null),
       renderRecentRooms: (mountEl) => renderRecentRoomsInto(mountEl, 3),
     };
     fetch(`/api/user/${encodeURIComponent(u)}`)
@@ -670,6 +706,7 @@ function showDaily(date) {
   document.title = `Wordul of the Day — ${date}`;
   showRoom("daily", date);                       // connects to /ws?room=daily/<date>
   game.isDaily = true; game.dailyDate = date;    // AFTER showRoom resets state (mirrors enterNewRoom's autoStart)
+  if (pendingDailySeed) { seedDailyOnce(pendingDailySeed); pendingDailySeed = null; }
 }
 
 // Username gate for a cold deep-link to /daily/<date> (the hub path already has a username).
@@ -691,6 +728,65 @@ function showDailyEntry(date) {
   };
   btn.addEventListener("click", play);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") play(); });
+}
+
+// Today's Wordul — its own Stats page (premium, easy back). Real public aggregates
+// only: played / solved / averages / guess distribution + the day's Studio title and
+// "glow". Usernames are withheld by design, so the top-10 leaderboard is a fast-follow.
+async function showDailyStats(date) {
+  document.title = `Wordul — Stats · ${date}`;
+  const app = $("#app");
+  app.innerHTML = "";
+  document.body.classList.remove("hub-home");
+  const dShort = new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" });
+  const ed = getEdition(dayTheme(new Date(), EDITIONS.map((e) => e.id)));
+  const glow = ed.companion?.lines?.idle?.[0] ?? "A quiet day on the board.";
+  const screen = document.createElement("section");
+  screen.className = "screen daily-stats-screen";
+  screen.innerHTML = `
+    <a href="/" class="link daily-stats-back" id="dailyStatsBack">← Home</a>
+    <header class="daily-stats-head">
+      <span class="daily-kicker">Today's Wordul · Stats</span>
+      <h1 class="daily-stats-title">${dShort}</h1>
+      <p class="daily-stats-studio">${ed.name} <span class="muted">· from the Studio</span></p>
+      <p class="daily-stats-glow">${glow}</p>
+    </header>
+    <div class="daily-stats-body" id="dailyStatsBody"><p class="muted small">Loading today's numbers…</p></div>`;
+  app.appendChild(screen);
+  $("#dailyStatsBack").addEventListener("click", (e) => { e.preventDefault(); navigate("/"); });
+  let summary = null;
+  try {
+    const res = await fetch(`/api/science/daily/${date}`);
+    if (res.ok) summary = await res.json();
+  } catch (_) { /* offline / cold day — render the empty state */ }
+  if (parseRoute().kind !== "daily-stats") return; // navigated away mid-fetch
+  renderDailyStatsBody(summary);
+}
+
+function renderDailyStatsBody(summary) {
+  const body = $("#dailyStatsBody");
+  if (!body) return;
+  if (!summary || !summary.totals) {
+    body.innerHTML = `<p class="muted daily-stats-empty">No numbers yet today — be the first to finish.</p>`;
+    return;
+  }
+  const v = computeDailyStatsView(summary);
+  const fmt = (n) => (n == null ? "—" : n.toLocaleString());
+  const stat = (num, label) => `<div class="dstat"><div class="dstat-num">${num}</div><div class="dstat-label">${label}</div></div>`;
+  const rows = v.distRows.filter((r) => r.count > 0).map((r) => {
+    const pct = v.maxCount > 0 ? Math.round((r.count / v.maxCount) * 100) : 0;
+    return `<div class="ddist-row"><span class="ddist-g">${r.guesses}</span><span class="ddist-bar" style="width:${Math.max(pct, 8)}%">${r.count}</span></div>`;
+  }).join("");
+  body.innerHTML = `
+    <div class="dstat-grid">
+      ${stat(fmt(v.played), "Played")}
+      ${stat(v.winRate == null ? "—" : v.winRate + "%", "Solved")}
+      ${stat(v.avgGuesses == null ? "—" : v.avgGuesses.toFixed(2), "Avg guesses")}
+      ${stat(v.avgScore == null ? "—" : Math.round(v.avgScore).toLocaleString(), "Avg score")}
+    </div>
+    <h2 class="daily-stats-sub">Guess distribution</h2>
+    <div class="ddist">${rows || '<p class="muted small">No solves yet.</p>'}</div>
+    <p class="daily-stats-foot muted small">Failed today: ${fmt(v.losses)} · Top-10 leaderboard coming soon.</p>`;
 }
 
 // Connect the per-player challenge WS — an isolated solo room seeded with the
@@ -3002,6 +3098,7 @@ function renderCrumbs(r) {
     r.kind === "room" ? r.slug.replace(/-/g, " ")
     : r.kind === "challenge" ? "challenge"
     : r.kind === "daily" ? "Daily"
+    : r.kind === "daily-stats" ? "Stats"
     : r.kind === "daily-archive" ? "Archive"
     : `@${r.username}`;
   nav.hidden = false;
@@ -3030,6 +3127,7 @@ function route() {
     return;
   }
   if (r.kind === "daily") { showDaily(r.date); return; }
+  if (r.kind === "daily-stats") { showDailyStats(r.date); return; }
   if (r.kind === "daily-archive") { showDailyArchive(); return; }
   if (r.kind === "room") {
     if (getUsername()) {
