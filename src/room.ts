@@ -11,6 +11,7 @@ import { pointsEarned, goldFromPoints, POINTS } from "./economy.ts";
 import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
 import { activeDate } from "./daily-core.ts";
 import { countMask, maskToPattern, type ScienceBaseEvent, type ScienceEvent, type ScienceOutcome, type ScienceRoomKind } from "./science.ts";
+import { outpacedLosers } from "./room-core.ts";
 import type { RoomMode } from "./modes.ts";
 import type {
   ChatEntry,
@@ -620,6 +621,7 @@ export class Room extends DurableObject<Env> {
   private async applyGuess(player: PlayerState, word: string): Promise<void> {
     const now = Date.now();
     const priorStatus = player.status;
+    const hadWinner = this.state.winner !== null;
     const mask = scoreGuess(word, this.state.word!);
     player.guesses.push({ word, mask });
     player.points = pointsEarned(player.guesses, this.state.maxGuesses) - player.pointsSpent;
@@ -637,6 +639,19 @@ export class Room extends DurableObject<Env> {
     this.emitAcceptedGuess(player, mask, now);
     if (priorStatus === "playing" && player.status !== "playing") {
       this.emitPlayerFinished(player, player.status === "won" ? "won" : "lost", now);
+    }
+    // First solve ends the race for everyone (live, non-daily rooms — Arena AND
+    // Friends). Flip the still-playing others to `lost` so they carry a real status
+    // into the snapshot and emitPlayerFinished fires for science/records/H2H. The
+    // existing afterPlayerStatus → maybeFinish then finds isGameOver() and finishes.
+    if (!hadWinner && this.state.winner && !this.state.isDaily) {
+      for (const username of outpacedLosers(this.state.players, this.state.winner)) {
+        const other = this.state.players.find((p) => p.username === username);
+        if (other) {
+          other.status = "lost";
+          this.emitPlayerFinished(other, "lost", now);
+        }
+      }
     }
     if (this.state.challengeId && (player.status === "won" || player.status === "lost") && !player.isBot) {
       const solved = player.status === "won";
