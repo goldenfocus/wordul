@@ -931,9 +931,33 @@ export class Room extends DurableObject<Env> {
         return calls;
       }),
     );
+    // Seeded room: record the head-to-head for each human against the persona. Reads
+    // this.state.players (internal, un-stripped) — the !isBot guard keeps the persona out
+    // of any USER DO (defect 21). Win = the human is the winner, else loss (defect 20).
+    if (this.state.seed) {
+      const personaId = this.state.seed.personaId;
+      for (const p of this.state.players) {
+        if (p.isBot) continue;
+        this.writeH2H(p.username, personaId, this.state.winner === p.username ? "w" : "l");
+      }
+    }
     // Backstop: ensure a finished seeded room is gone from the open index (close-on-join
     // already removed it; close is idempotent in arena-core).
     this.closeArena();
+  }
+
+  // Best-effort H2H write to the human's USER DO (ctx.waitUntil — can't block the finish).
+  private writeH2H(humanUsername: string, personaId: string, result: "w" | "l"): void {
+    const stub = this.env.USER.get(this.env.USER.idFromName(humanUsername));
+    this.ctx.waitUntil(
+      stub
+        .fetch(`https://do/h2h?username=${encodeURIComponent(humanUsername)}`, {
+          method: "POST",
+          body: JSON.stringify({ personaId, result }),
+          headers: { "content-type": "application/json" },
+        })
+        .catch((e) => console.error("h2h write failed", humanUsername, (e as Error).message)),
+    );
   }
 
   // Best-effort close of a seeded room in ARENA's open index. No-op for non-seeded rooms.
