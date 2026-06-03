@@ -110,10 +110,13 @@ function showHome() {
   const input = $("#usernameInput");
   input.value = getUsername();
 
-  // Start lands in the lobby (never auto-start) so you can set theme + length
-  // before the board goes live — the edition picker locks once playing.
-  $("#startPlayingBtn").addEventListener("click", () => enterNewRoom({ autoStart: false }));
-  // Enter in the username field is the spontaneous path → into the lobby.
+  // Registration commit: set the username and reveal the hub so the new player can
+  // choose Wordul of the Day / Solo / Head-to-head — rather than being dropped
+  // straight into a personal room.
+  $("#startPlayingBtn").addEventListener("click", () => {
+    if (commitUsername()) renderHomeIdentity();
+  });
+  // Enter in the username field mirrors the CTA → into the hub.
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") $("#startPlayingBtn").click();
   });
@@ -182,9 +185,10 @@ function renderHomeIdentity() {
   }
 }
 
-// Shared create flow for both CTAs. autoStart=true → solo game begins on the
-// first lobby snapshot (see onServerMessage); false → land in the lobby to invite.
-function enterNewRoom({ autoStart }) {
+// Validate + persist the typed username. Returns the committed username, or "" when
+// it fails the min-length gate (with inline feedback). Shared by the registration
+// CTA and the room-create flow.
+function commitUsername() {
   const input = $("#usernameInput");
   const username = setUsername(input ? input.value : getUsername());
   if (username.length < 3) {
@@ -194,8 +198,16 @@ function enterNewRoom({ autoStart }) {
       setTimeout(() => (input.style.outline = ""), 700);
     }
     toast("Pick a username — at least 3 letters", { error: true, duration: 1800 });
-    return;
+    return "";
   }
+  return username;
+}
+
+// Shared create flow for the hub CTAs. autoStart=true → solo game begins on the
+// first lobby snapshot (see onServerMessage); false → land in the lobby to invite.
+function enterNewRoom({ autoStart }) {
+  const username = commitUsername();
+  if (!username) return;
   const slug = generateRoomCode();
   history.pushState(null, "", `/@${username}/${slug}`);
   showRoom(username, slug);
