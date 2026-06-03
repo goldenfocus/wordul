@@ -1470,6 +1470,16 @@ html[data-edition="default"] .key.pressed {
   margin-top: 18px;
 }
 .modal-actions .btn { flex: none; width: 100%; }
+/* Arena end screen: reorder the shared button row (DOM order stays the friend-screen
+   default) into Join next → Rematch → Create → Main menu → Challenge, with the share row last. */
+.modal-actions.is-arena #modalJoinNext { order: 1; }
+.modal-actions.is-arena #modalPlayAgain { order: 2; }
+.modal-actions.is-arena #rematchDecline { order: 2; }
+.modal-actions.is-arena #modalCreateGame { order: 3; }
+.modal-actions.is-arena #modalMainMenu { order: 4; }
+.modal-actions.is-arena #modalChallenge { order: 5; }
+.modal-actions.is-arena .modal-divider { order: 6; }
+.modal-actions.is-arena .share-row { order: 7; }
 /* A labelled hairline separating the primary CTAs from the raw-link share row. */
 .modal-divider {
   display: flex; align-items: center; gap: 12px;

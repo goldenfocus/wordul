@@ -13,7 +13,7 @@ import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, dete
 import { getSettings, saveSettings, applySettings, openSettings, openHub } from "/settings.js";
 import { buildShareCardModel, renderShareCard } from "/share-card.js";
 import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
-import { mountArenaList } from "/arena-panel.js";
+import { mountArenaList, pickNextGame } from "/arena-panel.js";
 import { computeDailyStatsView } from "/daily-stats.js";
 import { computeFeedStreamView, computeFeedPostView } from "/feed.js";
 import { EDITIONS, getEdition } from "/editions/index.js";
@@ -111,6 +111,13 @@ function mount(tplId) {
 // into today's board as a seed. Held here between the home keypress and the daily
 // board becoming interactive; applied once by seedDailyOnce, then cleared.
 let pendingDailySeed = null;
+// Arena-origin handoff: set just before navigating INTO a room reached through the Arena
+// (open-games row tap or public host). showRoom consumes it into game.fromArena and mirrors
+// it to sessionStorage so a mid-game refresh still resolves the Arena end screen.
+let pendingArenaOrigin = false;
+// Set when a flow wants the home hub to open straight into the Arena list once it renders
+// (the "Join next game → none waiting" fallback). Consumed after renderHub.
+let pendingOpenArena = false;
 
 // One persistent listener: while the home screen is up and no field is focused, a
 // letter key starts today's word seeded with it (the card's own keydown handles
@@ -236,8 +243,9 @@ function renderHomeIdentity() {
         homeRoomVisible = HOME_ROOMS_PAGE;
         cbs.dailyResult = dailyResultFor(profile);
         renderHub(profile, cbs);
+        maybeOpenArena();
       })
-      .catch(() => renderHub({}, cbs));
+      .catch(() => { renderHub({}, cbs); maybeOpenArena(); });
   } else {
     if (greeting) greeting.hidden = true;
     if (intro) intro.hidden = false;
@@ -295,6 +303,8 @@ function enterNewRoom({ autoStart, publicArena = false }) {
   if (!username) return;
   const slug = generateRoomCode();
   history.pushState(null, "", `/@${username}/${slug}`);
+  // Hosting a public Arena room IS an Arena-origin entry — flag it before showRoom consumes it.
+  if (publicArena) pendingArenaOrigin = true;
   showRoom(username, slug);
   // showRoom resets game state, so set the one-shot flags after it.
   // Invite path lands quietly in the lobby; the explicit invite button shares on demand.
@@ -512,6 +522,7 @@ const game = {
   challengeMeta: null, // cached { owner, ownerScore, record, ... } from /api/challenge/<id>/meta
   isDaily: false,      // /daily/<date>: async one-shot, gated "underneath"
   dailyDate: null,
+  fromArena: false,    // reached through the Arena (open-games join or public host) → Arena end screen
   owner: null,
   slug: null,
   path: null,
@@ -648,6 +659,12 @@ function showRoom(owner, slug) {
   game.lastGuessCounts = new Map();
   game.autoStart = false;
   game.publicArena = false; // never carry a public-host intent into the next room
+  // Arena origin: the pending flag (set at entry) OR a sessionStorage marker (survives a
+  // mid-game refresh, which loses the in-memory flag). Persist it so a reload still resolves
+  // the Arena end screen. seed is stripped from snapshots, so origin can't be read off the wire.
+  game.fromArena = pendingArenaOrigin || sessionStorage.getItem("arena:" + game.path) === "1";
+  pendingArenaOrigin = false;
+  if (game.fromArena) { try { sessionStorage.setItem("arena:" + game.path, "1"); } catch {} }
   game.roomTab = "play";
   game.shareImage = null;
   game.replay = [];
@@ -1160,8 +1177,45 @@ function showArena() {
   const host = document.getElementById("arenaHost");
   if (host) host.addEventListener("click", () => { stopArenaPoll(); enterNewRoom({ autoStart: false, publicArena: true }); });
   arenaPollStop = mountArenaList(document.getElementById("arenaList"), {
-    onJoin: (routePath) => navigate(routePath), // navigate() calls stopArenaPoll()
+    onJoin: (routePath) => { pendingArenaOrigin = true; navigate(routePath); }, // navigate() calls stopArenaPoll()
   });
+}
+
+// --- Arena end-screen actions (the "keep playing the Arena" set) --------------
+// "Join next game →": jump straight to the next waiting open game (not the one just
+// played). If nothing else is waiting, fall back to the Arena list on the home hub.
+function joinNextArena() {
+  const current = `/@${game.owner}/${game.slug}`;
+  fetch("/api/arena/open")
+    .then((r) => (r.ok ? r.json() : []))
+    .then((games) => {
+      const next = pickNextGame(games, current);
+      closeStats();
+      if (next) { pendingArenaOrigin = true; navigate(next); }
+      else { pendingOpenArena = true; navigate("/"); } // none waiting → open the Arena list
+    })
+    .catch(() => { closeStats(); pendingOpenArena = true; navigate("/"); });
+}
+
+// "Create your own game": leave this finished room and host a fresh public Arena room,
+// listed in the open-games index for the next person (or bot) to join.
+function hostPublicArena() {
+  closeStats();
+  enterNewRoom({ autoStart: false, publicArena: true });
+}
+
+// "Main menu": close out to the home hub (route() handles leaveRoom + home render).
+function backToMenu() {
+  closeStats();
+  navigate("/");
+}
+
+// After the home hub renders, open straight into the Arena list if a flow requested it
+// (the "Join next → none waiting" fallback). One-shot; #hubContent only exists post-render.
+function maybeOpenArena() {
+  if (!pendingOpenArena) return;
+  pendingOpenArena = false;
+  showArena();
 }
 
 // Render a username as a clickable link to their public profile (/@username).
@@ -2941,6 +2995,12 @@ function opponentName() {
   return other?.username ?? "your opponent";
 }
 
+// The idle rematch button reads "Rematch" in the Arena (where it sits beside Join next /
+// Create / Main menu) and "Play again" on friend/daily end screens.
+function rematchLabel() {
+  return t(game.fromArena ? "endscreen.rematch" : "endscreen.playAgain");
+}
+
 // Propose a rematch and morph the action into a cancellable waiting state. The
 // waiting/accept/decline UI lives in the stats modal, so make sure it's open
 // (proposing from the lobby #rematchBtn while the modal is closed otherwise gives
@@ -2970,7 +3030,7 @@ function rematchControls() {
 function renderRematchIdle() {
   const { play, decline } = rematchControls();
   if (decline) decline.hidden = true;
-  if (play) { play.hidden = false; play.disabled = false; play.textContent = t("endscreen.playAgain"); play.onclick = proposeRematch; }
+  if (play) { play.hidden = false; play.disabled = false; play.textContent = rematchLabel(); play.onclick = proposeRematch; }
 }
 
 function renderRematchWaiting(who) {
@@ -3059,18 +3119,34 @@ function openStats(opts = {}) {
     eg.hidden = true;
   }
 
+  const finished = !!(game.snapshot && game.snapshot.phase === "finished");
+  // Arena games get the "keep playing the Arena" action set; everyone else keeps the
+  // plain Challenge + Play-again pair. .is-arena flips the CSS order so the buttons read
+  // Join next → Rematch → Create → Main menu → Challenge (DOM order stays friend-screen).
+  const arena = finished && game.fromArena === true;
+  const actions = document.querySelector(".modal-actions");
+  if (actions) actions.classList.toggle("is-arena", arena);
+
   const playAgain = $("#modalPlayAgain");
-  if (game.snapshot && game.snapshot.phase === "finished") {
+  if (finished) {
     playAgain.hidden = false;
     playAgain.onclick = proposeRematch;
-    // Reset to the plain "Play again" state; hide any stale decline button from a prior prompt.
+    // Reset to the plain idle state; hide any stale decline button from a prior prompt.
     const stale = document.getElementById("rematchDecline");
     if (stale) stale.hidden = true;
-    playAgain.textContent = t("endscreen.playAgain");
+    playAgain.textContent = rematchLabel(); // "Rematch" in the Arena, else "Play again"
     playAgain.disabled = false;
   } else {
     playAgain.hidden = true;
   }
+
+  // The three Arena-only actions. Hidden (and inert) on every non-Arena end screen.
+  const joinNext = document.getElementById("modalJoinNext");
+  if (joinNext) { joinNext.hidden = !arena; joinNext.textContent = t("endscreen.joinNext"); joinNext.onclick = joinNextArena; }
+  const createGame = document.getElementById("modalCreateGame");
+  if (createGame) { createGame.hidden = !arena; createGame.textContent = t("endscreen.createGame"); createGame.onclick = hostPublicArena; }
+  const mainMenu = document.getElementById("modalMainMenu");
+  if (mainMenu) { mainMenu.hidden = !arena; mainMenu.textContent = t("endscreen.mainMenu"); mainMenu.onclick = backToMenu; }
 
   // Pre-render the share card now (modal open) so the Share click can fire
   // navigator.share synchronously — iOS rejects share() after an async toBlob.

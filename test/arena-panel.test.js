@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { arenaRowProps, arenaEmptyState } from "../public/arena-panel.js";
+import { arenaRowProps, arenaEmptyState, pickNextGame } from "../public/arena-panel.js";
 
 const game = {
   routePath: "/@arena/maya-0",
@@ -37,5 +37,28 @@ describe("arenaEmptyState (F2)", () => {
   });
   it("non-empty array → list", () => {
     expect(arenaEmptyState([game], false)).toBe("list");
+  });
+});
+
+describe("pickNextGame (F3) — the 'Join next game' target", () => {
+  const maya = { routePath: "/@arena/maya-0", host: "Maya" };
+  const yan = { routePath: "/@yan/abcd", host: "yan" };
+  const wurdl = { routePath: "/@arena/wurdl-2", host: "wurdl" };
+
+  it("returns the first game that isn't the room just played", () => {
+    expect(pickNextGame([maya, yan, wurdl], "/@arena/maya-0")).toBe("/@yan/abcd");
+  });
+  it("returns the first game when the current room isn't in the list", () => {
+    expect(pickNextGame([maya, yan], "/@someone/gone")).toBe("/@arena/maya-0");
+  });
+  it("returns null when the only open game is the room just played", () => {
+    expect(pickNextGame([maya], "/@arena/maya-0")).toBe(null);
+  });
+  it("returns null for an empty list", () => {
+    expect(pickNextGame([], "/@arena/maya-0")).toBe(null);
+  });
+  it("returns null defensively for null/undefined games", () => {
+    expect(pickNextGame(null, "/@arena/maya-0")).toBe(null);
+    expect(pickNextGame(undefined, "/@arena/maya-0")).toBe(null);
   });
 });

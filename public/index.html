@@ -249,6 +249,10 @@
     <div class="modal-actions">
       <button id="modalChallenge" class="btn block challenge-cta" type="button">Challenge a friend</button>
       <button id="modalPlayAgain" class="btn ghost block" hidden>Play again <span class="cta-replay">⟳</span></button>
+      <!-- Arena-only actions; CSS .is-arena orders them Join next → Rematch → Create → Main menu → Challenge. -->
+      <button id="modalJoinNext" class="btn block" type="button" hidden>Join next game →</button>
+      <button id="modalCreateGame" class="btn ghost block" type="button" hidden>Create your own game</button>
+      <button id="modalMainMenu" class="btn ghost block" type="button" hidden>Main menu</button>
       <div class="modal-divider"><span>or share the link</span></div>
       <div class="share-row">
         <input class="share-url" id="shareUrl" readonly />

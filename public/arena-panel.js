@@ -25,6 +25,15 @@ export function arenaEmptyState(games, isError) {
   return "list";
 }
 
+// "Join next game" target: the first open game that ISN'T the room just played (you don't
+// want to rejoin the finished room). Returns its routePath, or null when nothing else is
+// waiting — the caller then falls back to the Arena list. Defensive against null/undefined.
+export function pickNextGame(games, currentRoutePath) {
+  if (!Array.isArray(games)) return null;
+  const next = games.find((g) => g && g.routePath && g.routePath !== currentRoutePath);
+  return next ? next.routePath : null;
+}
+
 const POLL_MS = 8000;
 
 // Render the open-games list into `mountEl`, polling while mounted. Returns a stop()
