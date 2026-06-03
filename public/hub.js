@@ -13,7 +13,7 @@ let hubCallbacks = {};
 export const hubState = { gold: 0, streak: 0, username: "" };
 
 // callbacks: { username, editions, editionName(id), onPlay(editionId, seed), onSolo(),
-//   onPvP(), onStats(), onShareDaily(), dailyResult, renderRecentRooms(el), fetchPlayed() }
+//   onPvP(), onArena(), onStats(), onShareDaily(), dailyResult, renderRecentRooms(el), fetchPlayed() }
 // dailyResult is null until you've played today, then { won, guesses }.
 // The avatar/menu is the one persistent topbar avatar (#avatarBtn → showHub).
 export function renderHub(profile, callbacks) {
@@ -67,6 +67,10 @@ function renderDaily() {
           <span class="mode-ico">${GLYPH.duo}</span>
           <span class="mode-name">Head-to-head</span>
         </button>
+        <button id="modeArena" class="mode-tile mode-tile-wide" type="button">
+          <span class="mode-ico">${GLYPH.swords}</span>
+          <span class="mode-name">Arena</span>
+        </button>
       </div>
     </section>
 
@@ -94,6 +98,8 @@ function wireDaily() {
   if (solo && hubCallbacks.onSolo) solo.addEventListener("click", () => hubCallbacks.onSolo());
   const pvp = document.getElementById("modePvP");
   if (pvp && hubCallbacks.onPvP) pvp.addEventListener("click", () => hubCallbacks.onPvP());
+  const arena = document.getElementById("modeArena");
+  if (arena && hubCallbacks.onArena) arena.addEventListener("click", () => hubCallbacks.onArena());
 
   const recent = document.getElementById("dailyRecent");
   const list = document.getElementById("hubRoomList");

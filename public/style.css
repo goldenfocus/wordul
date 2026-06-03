@@ -1748,6 +1748,11 @@ body.reduced-motion .gold-floater { display: none !important; }
 .arena-row-meta { font-size: 12px; }
 .arena-row-seats { font-variant-numeric: tabular-nums; font-weight: 600; opacity: 0.8; }
 .arena-state { padding: 16px; text-align: center; color: var(--muted, #888); font-size: 14px; }
+/* Arena view (open-games launcher reached from the home's Arena tile). */
+.arena-view { display: flex; flex-direction: column; gap: 12px; }
+.pvp-title { font-size: 22px; font-weight: 800; letter-spacing: 0.01em; margin: 0; }
+.arena-blurb { font-size: 14px; margin: 0 0 4px; }
+.arena-mount { min-height: 56px; }
 
 /* --- Per-room scoreboard --- */
 .scoreboard {
@@ -2339,6 +2344,9 @@ body.hub-home .topbar-stats { display: flex; }
 .mode-ico { color: var(--accent); opacity: .9; }   /* bare glyph — no chip, no pill */
 .mode-ico .glyph { width: 27px; height: 27px; }
 .mode-name { font-family: var(--font-display); font-size: 20px; line-height: 1.05; color: var(--fg); }
+/* The Arena tile spans the full row under Solo + Head-to-head — a wide, horizontal
+   door into the open-games list. Same glass field, just laid out in a row. */
+.mode-tile-wide { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: flex-start; min-height: 72px; padding: 18px 22px; }
 @media (prefers-reduced-motion: reduce) {
   .daily-card, .daily-tile.is-cursor { animation: none !important; }
   .daily-card, .mode-tile { transition: none !important; }

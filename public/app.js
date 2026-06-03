@@ -13,6 +13,7 @@ import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, dete
 import { getSettings, saveSettings, applySettings, openSettings, openHub } from "/settings.js";
 import { buildShareCardModel, renderShareCard } from "/share-card.js";
 import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
+import { mountArenaList } from "/arena-panel.js";
 import { computeDailyStatsView } from "/daily-stats.js";
 import { computeFeedStreamView, computeFeedPostView } from "/feed.js";
 import { EDITIONS, getEdition } from "/editions/index.js";
@@ -215,6 +216,7 @@ function renderHomeIdentity() {
       onPlay: (editionId, seed) => { applyEdition(editionId); pendingDailySeed = seed || null; bloomIntoDaily(); },
       onSolo: () => enterNewRoom({ autoStart: true }),
       onPvP: () => enterNewRoom({ autoStart: false }),
+      onArena: () => showArena(),
       onStats: () => navigate("/daily/" + todayUTC() + "/stats"),
       onShareDaily: () => shareDailyResult(cbs.dailyResult),
       // dailyResult is filled from the profile below: null until you've played today,
@@ -288,15 +290,17 @@ function commitUsername() {
 
 // Shared create flow for the hub CTAs. autoStart=true → solo game begins on the
 // first lobby snapshot (see onServerMessage); false → land in the lobby to invite.
-function enterNewRoom({ autoStart }) {
+function enterNewRoom({ autoStart, publicArena = false }) {
   const username = commitUsername();
   if (!username) return;
   const slug = generateRoomCode();
   history.pushState(null, "", `/@${username}/${slug}`);
   showRoom(username, slug);
-  // showRoom resets game state, so set the one-shot flag after it.
+  // showRoom resets game state, so set the one-shot flags after it.
   // Invite path lands quietly in the lobby; the explicit invite button shares on demand.
   if (autoStart) game.autoStart = true;
+  // Public Arena host: tell the room (via hello) to list itself in the open-games index.
+  if (publicArena) game.publicArena = true;
 }
 
 // --- Home rooms list ---
@@ -643,6 +647,7 @@ function showRoom(owner, slug) {
   game.chatCollapsed = false;
   game.lastGuessCounts = new Map();
   game.autoStart = false;
+  game.publicArena = false; // never carry a public-host intent into the next room
   game.roomTab = "play";
   game.shareImage = null;
   game.replay = [];
@@ -1123,8 +1128,40 @@ function armGiveUpTimer() {
 
 // SPA navigation: pushState + re-dispatch the router.
 function navigate(path) {
+  stopArenaPoll(); // any route change tears down the Arena open-games poll
   history.pushState(null, "", path);
   route();
+}
+
+// The Arena (bots-in-PvP) open-games poll handle. mountArenaList returns a stop() we MUST
+// call on teardown (Back, row-tap → navigate, or any nav) so the 8s poll can't leak.
+let arenaPollStop = null;
+function stopArenaPoll() {
+  if (arenaPollStop) { arenaPollStop(); arenaPollStop = null; }
+}
+
+// The Arena: open games anyone can jump into — bots now, public human rooms too (a host
+// opts in via "Host a public game"). Rendered into #hubContent (home stays mounted); Back
+// restores the launcher. Distinct from Head-to-head, which makes a private invite-link room.
+function showArena() {
+  const content = document.getElementById("hubContent");
+  if (!content) return;
+  stopArenaPoll();
+  content.innerHTML =
+    `<section class="hub-panel arena-view">
+      <button id="arenaBack" class="hub-textlink" type="button">← Back</button>
+      <h1 class="pvp-title">Arena</h1>
+      <p class="arena-blurb muted">Jump into an open game — beat a worduler or take on whoever's waiting.</p>
+      <div id="arenaList" class="arena-mount"></div>
+      <button id="arenaHost" class="btn block">Host a public game →</button>
+    </section>`;
+  const back = document.getElementById("arenaBack");
+  if (back) back.addEventListener("click", () => { stopArenaPoll(); renderHomeIdentity(); });
+  const host = document.getElementById("arenaHost");
+  if (host) host.addEventListener("click", () => { stopArenaPoll(); enterNewRoom({ autoStart: false, publicArena: true }); });
+  arenaPollStop = mountArenaList(document.getElementById("arenaList"), {
+    onJoin: (routePath) => navigate(routePath), // navigate() calls stopArenaPoll()
+  });
 }
 
 // Render a username as a clickable link to their public profile (/@username).
@@ -1255,6 +1292,7 @@ function openSocket(url) {
       edition: getActiveEditionId(), // seeds a fresh room with the creator's theme
       mode: "race", // only valid selectable mode today
       scienceOptOut: !getSettings().communityScience,
+      public: game.publicArena === true, // host opted into the public Arena open-games list
     });
     refreshGold(); // sync server-authoritative balance into HUD cache on join
     // Kick off heartbeat so the path stays warm.
@@ -3379,6 +3417,7 @@ function renderCrumbs(r) {
 }
 
 function route() {
+  stopArenaPoll(); // leaving the in-place Arena view (incl. browser Back / popstate) kills its poll
   const r = parseRoute();
   renderCrumbs(r);
   if (r.kind === "challenge") {
