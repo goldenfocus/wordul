@@ -132,6 +132,20 @@ function seedDailyOnce(letter) {
   setTimeout(tick, 120);
 }
 
+// Play today's word as an in-place BLOOM, not a hard cut to a new screen: wrap the
+// client-side nav in a View Transition so the home card morphs/grows into the board
+// (showDaily tags #tabPlay with the same view-transition-name as .daily-card).
+// Progressive + reduced-motion safe: no API or reduce-motion → plain instant nav.
+function bloomIntoDaily() {
+  const target = "/daily/" + todayUTC();
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (typeof document.startViewTransition === "function" && !reduce) {
+    document.startViewTransition(() => navigate(target));
+  } else {
+    navigate(target);
+  }
+}
+
 // --- screens ---
 
 function showHome() {
@@ -193,7 +207,7 @@ function renderHomeIdentity() {
       editionName: (id) => getEdition(id).name,
       // Tap or type-to-play: drop into today's board (client-side, no reload). A
       // typed letter is carried as a seed so "start playing right here" feels real.
-      onPlay: (editionId, seed) => { applyEdition(editionId); pendingDailySeed = seed || null; navigate("/daily/" + todayUTC()); },
+      onPlay: (editionId, seed) => { applyEdition(editionId); pendingDailySeed = seed || null; bloomIntoDaily(); },
       onSolo: () => enterNewRoom({ autoStart: true }),
       onPvP: () => enterNewRoom({ autoStart: false }),
       onStats: () => navigate("/daily/" + todayUTC() + "/stats"),
@@ -706,6 +720,10 @@ function showDaily(date) {
   document.title = `Wordul of the Day — ${date}`;
   showRoom("daily", date);                       // connects to /ws?room=daily/<date>
   game.isDaily = true; game.dailyDate = date;    // AFTER showRoom resets state (mirrors enterNewRoom's autoStart)
+  // Morph target: the home's .daily-card grows into the play panel (View Transition).
+  // Set synchronously after mount so the transition snapshot picks it up.
+  const tabPlay = document.getElementById("tabPlay");
+  if (tabPlay) tabPlay.style.viewTransitionName = "wotd-bloom";
   if (pendingDailySeed) { seedDailyOnce(pendingDailySeed); pendingDailySeed = null; }
 }
 

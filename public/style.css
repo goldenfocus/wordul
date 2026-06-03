@@ -2272,6 +2272,16 @@ body.hub-home .topbar-stats { display: flex; }
   border: 1px solid rgba(124,58,237,0.24);
   transition: transform .14s, border-color .2s, box-shadow .3s;
   animation: dailyBreathe 5.5s ease-in-out infinite;
+  /* Shared name so tapping the card MORPHS it into the daily board (the play
+     panel claims the same name in showDaily) — the word "blooms" open, not a cut. */
+  view-transition-name: wotd-bloom;
+}
+/* The bloom grows from where the card sits; soften the cross-fade so it reads as
+   one surface opening rather than two screens swapping. */
+::view-transition-old(wotd-bloom),
+::view-transition-new(wotd-bloom) { animation-duration: .42s; }
+@media (prefers-reduced-motion: reduce) {
+  .daily-card { view-transition-name: none; animation: none; }
 }
 @keyframes dailyBreathe {
   0%,100% { box-shadow: 0 0 28px -6px rgba(157,139,255,0.26); }
