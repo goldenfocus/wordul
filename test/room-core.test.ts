@@ -20,4 +20,9 @@ describe("outpacedLosers", () => {
   it("is empty when nobody else is still playing", () => {
     expect(outpacedLosers([player("yan", "won"), player("alex", "lost")], "yan")).toEqual([]);
   });
+
+  it("excludes the winner even when their status is still 'playing'", () => {
+    const players = [player("yan", "playing"), player("alex", "playing")];
+    expect(outpacedLosers(players, "yan")).toEqual(["alex"]);
+  });
 });
