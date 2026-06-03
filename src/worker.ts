@@ -157,6 +157,19 @@ export default {
       return Response.json(post, { headers: { "cache-control": "public, max-age=300" } });
     }
 
+    if (url.pathname === "/feed") return renderFeedStream(env, url);
+    if (url.pathname === "/feed/weekly") {
+      const post = await feedWeeklyPost(env);
+      const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+      return new HTMLRewriter()
+        .on('[data-meta="title"]', new TextSetter(post.headline))
+        .on('[data-meta="canonical"]', new AttrSetter("href", `${url.origin}/feed/weekly`))
+        .on('[data-feed-prose]', new RawHtmlSetter(feedPostProse(post, url.origin)))
+        .transform(shell);
+    }
+    const feedHtmlMatch = url.pathname.match(FEED_DATE_RE);
+    if (feedHtmlMatch && !url.pathname.endsWith(".json")) return renderFeedPost(env, url, feedHtmlMatch[1]);
+
     // Legacy redirect: /r or /r/<code> -> home (rooms are owner-nested now).
     if (url.pathname === "/r" || url.pathname.startsWith("/r/")) {
       return Response.redirect(url.origin + "/", 301);
@@ -301,6 +314,71 @@ async function feedStream(env: Env, days = 14): Promise<FeedPost[]> {
   const dates = Array.from({ length: days }, (_, i) => shiftDate(today, -1 - i)); // yesterday backwards
   const posts = await Promise.all(dates.map((d) => feedDailyPost(env, d).catch(() => null)));
   return posts.filter((p): p is FeedPost => !!p && p.published);
+}
+
+function feedPostProse(post: FeedPost, origin: string): string {
+  const findings = post.findings.map((f) => `<li>${escapeHtml(f.text)}</li>`).join("");
+  const notes = post.brainNotes.map((n) =>
+    `<aside class="brain-note" data-pillar="${n.pillar}"><h3>${escapeHtml(n.title)}</h3>` +
+    `<p>${escapeHtml(n.note)}</p>${n.citation ? `<cite>${escapeHtml(n.citation)}</cite>` : ""}</aside>`).join("");
+  const ed = post.editorial?.intro ? `<p class="lab-intro">${escapeHtml(post.editorial.intro)}</p>` : "";
+  return `<article><h1>${escapeHtml(post.headline)}</h1>${ed}` +
+    `<ul class="findings">${findings}</ul>${notes}` +
+    `<p class="pillars">${post.pillars.map(escapeHtml).join(" · ")}</p>` +
+    `<nav><a href="${origin}/feed">← the Lab feed</a></nav></article>`;
+}
+
+function feedArticleJsonLd(post: FeedPost, origin: string): object {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: post.headline,
+    datePublished: post.date,
+    author: { "@type": "Organization", name: "Wordul" },
+    publisher: { "@type": "Organization", name: "Wordul", url: origin },
+    about: post.pillars,
+    isPartOf: { "@type": "WebSite", name: "Wordul Living Lab", url: `${origin}/feed` },
+  };
+}
+
+async function renderFeedPost(env: Env, url: URL, date: string): Promise<Response> {
+  const post = await feedDailyPost(env, date);
+  const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+  if (!post.published) {
+    // Active/unknown day: no-spoiler shell, self canonical, no findings.
+    return new HTMLRewriter()
+      .on('[data-meta="title"]', new TextSetter("The Wordul Lab"))
+      .on('[data-meta="canonical"]', new AttrSetter("href", `${url.origin}/feed/${date}`))
+      .transform(shell);
+  }
+  const title = post.headline;
+  const desc = post.findings.map((f) => f.text).join(" ").slice(0, 200);
+  const jsonld = JSON.stringify(feedArticleJsonLd(post, url.origin)).replace(/</g, "\\u003c");
+  return new HTMLRewriter()
+    .on('[data-meta="title"]', new TextSetter(title))
+    .on('[data-meta="og:title"]', new AttrSetter("content", title))
+    .on('[data-meta="description"]', new AttrSetter("content", desc))
+    .on('[data-meta="og:description"]', new AttrSetter("content", desc))
+    .on('[data-meta="canonical"]', new AttrSetter("href", `${url.origin}/feed/${date}`))
+    .on('[data-meta="og:url"]', new AttrSetter("content", `${url.origin}/feed/${date}`))
+    .on('[data-feed-jsonld]', new RawHtmlSetter(jsonld))
+    .on('[data-feed-prose]', new RawHtmlSetter(feedPostProse(post, url.origin)))
+    .transform(shell);
+}
+
+async function renderFeedStream(env: Env, url: URL): Promise<Response> {
+  const posts = await feedStream(env);
+  const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+  const list = posts.map((p) =>
+    `<li><a href="${url.origin}/feed/${p.slug}"><strong>${escapeHtml(p.headline)}</strong></a>` +
+    (p.findings[0] ? `<span>${escapeHtml(p.findings[0].text)}</span>` : "") + `</li>`).join("");
+  const prose = `<h1>The Wordul Living Lab</h1><p>Honest, privacy-preserving discoveries from the daily puzzle.</p><ul class="feed-stream">${list}</ul>`;
+  return new HTMLRewriter()
+    .on('[data-meta="title"]', new TextSetter("The Wordul Living Lab — daily discoveries"))
+    .on('[data-meta="description"]', new AttrSetter("content", "Honest, privacy-preserving discoveries about how people learn and reason, from the Wordul of the Day."))
+    .on('[data-meta="canonical"]', new AttrSetter("href", `${url.origin}/feed`))
+    .on('[data-feed-prose]', new RawHtmlSetter(prose))
+    .transform(shell);
 }
 
 async function injectMeta(
