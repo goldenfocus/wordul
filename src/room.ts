@@ -838,6 +838,9 @@ export class Room extends DurableObject<Env> {
     return {
       ...this.state,
       word: reveal ? this.state.word : null,
+      // The daily story names the answer ("Why EMBER?") — gate it exactly like `word`,
+      // else a still-playing viewer reads today's word straight off the WS payload.
+      story: reveal ? this.state.story : null,
       players: this.state.isDaily
         ? (me ? [{ ...me, guesses: [...me.guesses] }] : [])
         : this.state.players.map((p) => ({ ...p, guesses: [...p.guesses] })),

@@ -282,14 +282,21 @@ async function injectDailyMeta(env: Env, url: URL, date: string): Promise<Respon
       .transform(shell);
   }
 
-  const meta = buildDailyMeta(date, world, url.origin);
-  const jsonld = JSON.stringify(buildDailyJsonLd(date, world, url.origin));
+  // The ACTIVE puzzle must NEVER reveal its answer via SEO — a curated story like
+  // "Why EMBER?" would leak today's word to anyone reading view-source. Today: generic,
+  // no-spoiler meta + prose. Past days are archival → full story.
+  const isActive = date === activeDate(Date.now());
+  const seoWorld: World = isActive
+    ? { ...world, story: { title: "Today's Wordul", body: "One word, the whole world. Solve today's Wordul to reveal the story behind the word." } }
+    : world;
+  const meta = buildDailyMeta(date, seoWorld, url.origin);
+  const jsonld = JSON.stringify(buildDailyJsonLd(date, seoWorld, url.origin));
   const { prev, next } = dailyPrevNext(date);
   const prose =
     `<h1>${escapeHtml(meta.title)}</h1>` +
-    `<h2>${escapeHtml(world.story.title)}</h2>` +
-    `<p>${escapeHtml(world.story.body)}</p>` +
-    (world.story.tip ? `<p><em>${escapeHtml(world.story.tip)}</em></p>` : "") +
+    `<h2>${escapeHtml(seoWorld.story.title)}</h2>` +
+    `<p>${escapeHtml(seoWorld.story.body)}</p>` +
+    (seoWorld.story.tip ? `<p><em>${escapeHtml(seoWorld.story.tip)}</em></p>` : "") +
     `<nav><a href="${url.origin}/daily/${prev}">← ${prev}</a> · ` +
     `<a href="${url.origin}/daily/archive">archive</a> · ` +
     `<a href="${url.origin}/daily/${next}">${next} →</a></nav>`;
