@@ -45,6 +45,10 @@ npm run deploy
 |------------|-------|--------|------------|-----------|
 | 2026-06-01 23:03 | dad (Yan's session) | brain+body integrated → prod | 7f3c4e44 | ✅ |
 | 2026-06-02 14:31 | claude (voice fix) | voice manifest neg-cache fix + module-graph guard → prod (on top of already-live fdbcc71 challenge) | 92d6a48d | ✅ |
+| 2026-06-03 10:08 | claude (daily crash fix) | render()-guard (#boards) + zombie-WS reconnect fix for "leave daily → boom, zero rows" → prod (2b4c872) | 0dd32227 (superseded↓) | ✅ |
+| 2026-06-03 ~10:10 | (concurrent session) | challenge ctx + session-based intentional WS teardown — converged: KEPT my render-guard, replaced my reconnect-guard with `socketSession`/`session.reconnect` → prod (3a07553) | 3a07553 deploy | ✅ |
+
+> Benign collision: both sessions fixed the same daily-leave crash within ~2 min. Final prod `3a07553` carries **both** defenses (render `#boards` guard + session teardown). NOTE: local `main` checkout is stale/orphaned at `bde11dd` (never on origin/main) — origin/main + prod are the truth.
 
 To claim: add a row with `🔒 deploying`, push this file, deploy, then flip to ✅
 with the Version ID from `wrangler deploy` output. Clear stale 🔒 rows older than ~15min.
