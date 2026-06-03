@@ -39,6 +39,7 @@ export type PlayerState = {
   points: number;        // live in-game points (earned − spent); reset each round
   pointsSpent: number;   // running power-up spend this round (internal accumulator)
   scored?: boolean;        // daily: this player's one result has been recorded (mint once)
+  goldAwarded?: number;    // daily: gold actually minted on a confirmed (res.ok) ledger write
 };
 
 export type RoomPhase = "lobby" | "playing" | "finished";
