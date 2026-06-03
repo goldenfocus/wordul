@@ -11,7 +11,15 @@ import { pointsEarned, goldFromPoints, POINTS } from "./economy.ts";
 import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
 import { activeDate } from "./daily-core.ts";
 import { countMask, maskToPattern, type ScienceBaseEvent, type ScienceEvent, type ScienceOutcome, type ScienceRoomKind } from "./science.ts";
-import { outpacedLosers } from "./room-core.ts";
+import {
+  outpacedLosers,
+  rematchReduce,
+  nextAlarmAt,
+  REMATCH_TIMEOUT_MS,
+  BOT_REMATCH_MIN_MS,
+  BOT_REMATCH_MAX_MS,
+  type RematchEffect,
+} from "./room-core.ts";
 import type { RoomMode } from "./modes.ts";
 import type {
   ChatEntry,
@@ -237,8 +245,12 @@ export class Room extends DurableObject<Env> {
         return this.onStart(ws);
       case "guess":
         return this.onGuess(ws, msg.word);
-      case "rematch":
-        return this.onRematch(ws);
+      case "rematch_propose":
+        return this.onRematchPropose(ws);
+      case "rematch_accept":
+        return this.onRematchAccept(ws);
+      case "rematch_decline":
+        return this.onRematchDecline(ws);
       case "chat":
         return this.onChat(ws, msg.text);
       case "set_length":
@@ -1056,22 +1068,43 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  private async onRematch(ws: WebSocket): Promise<void> {
-    if (this.state.isDaily) return; // daily never resets — one attempt per day
-    if (this.state.phase !== "finished") return;
-    this.state.phase = "lobby";
-    this.state.word = null;
-    this.state.winner = null;
-    this.state.startedAt = null;
-    this.state.finishedAt = null;
-    for (const p of this.state.players) {
-      p.guesses = [];
-      p.status = "playing";
-      p.points = 0;
-      p.pointsSpent = 0;
-      p.revealHints = 0;
-      p.vowelHints = 0;
+  private async onRematchPropose(ws: WebSocket): Promise<void> {
+    if (this.state.isDaily || this.state.phase !== "finished") return;
+    const username = this.userFor(ws);
+    if (!username) return;
+    const me = this.state.players.find((p) => p.username === username);
+    if (!me) return;
+    const opponent = this.state.players.find((p) => p.username !== username);
+    // Opponent already gone (e.g. a bot that declined a prior proposal) ⇒ settle Home.
+    if (!opponent) {
+      this.broadcastAll({ type: "rematch_cancelled", reason: "left" });
+      return;
     }
+    const { rematch, effects } = rematchReduce(this.state.rematch ?? null, {
+      kind: "propose", from: username, opponentIsBot: !!opponent.isBot, now: Date.now(),
+    });
+    this.state.rematch = rematch;
+    await this.applyRematchEffects(effects);
+    await this.persistAndBroadcast();
+  }
+
+  private async onRematchAccept(ws: WebSocket): Promise<void> {
+    if (this.state.isDaily || this.state.phase !== "finished") return;
+    const username = this.userFor(ws);
+    if (!username) return;
+    const { rematch, effects } = rematchReduce(this.state.rematch ?? null, { kind: "accept", from: username });
+    this.state.rematch = rematch;
+    await this.applyRematchEffects(effects);
+    await this.persistAndBroadcast();
+  }
+
+  private async onRematchDecline(ws: WebSocket): Promise<void> {
+    if (this.state.isDaily) return;
+    const username = this.userFor(ws);
+    if (!username) return;
+    const { rematch, effects } = rematchReduce(this.state.rematch ?? null, { kind: "decline" });
+    this.state.rematch = rematch;
+    await this.applyRematchEffects(effects);
     await this.persistAndBroadcast();
   }
 
@@ -1110,6 +1143,67 @@ export class Room extends DurableObject<Env> {
     }
   }
 
+  // Push a non-snapshot server message to every connected socket (handshake events).
+  private broadcastAll(msg: ServerMessage): void {
+    for (const ws of this.ctx.getWebSockets()) {
+      try { ws.send(JSON.stringify(msg)); } catch { /* socket closing; ignore */ }
+    }
+  }
+
+  private clearRematchAlarms(): void {
+    this.state.botRematchAt = null;
+    this.state.rematchTimeoutAt = null;
+  }
+
+  // One alarm to rule them all: set it to the earliest armed rematch deadline, or
+  // clear it. Only called in the finished phase (bot-GUESS alarms own the playing
+  // phase), so the two never fight over the single DO alarm.
+  private armRematchAlarm(): void {
+    const at = nextAlarmAt([this.state.botRematchAt, this.state.rematchTimeoutAt]);
+    if (at != null) void this.ctx.storage.setAlarm(at);
+    else void this.ctx.storage.deleteAlarm();
+  }
+
+  // Perform the side effects a rematchReduce() returned. `runStart` is the existing
+  // round-restart (increment, word pick, GO!, bot tick) — the handshake's accept path.
+  private async applyRematchEffects(effects: RematchEffect[]): Promise<void> {
+    let starter = "someone";
+    for (const e of effects) {
+      switch (e.kind) {
+        case "proposed":
+          this.broadcastAll({ type: "rematch_proposed", proposer: e.proposer });
+          break;
+        case "accepted":
+          starter = e.by;
+          this.broadcastAll({ type: "rematch_accepted", by: e.by });
+          break;
+        case "cancelled":
+          this.clearRematchAlarms();
+          this.armRematchAlarm();
+          this.broadcastAll({ type: "rematch_cancelled", reason: e.reason });
+          break;
+        case "schedule_timeout":
+          this.state.rematchTimeoutAt = Date.now() + REMATCH_TIMEOUT_MS;
+          this.armRematchAlarm();
+          break;
+        case "schedule_bot":
+          this.state.botRematchAt = Date.now() + BOT_REMATCH_MIN_MS
+            + Math.floor(Math.random() * (BOT_REMATCH_MAX_MS - BOT_REMATCH_MIN_MS));
+          this.armRematchAlarm();
+          break;
+        case "bot_leaves": {
+          const i = this.state.players.findIndex((p) => p.isBot);
+          if (i >= 0) this.state.players.splice(i, 1);
+          break;
+        }
+        case "start":
+          this.clearRematchAlarms();
+          await this.runStart(starter); // resets everyone, picks word, GO!, schedules bot tick
+          break;
+      }
+    }
+  }
+
   private isGameOver(): boolean {
     // The race no longer ends the instant someone wins — remaining players keep going
     // for their own gold/score. It's over once every connected player is done (won/lost).
@@ -1143,6 +1237,9 @@ export class Room extends DurableObject<Env> {
       // key (Slice D sets state.seed). TS doesn't enforce the shadow (seed isn't on the
       // declared outbound shape via this path), so this comment documents the dependency.
       seed: undefined,
+      rematch: undefined,
+      botRematchAt: undefined,
+      rematchTimeoutAt: undefined,
       players: this.state.isDaily
         ? (me ? [projectPlayerForClient({ ...me, guesses: [...me.guesses] })] : [])
         : this.state.players.map((p) => projectPlayerForClient({ ...p, guesses: [...p.guesses] })),

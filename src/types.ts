@@ -83,13 +83,19 @@ export type RoomSnapshot = {
   story?: { title: string; body: string; tip?: string } | null; // World story for the unlock
   voice?: string;          // World companion voice id (forward-compat; client still defaults)
   seed?: SeedMarker;       // INTERNAL ONLY — present on seeded bot rooms; stripped outbound (Slice C)
+  // Rematch handshake — INTERNAL ONLY; stripped outbound in snapshotFor (like seed).
+  rematch?: { proposer: string; deadline: number } | null;
+  botRematchAt?: number | null;     // epoch ms the bot decides; null = none pending
+  rematchTimeoutAt?: number | null; // epoch ms the proposal auto-cancels; null = none pending
 };
 
 export type ClientMessage =
   | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string; scienceOptOut?: boolean }
   | { type: "start" }
   | { type: "guess"; word: string }
-  | { type: "rematch" }
+  | { type: "rematch_propose" }
+  | { type: "rematch_accept" }
+  | { type: "rematch_decline" }
   | { type: "chat"; text: string }
   | { type: "set_length"; wordLength: number }
   | { type: "set_mode"; mode: RoomMode }
@@ -106,7 +112,10 @@ export type ServerMessage =
   | { type: "invalid_guess"; reason: string }
   | { type: "revealed_letter"; index: number; letter: string }
   | { type: "vowels"; count: number }
-  | { type: "pong" };
+  | { type: "pong" }
+  | { type: "rematch_proposed"; proposer: string }
+  | { type: "rematch_accepted"; by: string }
+  | { type: "rematch_cancelled"; reason: "declined" | "timeout" | "left" };
 
 // Challenge link types live in challenge-core.ts (pure + unit-tested); re-export
 // here so DO/worker/room import them alongside the other shared types.
