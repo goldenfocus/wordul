@@ -81,6 +81,19 @@ status into the snapshot (the client reads per-player `status`, and `emitPlayerF
 fire for them so science/records stay consistent). The implementation plan picks the exact seam;
 the **behavioral contract** is: *winner set ⇒ all others `lost` ⇒ room `finished`, same tick.*
 
+**Exact seam (validated against code):** in `applyGuess`, capture `hadWinner = state.winner !== null`
+*before* the all-green block. After the winner's own `emitPlayerFinished` (today ~line 654) and
+*before* `afterPlayerStatus(player)` (~line 666): if `!hadWinner && state.winner` (this guess is the
+first solve) and `!isDaily`, loop the other players still `playing` → set `status = "lost"` and
+`emitPlayerFinished(p, "lost", now)` for each. Then the existing `afterPlayerStatus → maybeFinish`
+finds `isGameOver()` true and finishes. Gate the flip on `!isDaily` (daily never has a live race).
+
+> **H2H / records stay correct for free.** `finishGame()` loops `state.players` and `writeH2H`s
+> `winner === p.username ? "w" : "l"` (~line 956), and `buildGameRecords` reads each player's real
+> `status`. Flipping outpaced players to `lost` (rather than leaving them `playing`) is what keeps
+> the loser's H2H ledger and game record honest — another reason to prefer the explicit flip over a
+> bare `isGameOver()` tweak.
+
 > ⚠️ The bot pacing alarm (`scheduleBotTick`) must not fire a guess into a now-finished room — the
 > existing `alarm()` already guards `phase !== "playing"`, so a finished race is safe, but verify.
 
@@ -129,6 +142,20 @@ rematch: {
 } | null
 ```
 
+> ⚠️ **`this.state` IS `RoomSnapshot`** (`room.ts:71` — `private state: RoomSnapshot`). The
+> handshake carries its texture over dedicated messages (`rematch_proposed` etc.), **not** the
+> snapshot, so `rematch` (and the alarm fields in Part 4) are **server-internal** and MUST be
+> stripped in `snapshotFor()` exactly like `seed`/`publicArena` (`rematch: undefined`, etc., placed
+> *after* `...this.state`). Otherwise the proposer's identity + deadline leak into the client
+> contract and duplicate the message-driven flow. Add them to the `RoomSnapshot` type alongside the
+> other `INTERNAL ONLY` fields (`types.ts:85–86`).
+
+> **Reconnect-during-proposal (known v1 limitation, not a blocker).** `rematch_proposed` is a
+> one-shot broadcast and the proposal is stripped from the snapshot, so a recipient who reconnects
+> inside the 15s window won't see the Accept/Decline prompt. This degrades gracefully: the proposal
+> simply hits its `timeout` and the proposer fades Home (Part 5) — no dead-end, no stuck state.
+> Re-surfacing a live proposal on reconnect is deliberately out of scope for v1.
+
 ### Messages
 
 | Direction | Type | Payload | Meaning |
@@ -162,6 +189,12 @@ Only valid while `phase === "finished"` and `!isDaily`.
 
 ### Client flow (`public/app.js`)
 
+> **Two entry points to rewire** (both currently fire-and-forget `send({type:"rematch"})`):
+> the lobby `#rematchBtn` (`app.js:565–568`, shown in `finished` phase) and the stats modal's
+> `#modalPlayAgain` (`app.js:2697–2705`). Both must now send `rematch_propose` and morph into the
+> waiting state. Route both through one `proposeRematch()` helper so the waiting/accepted/cancelled
+> handling lives in a single place.
+
 - **Proposer:** tap Rematch → button morphs to **"Waiting for pax… ✕"** (the ✕ sends
   `rematch_decline` to cancel my own proposal). On `rematch_accepted` → modal closes, GO! plays
   (existing `emitRoundStarted` path). On `rematch_cancelled` → friendly line + fade Home (Part 5).
@@ -179,21 +212,30 @@ When the opponent is a bot (`player.isBot`) and a human proposes, the bot **deci
 The DO has **one alarm**, already used by `scheduleBotTick()` to pace bot *guesses*. The bot's
 delayed rematch decision must **share** that alarm — do **not** assume a second one exists.
 
-Add a small pending-action discriminator to room state so `alarm()` knows what it's waking for:
+A single `pendingAlarm` enum can't represent two actions outstanding at once (a bot decision *and*
+its timeout), so model the wake-reasons as **nullable deadline fields** and let `alarm()` process
+whatever is due:
 
 ```ts
-pendingAlarm: "bot_guess" | "bot_rematch" | "rematch_timeout" | null
+// server-internal (stripped in snapshotFor, like rematch above)
+botRematchAt?: number | null;    // epoch ms the bot decides; null = none pending
+rematchTimeoutAt?: number | null; // epoch ms the proposal auto-cancels; null = none pending
 ```
 
-`alarm()` branches on `pendingAlarm`:
-- `bot_guess` → existing guess path (only when `phase === "playing"`).
-- `bot_rematch` → run the bot's decision (below).
-- `rematch_timeout` → if a proposal is still pending, cancel it (`reason: "timeout"`).
+A tiny `armAlarm()` helper sets the DO alarm to `min(botRematchAt, rematchTimeoutAt, <bot-guess
+delay>)` of whatever is non-null. `alarm()` then, in order: (a) if `phase === "playing"`, run the
+existing bot-**guess** path; (b) if `botRematchAt` is due, run the bot's rematch **decision**
+(below) and clear it; (c) if `rematchTimeoutAt` is due and a proposal is still pending, cancel it
+(`reason: "timeout"`). Re-arm for any still-future deadline before returning.
 
-> Note both a bot decision and a human-proposal timeout can be outstanding at once. Since there's
-> one alarm, store **both** deadlines and set the alarm to the **earliest**; on wake, process every
-> due action and reschedule for the next. The bot's 3–9s decision will essentially always fire
-> before the 15s human-timeout, so in practice the bot path resolves first.
+> **Why this is tractable:** bot-**guess** alarms only exist while `phase === "playing"`; rematch
+> alarms only while `phase === "finished"`. They are **mutually exclusive by phase** and never
+> co-pend. The only genuinely simultaneous pair is `botRematchAt` (3–9s) + `rematchTimeoutAt` (15s)
+> in a finished room — and the bot decision always fires first and **resolves** the proposal
+> (accept→`runStart` clears both; decline→cancel clears both), so the 15s timeout is really only
+> load-bearing for the **human-vs-human** case where no bot decision is scheduled. Keep the
+> general "process all due, re-arm earliest" loop anyway — it's the same amount of code and is
+> robust to future N-way rooms.
 
 ### The decision
 
@@ -233,8 +275,10 @@ screen settles to **Home**. No retry loop, no error tone.
 
 **Server → clients:** `rematch_proposed`, `rematch_accepted`, `rematch_cancelled`
 
-**Room state additions:** `rematch: {proposer, deadline} | null`, `pendingAlarm` discriminator
-(+ bot-decision / timeout deadlines as needed for alarm multiplexing).
+**Room state additions (all server-internal — stripped in `snapshotFor`):** `rematch:
+{proposer, deadline} | null`, plus nullable alarm-deadline fields `botRematchAt` / `rematchTimeoutAt`
+for alarm multiplexing (replaces the single `pendingAlarm` enum from the draft, which couldn't hold
+two co-pending wakes).
 
 **No new server field for "outpaced"** — derived on the client from `status`, `guesses.length`,
 `maxGuesses`, and `winner`.
@@ -280,6 +324,9 @@ Reducer-level, deterministic (seed the RNG):
 9. **Alarm multiplexing:** a pending bot-guess alarm and a pending rematch decision don't clobber
    each other; earliest-deadline wins and both eventually process.
 10. **Opponent-left while pending ⇒ cancelled{left}.**
+11. **No internal leak:** with a proposal pending, the outbound snapshot (`snapshotFor`) has
+    `rematch`/`botRematchAt`/`rematchTimeoutAt` all `undefined` — mirrors the existing
+    `seed`/`publicArena` strip assertions.
 
 ---
 
