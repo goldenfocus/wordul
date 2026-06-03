@@ -103,7 +103,12 @@ export function buildDailyPost(
   // Privacy gate enforced HERE (Task 4 expands the teaser): the active/future day
   // exposes participation only — never solve rate, difficulty, or the answer word.
   if (!isPast) {
-    return { ...base, headline: "", findings: [], highlights: [], brainNotes: [], pillars: [], published: false };
+    const finishes = summary.totals.playerFinishes;
+    const findings: Finding[] = finishes > 0
+      ? [{ kind: "participation", value: finishes, display: String(finishes), text: `${finishes} players are wordling today.` }]
+      : [];
+    const headline = finishes > 0 ? `${finishes} players are wordling today.` : "Today's discovery is still being written.";
+    return { ...base, headline, findings, highlights: [], brainNotes: [], pillars: [], published: false };
   }
 
   const findings = buildDailyFindings(summary);

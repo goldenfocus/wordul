@@ -80,6 +80,27 @@ describe("brain notes", () => {
   });
 });
 
+describe("privacy gate — active day", () => {
+  it("withholds solve rate, difficulty, and the answer word for today; participation only", () => {
+    const s = summary("2026-06-03"); // today
+    const post = buildDailyPost(s, world({ date: "2026-06-03", word: "EMBER" }), BRAIN_NOTES, { todayUTC: "2026-06-03" });
+    expect(post.published).toBe(false);
+    const kinds = post.findings.map((f) => f.kind);
+    expect(kinds).toEqual(["participation"]);           // ONLY participation
+    expect(post.brainNotes).toEqual([]);
+    expect(post.pillars).toEqual([]);
+    expect(post.highlights).toEqual([]);
+    const blob = JSON.stringify(post);
+    expect(blob).not.toContain("EMBER");                 // never leak the active word
+    expect(blob).not.toContain("solve_rate");
+  });
+
+  it("future dates are treated like the active day (never published)", () => {
+    const post = buildDailyPost(summary("2026-06-10"), world({ date: "2026-06-10" }), BRAIN_NOTES, { todayUTC: "2026-06-03" });
+    expect(post.published).toBe(false);
+  });
+});
+
 describe("buildDailyPost — past-day data block", () => {
   it("computes an honest solve rate, median, and participation from the summary", () => {
     const post = buildDailyPost(summary("2026-06-02"), world(), [], { todayUTC: "2026-06-03" });
