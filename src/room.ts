@@ -517,7 +517,7 @@ export class Room extends DurableObject<Env> {
         headers: { "content-type": "application/json" },
       })));
     }
-    await this.maybeFinish();
+    await this.afterPlayerStatus(player);
   }
 
   // --- Slice 0: the robot room ------------------------------------------------------
@@ -588,7 +588,7 @@ export class Room extends DurableObject<Env> {
     if (!player || player.status !== "playing") return;
     player.status = "lost";
     if (!this.isGameOver()) this.pushSystem(`${username} gave up`);
-    await this.maybeFinish();
+    await this.afterPlayerStatus(player);
     await this.persistAndBroadcast();
   }
 
@@ -675,6 +675,56 @@ export class Room extends DurableObject<Env> {
         return calls;
       }),
     );
+  }
+
+  // Completion router. Race rooms finish all-at-once (maybeFinish); daily rooms score
+  // each player the moment THEY finish (won/lost), exactly once, with no global finish.
+  private async afterPlayerStatus(player: PlayerState): Promise<void> {
+    if (!this.state.isDaily) {
+      await this.maybeFinish();
+      return;
+    }
+    if (player.status !== "playing" && !player.scored) {
+      player.scored = true;
+      if (this.state.winner === null && player.status === "won") this.state.winner = player.username;
+      await this.scorePlayer(player);
+    }
+  }
+
+  // Daily: record ONE player's result — scoreboard bump + game record + gold (score
+  // mint + flat daily goody). Best-effort; never blocks the player's board flipping.
+  private async scorePlayer(player: PlayerState): Promise<void> {
+    this.state.scoreboard = bumpScoreboard(this.state.scoreboard, {
+      winner: player.status === "won" ? player.username : null,
+      participants: [player.username],
+    });
+    // Daily is async one-shot: each record is intentionally SOLO (empty opponents) —
+    // hundreds play the same word across 24h, so a per-player rival list is meaningless.
+    // summarizeRoomGame + the profile UI already handle solo records gracefully.
+    const records = buildGameRecords({
+      roomPath: this.state.path,
+      word: this.state.word ?? "",
+      wordLength: this.state.wordLength,
+      finishedAt: Date.now(),
+      players: [{ username: player.username, status: player.status, guesses: player.guesses.length }],
+    });
+    const record = records[player.username];
+    const gold = goldFromPoints(player.points) + DAILY_GOLD_BONUS; // score mint + goody
+    const stub = this.env.USER.get(this.env.USER.idFromName(player.username));
+    const calls: Promise<unknown>[] = [
+      stub.fetch(`https://do/append?username=${encodeURIComponent(player.username)}`, {
+        method: "POST", body: JSON.stringify(record),
+      }).catch((e) => console.error("daily report failed", player.username, (e as Error).message)),
+    ];
+    if (!player.isBot) {
+      calls.push(
+        stub.fetch(`https://do/ledger/append?username=${encodeURIComponent(player.username)}`, {
+          method: "POST",
+          body: JSON.stringify({ token: "gold", delta: gold, reason: "mint:daily", ref: `${this.state.path}#${player.username}` }),
+        }).catch((e) => console.error("daily mint failed", player.username, (e as Error).message)),
+      );
+    }
+    await Promise.allSettled(calls);
   }
 
   private async onRematch(ws: WebSocket): Promise<void> {
