@@ -2903,9 +2903,14 @@ function opponentName() {
   return other?.username ?? "your opponent";
 }
 
-// Propose a rematch and morph the action into a cancellable waiting state.
+// Propose a rematch and morph the action into a cancellable waiting state. The
+// waiting/accept/decline UI lives in the stats modal, so make sure it's open
+// (proposing from the lobby #rematchBtn while the modal is closed otherwise gives
+// no visible "Waiting…" feedback).
 function proposeRematch() {
   send({ type: "rematch_propose" });
+  const modal = document.getElementById("statsModal");
+  if (modal && modal.hidden) openStats();
   renderRematchWaiting(opponentName());
 }
 
