@@ -24,6 +24,7 @@ export interface Env {
   CHALLENGE: DurableObjectNamespace;
   DAILY: DurableObjectNamespace;
   SCIENCE: DurableObjectNamespace;
+  ARENA: DurableObjectNamespace;
   DIRECTORY: KVNamespace;
   DESIGNS: R2Bucket;
   DAILY_ADMIN_TOKEN?: string; // wrangler secret; gates POST /daily/schedule

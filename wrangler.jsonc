@@ -40,6 +40,10 @@
       {
         "name": "SCIENCE",
         "class_name": "Science"
+      },
+      {
+        "name": "ARENA",
+        "class_name": "Arena"
       }
     ]
   },
@@ -93,6 +97,12 @@
       // server required, and raw usernames never enter this storage.
       "tag": "v5",
       "new_sqlite_classes": ["Science"]
+    },
+    {
+      // Arena coordinator DO. Free plan: new_sqlite_classes (NOT new_classes — err 10097;
+      // dry-run won't catch it, only a real deploy does). v5 (Science) is the prior max.
+      "tag": "v6",
+      "new_sqlite_classes": ["Arena"]
     }
   ],
 
