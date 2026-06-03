@@ -7,6 +7,7 @@ import { buildGameRecords, summarizeRoomGame } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
 import { pointsEarned, goldFromPoints, POINTS } from "./economy.ts";
 import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
+import { activeDate } from "./daily-core.ts";
 import type { RoomMode } from "./modes.ts";
 import type {
   ChatEntry,
@@ -228,7 +229,7 @@ export class Room extends DurableObject<Env> {
       existing.connected = true;
       if (wasOffline) this.pushSystem(`${username} reconnected`);
     } else {
-      if (this.state.players.length >= MAX_PLAYERS) {
+      if (!this.state.isDaily && this.state.players.length >= MAX_PLAYERS) {
         this.send(ws, { type: "error", message: "room full" });
         return;
       }
@@ -280,6 +281,13 @@ export class Room extends DurableObject<Env> {
       void this.registerRoom();
     }
     await this.seedDailyIfNeeded();
+    // Daily gold is mint-confirmed: if a player finished but a prior mint failed (scored
+    // still false), retry now that they're back. Idempotent — scorePlayer only marks
+    // scored on a confirmed ledger write.
+    if (this.state.isDaily) {
+      const p = this.state.players.find((x) => x.username === username);
+      if (p && p.status !== "playing" && !p.scored) await this.afterPlayerStatus(p);
+    }
     this.ensureBot();
     await this.persistAndBroadcast();
   }
@@ -291,17 +299,26 @@ export class Room extends DurableObject<Env> {
   private async seedDailyIfNeeded(): Promise<void> {
     const date = dailyDateOf(this.state.path);
     if (!date) return;                 // not a daily room
+    if (date > activeDate(Date.now())) return; // future day → unplayable, never seed (anti gold-farm)
     if (this.state.isDaily && this.state.word) return; // already seeded
     try {
       const res = await this.env.DAILY.get(this.env.DAILY.idFromName("daily"))
         .fetch(`https://do/resolve?date=${date}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.error("seedDaily resolve non-ok", this.state.path, res.status);
+        this.pushSystem("Today's Wordul is warming up — refresh in a sec.");
+        return;
+      }
       const world = (await res.json()) as {
         word: string; edition: string; voice: string;
         story: { title: string; body: string; tip?: string };
       };
       const word = (world.word ?? "").toUpperCase();
-      if (!/^[A-Z]+$/.test(word)) return;
+      if (!/^[A-Z]+$/.test(word)) {
+        console.error("seedDaily empty/invalid word", this.state.path, JSON.stringify(world.word));
+        this.pushSystem("Today's Wordul is warming up — refresh in a sec.");
+        return;
+      }
       this.state.isDaily = true;
       this.state.word = word;
       this.state.wordLength = word.length;
@@ -314,6 +331,7 @@ export class Room extends DurableObject<Env> {
       this.state.startedAt = this.state.startedAt ?? Date.now();
     } catch (e) {
       console.error("seedDaily failed", this.state.path, (e as Error).message);
+      this.pushSystem("Today's Wordul is warming up — refresh in a sec.");
     }
   }
 
@@ -685,7 +703,6 @@ export class Room extends DurableObject<Env> {
       return;
     }
     if (player.status !== "playing" && !player.scored) {
-      player.scored = true;
       if (this.state.winner === null && player.status === "won") this.state.winner = player.username;
       await this.scorePlayer(player);
     }
@@ -711,20 +728,37 @@ export class Room extends DurableObject<Env> {
     const record = records[player.username];
     const gold = goldFromPoints(player.points) + DAILY_GOLD_BONUS; // score mint + goody
     const stub = this.env.USER.get(this.env.USER.idFromName(player.username));
-    const calls: Promise<unknown>[] = [
-      stub.fetch(`https://do/append?username=${encodeURIComponent(player.username)}`, {
+    // Record append is best-effort but observable (FIX 10): log a non-2xx, never throw.
+    try {
+      const recRes = await stub.fetch(`https://do/append?username=${encodeURIComponent(player.username)}`, {
         method: "POST", body: JSON.stringify(record),
-      }).catch((e) => console.error("daily report failed", player.username, (e as Error).message)),
-    ];
-    if (!player.isBot) {
-      calls.push(
-        stub.fetch(`https://do/ledger/append?username=${encodeURIComponent(player.username)}`, {
-          method: "POST",
-          body: JSON.stringify({ token: "gold", delta: gold, reason: "mint:daily", ref: `${this.state.path}#${player.username}` }),
-        }).catch((e) => console.error("daily mint failed", player.username, (e as Error).message)),
-      );
+      });
+      if (!recRes.ok) console.error("daily report non-ok", player.username, recRes.status);
+    } catch (e) {
+      console.error("daily report failed", player.username, (e as Error).message);
     }
-    await Promise.allSettled(calls);
+    // Bots never mint; mark them scored so they don't retry forever.
+    if (player.isBot) {
+      player.scored = true;
+      return;
+    }
+    // Gold goody must be HONEST: only mark scored + record goldAwarded once the ledger
+    // write is confirmed (res.ok). A failed/thrown mint leaves scored=false so a later
+    // reconnect retries — the player never sees "here's your gold" on a 0-gold mint.
+    try {
+      const res = await stub.fetch(`https://do/ledger/append?username=${encodeURIComponent(player.username)}`, {
+        method: "POST",
+        body: JSON.stringify({ token: "gold", delta: gold, reason: "mint:daily", ref: `${this.state.path}#${player.username}` }),
+      });
+      if (res.ok) {
+        player.scored = true;
+        player.goldAwarded = gold;
+      } else {
+        console.error("daily mint non-ok", player.username, res.status);
+      }
+    } catch (e) {
+      console.error("daily mint failed", player.username, (e as Error).message);
+    }
   }
 
   private async onRematch(ws: WebSocket): Promise<void> {
@@ -804,7 +838,9 @@ export class Room extends DurableObject<Env> {
     return {
       ...this.state,
       word: reveal ? this.state.word : null,
-      players: this.state.players.map((p) => ({ ...p, guesses: [...p.guesses] })),
+      players: this.state.isDaily
+        ? (me ? [{ ...me, guesses: [...me.guesses] }] : [])
+        : this.state.players.map((p) => ({ ...p, guesses: [...p.guesses] })),
     };
   }
 
