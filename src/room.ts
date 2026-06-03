@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { WORDS_BY_SIZE, isSupportedSize } from "./wordsbysize.ts";
 import { scoreGuess, countVowels, revealUngreened, type Color } from "./color.ts";
 import { computeNextGuess } from "./solver.ts";
+import { noobGuess, NOOB } from "./noob.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { buildGameRecords, summarizeRoomGame } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
@@ -607,8 +608,12 @@ export class Room extends DurableObject<Env> {
     // person playing a word game, and people are slow.
     const bot = this.state.players.find((p) => p.isBot);
     const opening = !bot || bot.guesses.length === 0;
-    const base = opening ? 6000 : 4000;
-    const delay = base + Math.floor(Math.random() * 6000); // opener 6–12s, then 4–10s
+    // Seeded (Arena bot) rooms pace slower so the persona reads beatable; labeled /robots
+    // rooms keep the original snappier cadence. `state.seed` is falsy until Slice D seeds.
+    const seeded = !!this.state.seed;
+    const base = seeded ? (opening ? 10000 : 7000) : (opening ? 6000 : 4000);
+    const spread = seeded ? 10000 : 6000; // seeded: 10–20s opener, 7–17s subsequent
+    const delay = base + Math.floor(Math.random() * spread);
     void this.ctx.storage.setAlarm(Date.now() + delay);
   }
 
@@ -620,7 +625,10 @@ export class Room extends DurableObject<Env> {
     if (!bot) return;
     // Dad's brain drives our body: the solver sees ONLY a BotView (length + its own
     // earned masks) — never this.state.word. The cheat-isolation wall stays intact.
-    const word = computeNextGuess({ wordLength: this.state.wordLength, ownGuesses: bot.guesses });
+    // Seeded rooms play through the fallible noob; labeled /robots rooms stay sharp.
+    // `state.seed` is falsy until Slice D, so every existing room keeps the sharp path.
+    const view = { wordLength: this.state.wordLength, ownGuesses: bot.guesses };
+    const word = this.state.seed ? noobGuess(view, NOOB, Math.random()) : computeNextGuess(view);
     if (word) await this.applyGuess(bot, word);
     await this.persistAndBroadcast();
     const stillGoing = this.state.players.some((p) => p.isBot && p.status === "playing");
