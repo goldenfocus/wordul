@@ -99,4 +99,14 @@ describe("normalizeWorld", () => {
     expect(normalizeWorld({ date: "nope", word: "EMBER", story: {} })).toBeNull(); // bad date
     expect(normalizeWorld({ date: "2026-06-02", word: "EM3ER", story: { title: "t", body: "b" } })).toBeNull();
   });
+  it("accepts and round-trips an optional feedEditorial overlay", () => {
+    const w = normalizeWorld({ date: "2026-06-02", word: "CRANE",
+      story: { title: "t", body: "b" },
+      feedEditorial: { title: "Hi", intro: "x", body: "y", media: { images: ["/a.png"] } } });
+    expect(w?.feedEditorial?.title).toBe("Hi");
+  });
+  it("omits feedEditorial when absent (back-compat)", () => {
+    const w = normalizeWorld({ date: "2026-06-02", word: "CRANE", story: { title: "t", body: "b" } });
+    expect(w && "feedEditorial" in w).toBe(false);
+  });
 });
