@@ -97,3 +97,11 @@ export function openGames(state: ArenaState): OpenGame[] {
 export function liveCount(state: ArenaState): number {
   return Object.values(state.seeded).filter((r) => r.status !== "closed").length;
 }
+
+// The monotonic seedCount makes every mint's key unique. `path` is the DO key (idFromName);
+// `routePath` is what the client navigates to — the worker's ROOM_RE accepts /@arena/<slug>
+// and resolves /ws?room=arena/<slug> to the byte-identical key.
+export function seedPaths(personaId: string, seedCount: number): { path: string; routePath: string } {
+  const slug = `${personaId}-${seedCount}`;
+  return { path: `arena/${slug}`, routePath: `/@arena/${slug}` };
+}
