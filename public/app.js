@@ -1301,17 +1301,22 @@ function renderDailyUnlock(snap, me) {
   box.hidden = !done;
   if (!done) return;
   const won = me.status === "won";
+  // Only a CONFIRMED gold mint sets player.goldAwarded (a number). Drive both the
+  // copy and the celebration off it — never claim/float gold the server didn't grant.
+  const award = (me && typeof me.goldAwarded === "number") ? me.goldAwarded : 0;
   const goody = $("#dailyGoody");
   if (goody && !goody.dataset.filled) {
+    const word = snap.word || "";
     goody.textContent = won
-      ? t("daily.goodySolved", { word: snap.word || "" })
-      : t("daily.goodyMissed", { word: snap.word || "" });
+      ? (award > 0 ? t("daily.goodySolved", { word, gold: award }) : t("daily.goodySolvedNoGold", { word }))
+      : (award > 0 ? t("daily.goodyMissed", { word, gold: award }) : t("daily.goodyMissedNoGold", { word }));
     if (won) goody.classList.add("is-win"); // gold halo (CSS) — solve only
     goody.dataset.filled = "1";
-    // GOLD-FLIGHT: celebrate a solve once — bump the HUD + send a few floaters
-    // rising toward it. Reuses the existing .gold-floater / gold-bump system; skip
-    // entirely under reduced motion (the calm CSS appear covers that case).
-    if (won && !getSettings().reducedMotion) celebrateDailyUnlock();
+    // GOLD-FLIGHT: celebrate a confirmed gold solve once — bump the HUD + send a few
+    // floaters rising toward it. Reuses the existing .gold-floater / gold-bump system;
+    // skip entirely under reduced motion (the calm CSS appear covers that case), and
+    // skip when the mint credited 0 (no coins for a zero/failed award).
+    if (won && award > 0 && !getSettings().reducedMotion) celebrateDailyUnlock();
   }
   const story = $("#dailyStory");
   if (story && snap.story && !story.dataset.filled) {
