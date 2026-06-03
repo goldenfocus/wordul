@@ -248,7 +248,7 @@ export class Room extends DurableObject<Env> {
   private async handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
       case "hello":
-        return this.onHello(ws, msg.username, msg.wordLength, msg.edition, msg.mode, msg.scienceOptOut);
+        return this.onHello(ws, msg.username, msg.wordLength, msg.edition, msg.mode, msg.scienceOptOut, msg.public);
       case "start":
         return this.onStart(ws);
       case "guess":
@@ -290,6 +290,7 @@ export class Room extends DurableObject<Env> {
     edition?: string,
     mode?: RoomMode,
     scienceOptOut = false,
+    isPublic = false,
   ): Promise<void> {
     // Trust model is intentional: identity is passwordless by product decision (a casual
     // word game — "kindness model", see spec 2026-05-31-username-identity). The client-
@@ -368,6 +369,15 @@ export class Room extends DurableObject<Env> {
       ) {
         this.state.mode = mode;
       }
+      // A public Arena room opts into the open-games index at creation (owner, fresh lobby).
+      if (
+        isPublic &&
+        username === this.state.owner &&
+        this.state.phase === "lobby" &&
+        this.state.round === 0
+      ) {
+        this.state.publicArena = true;
+      }
       this.pushSystem(`${username} joined`);
     }
 
@@ -392,16 +402,20 @@ export class Room extends DurableObject<Env> {
     }
     this.ensureBot();
     // Seeded Arena room: auto-start the instant the first human is connected (no host
-    // "start" click), then close the room out of ARENA's open index — a human committed,
-    // so it's no longer joinable by anyone else (the 2-cap already rejects a 2nd human).
+    // "start" click). runStart closes the room out of the open index (a human committed;
+    // the 2-cap already rejects a 2nd human).
     if (
       this.state.seed &&
       this.state.phase === "lobby" &&
       this.state.players.some((p) => !p.isBot && p.connected)
     ) {
       const persona = this.state.players.find((p) => p.isBot);
-      const started = await this.runStart(persona?.username ?? "arena");
-      if (started) this.closeArena();
+      await this.runStart(persona?.username ?? "arena");
+    }
+    // Public human Arena room: list it in the open index while it waits in the lobby.
+    // runStart/finishGame close it. Best-effort; a refresh just re-asserts the listing.
+    if (this.state.publicArena && this.state.phase === "lobby") {
+      this.publishArena();
     }
     await this.persistAndBroadcast();
   }
@@ -605,6 +619,7 @@ export class Room extends DurableObject<Env> {
     this.pushSystem(`${who} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
     this.emitRoundStarted();
     if (this.state.players.some((p) => p.isBot && p.status === "playing")) this.scheduleBotTick();
+    this.closeArena(); // once it starts, it's no longer an open game (no-op for normal rooms)
     await this.persistAndBroadcast();
     return true;
   }
@@ -1031,9 +1046,38 @@ export class Room extends DurableObject<Env> {
     );
   }
 
-  // Best-effort close of a seeded room in ARENA's open index. No-op for non-seeded rooms.
+  // Best-effort: list this human-hosted public room in ARENA's open index (humans alongside
+  // bots). No-op unless the room opted into public Arena.
+  private publishArena(): void {
+    if (!this.state.publicArena) return;
+    const arena = this.env.ARENA.get(this.env.ARENA.idFromName("arena"));
+    const rec = {
+      path: this.state.path,
+      routePath: `/@${this.state.path}`,
+      name: this.state.name,
+      host: this.state.owner,
+      personaId: "",            // not a bot
+      personaIcon: "👤",         // humans have no emoji persona; neutral marker
+      edition: this.state.edition,
+      wordLength: this.state.wordLength,
+      seats: "1/2",
+      mintedAt: Date.now(),
+      status: "registered" as const,
+    };
+    this.ctx.waitUntil(
+      arena
+        .fetch(new Request("https://do/publish", {
+          method: "POST",
+          body: JSON.stringify(rec),
+          headers: { "content-type": "application/json" },
+        }))
+        .catch((e) => console.error("arena publish failed", this.state.path, (e as Error).message)),
+    );
+  }
+
+  // Best-effort close of a seeded OR public room in ARENA's open index. No-op otherwise.
   private closeArena(): void {
-    if (!this.state.seed) return;
+    if (!this.state.seed && !this.state.publicArena) return;
     const arena = this.env.ARENA.get(this.env.ARENA.idFromName("arena"));
     this.ctx.waitUntil(
       arena
@@ -1284,6 +1328,7 @@ export class Room extends DurableObject<Env> {
       // key (Slice D sets state.seed). TS doesn't enforce the shadow (seed isn't on the
       // declared outbound shape via this path), so this comment documents the dependency.
       seed: undefined,
+      publicArena: undefined, // internal-only; not part of the client contract
       rematch: undefined,
       botRematchAt: undefined,
       rematchTimeoutAt: undefined,

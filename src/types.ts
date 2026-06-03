@@ -83,14 +83,15 @@ export type RoomSnapshot = {
   story?: { title: string; body: string; tip?: string } | null; // World story for the unlock
   voice?: string;          // World companion voice id (forward-compat; client still defaults)
   seed?: SeedMarker;       // INTERNAL ONLY — present on seeded bot rooms; stripped outbound (Slice C)
-  // Rematch handshake — INTERNAL ONLY; stripped outbound in snapshotFor (like seed).
+  publicArena?: boolean;   // INTERNAL ONLY — a human-hosted public Arena room; stripped outbound
+  // Rematch handshake — INTERNAL ONLY; stripped outbound in snapshotFor (like seed/publicArena).
   rematch?: { proposer: string; deadline: number } | null;
   botRematchAt?: number | null;     // epoch ms the bot decides; null = none pending
   rematchTimeoutAt?: number | null; // epoch ms the proposal auto-cancels; null = none pending
 };
 
 export type ClientMessage =
-  | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string; scienceOptOut?: boolean }
+  | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string; scienceOptOut?: boolean; public?: boolean }
   | { type: "start" }
   | { type: "guess"; word: string }
   | { type: "rematch_propose" }

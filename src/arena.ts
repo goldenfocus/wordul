@@ -44,6 +44,13 @@ export class Arena extends DurableObject<Env> {
       await this.save(apply(await this.load(), { type: "register", path: b.path }));
       return Response.json({ ok: true });
     }
+    if (req.method === "POST" && url.pathname === "/publish") {
+      // A human-hosted public room announces itself (no mint/seed handshake).
+      const rec = (await req.json().catch(() => null)) as SeedRec | null;
+      if (!rec?.path || !rec.routePath || !rec.host) return new Response("bad request", { status: 400 });
+      await this.save(apply(await this.load(), { type: "publish", rec }));
+      return Response.json({ ok: true });
+    }
     if (req.method === "POST" && url.pathname === "/close") {
       const b = (await req.json().catch(() => null)) as { path?: string } | null;
       if (!b?.path) return new Response("bad request", { status: 400 });

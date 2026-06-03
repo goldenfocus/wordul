@@ -22,6 +22,7 @@ export type ArenaState = { seeded: Record<string, SeedRec>; seedCount: number };
 
 export type ArenaEvent =
   | { type: "mint"; rec: SeedRec }
+  | { type: "publish"; rec: SeedRec }
   | { type: "register"; path: string }
   | { type: "close"; path: string };
 
@@ -46,6 +47,13 @@ export function apply(state: ArenaState, event: ArenaEvent): ArenaState {
       return {
         seedCount: state.seedCount + 1,
         seeded: { ...state.seeded, [event.rec.path]: { ...event.rec, status: "minted" } },
+      };
+    case "publish":
+      // A human-hosted public room: already live (no mint/seed handshake), so it goes
+      // straight to "registered" and does NOT consume a persona seedCount.
+      return {
+        ...state,
+        seeded: { ...state.seeded, [event.rec.path]: { ...event.rec, status: "registered" } },
       };
     case "register": {
       const cur = state.seeded[event.path];

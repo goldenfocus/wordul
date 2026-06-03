@@ -148,3 +148,28 @@ describe("seedPaths + monotonic counter (D1)", () => {
     expect(Object.keys(s.seeded)).toHaveLength(2);
   });
 });
+
+describe("publish — human public rooms in the index", () => {
+  it("inserts a registered rec directly, without bumping seedCount", () => {
+    const human = rec({ path: "yan/abcd", routePath: "/@yan/abcd", host: "yan", personaId: "", status: "minted" });
+    const s = apply(emptyArenaState(), { type: "publish", rec: human });
+    expect(s.seedCount).toBe(0); // human rooms don't consume a persona counter
+    expect(s.seeded["yan/abcd"].status).toBe("registered");
+  });
+
+  it("a published human room shows up in openGames alongside bots", () => {
+    let s = apply(emptyArenaState(), { type: "publish", rec: rec({ path: "yan/abcd", routePath: "/@yan/abcd", host: "yan", personaId: "" }) });
+    // a bot room too
+    s = apply(s, { type: "mint", rec: rec({ path: "arena/maya-0" }) });
+    s = apply(s, { type: "register", path: "arena/maya-0" });
+    const hosts = openGames(s).map((g) => g.host).sort();
+    expect(hosts).toEqual(["maya", "yan"]);
+  });
+
+  it("close removes a published human room (idempotent)", () => {
+    let s = apply(emptyArenaState(), { type: "publish", rec: rec({ path: "yan/abcd", routePath: "/@yan/abcd", host: "yan" }) });
+    s = apply(s, { type: "close", path: "yan/abcd" });
+    expect(s.seeded["yan/abcd"].status).toBe("closed");
+    expect(openGames(s)).toHaveLength(0);
+  });
+});
