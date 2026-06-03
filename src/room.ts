@@ -3,6 +3,7 @@ import { WORDS_BY_SIZE, isSupportedSize } from "./wordsbysize.ts";
 import { scoreGuess, countVowels, revealUngreened, type Color } from "./color.ts";
 import { computeNextGuess } from "./solver.ts";
 import { noobGuess, NOOB } from "./noob.ts";
+import { projectPlayerForClient } from "./bots.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { buildGameRecords, summarizeRoomGame } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
@@ -599,7 +600,11 @@ export class Room extends DurableObject<Env> {
       points: 0,
       pointsSpent: 0,
     });
-    this.pushSystem(`🤖 ${BOT_NAME} powered on — knows the basics, holds no grudges.`);
+    // Only the labeled /robots room announces the worduler. Seeded Arena rooms (Slice D)
+    // inject their persona silently — no system line, no disguise tell.
+    if (this.isRobotRoom()) {
+      this.pushSystem(`🤖 ${BOT_NAME} powered on — knows the basics, holds no grudges.`);
+    }
   }
 
   private scheduleBotTick(): void {
@@ -998,9 +1003,14 @@ export class Room extends DurableObject<Env> {
       // The daily story names the answer ("Why EMBER?") — gate it exactly like `word`,
       // else a still-playing viewer reads today's word straight off the WS payload.
       story: reveal ? this.state.story : null,
+      // Disguise (the single enforcement point): strip isBot per-player AND the server-only
+      // seed marker. `seed: undefined` MUST come after ...this.state to shadow the internal
+      // key (Slice D sets state.seed). TS doesn't enforce the shadow (seed isn't on the
+      // declared outbound shape via this path), so this comment documents the dependency.
+      seed: undefined,
       players: this.state.isDaily
-        ? (me ? [{ ...me, guesses: [...me.guesses] }] : [])
-        : this.state.players.map((p) => ({ ...p, guesses: [...p.guesses] })),
+        ? (me ? [projectPlayerForClient({ ...me, guesses: [...me.guesses] })] : [])
+        : this.state.players.map((p) => projectPlayerForClient({ ...p, guesses: [...p.guesses] })),
     };
   }
 
