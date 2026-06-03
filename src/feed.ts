@@ -113,8 +113,7 @@ export function buildDailyPost(
 
   const findings = buildDailyFindings(summary);
   const matched = matchBrainNotes(findings, notes);
-  // NOTE: cast shim — World.feedEditorial is added in Task 5, which removes this cast.
-  const editorial = (world as World & { feedEditorial?: FeedEditorial }).feedEditorial;
+  const editorial = world.feedEditorial;
   return {
     ...base,
     headline: dailyHeadline(summary.date, world.word, findings),

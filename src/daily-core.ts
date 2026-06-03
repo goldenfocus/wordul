@@ -9,6 +9,12 @@ export interface World {
   voice: string;           // companion voice id (e.g. "yang")
   story: { title: string; body: string; tip?: string };
   curator?: { username: string; message: string }; // RESERVED (#4)
+  feedEditorial?: {            // RESERVED: Living Lab Feed editorial overlay (admin-gated)
+    title?: string;
+    intro?: string;
+    body?: string;
+    media?: { images: string[]; video?: string };
+  };
   createdAt: number;       // epoch ms
 }
 
@@ -91,6 +97,19 @@ export function normalizeWorld(input: unknown): World | null {
     if (typeof c.username === "string" && typeof c.message === "string") {
       world.curator = { username: c.username, message: c.message };
     }
+  }
+  if (o.feedEditorial && typeof o.feedEditorial === "object") {
+    const e = o.feedEditorial as Record<string, unknown>;
+    const ed: NonNullable<World["feedEditorial"]> = {};
+    if (typeof e.title === "string") ed.title = e.title;
+    if (typeof e.intro === "string") ed.intro = e.intro;
+    if (typeof e.body === "string") ed.body = e.body;
+    if (e.media && typeof e.media === "object") {
+      const m = e.media as Record<string, unknown>;
+      const images = Array.isArray(m.images) ? m.images.filter((x): x is string => typeof x === "string") : [];
+      ed.media = { images, ...(typeof m.video === "string" ? { video: m.video } : {}) };
+    }
+    if (Object.keys(ed).length > 0) world.feedEditorial = ed;
   }
   return world;
 }

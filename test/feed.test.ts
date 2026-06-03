@@ -114,3 +114,15 @@ describe("buildDailyPost — past-day data block", () => {
     expect(byKind.participation.value).toBe(100);
   });
 });
+
+describe("editorial overlay", () => {
+  it("rides on top of a past-day post without altering findings/highlights", () => {
+    const ed = { title: "The week we all chased CRANE", intro: "A note from the lab." };
+    const plain = buildDailyPost(summary("2026-06-02"), world(), BRAIN_NOTES, { todayUTC: "2026-06-03" });
+    const withEd = buildDailyPost(summary("2026-06-02"), world({ feedEditorial: ed }), BRAIN_NOTES, { todayUTC: "2026-06-03" });
+    expect(withEd.editorial).toEqual(ed);
+    expect(withEd.findings).toEqual(plain.findings);     // data block identical
+    expect(withEd.highlights).toEqual(plain.highlights);
+    expect(withEd.headline).toEqual(plain.headline);
+  });
+});
