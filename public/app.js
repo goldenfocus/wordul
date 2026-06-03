@@ -990,6 +990,14 @@ function openSocket(url) {
   });
 
   ws.addEventListener("close", () => {
+    // If this socket is no longer the current one, the close was intentional —
+    // leaveRoom() nulled game.ws, or a reconnect/new room already replaced it.
+    // Reconnecting here would resurrect a ZOMBIE socket that streams snapshots
+    // into whatever view is now mounted (home/hub/profile), where the room
+    // scaffold is gone — render() then throws on #lobbyControls. (leaveRoom's
+    // `onclose = null` never stopped this: the reconnect is an addEventListener
+    // listener, not the onclose property.) Bail so leaving a room stays left.
+    if (game.ws !== ws) return;
     stopHeartbeat();
     setConnectionStatus("reconnecting");
     // Only show the toast if the reconnect actually takes a while. Most close
@@ -1430,6 +1438,11 @@ function gameRow(g) {
 
 function render() {
   if (!game.snapshot) return;
+  // A late snapshot can land after we've left the room view: tpl-room is unmounted
+  // on home/hub/profile, so the room scaffold (#boards, #lobbyControls, …) is gone.
+  // With nothing to draw, bail before dereferencing room-only elements that would
+  // throw against the wrong template. #boards is the room scaffold's signature node.
+  if (!$("#boards")) return;
   const snap = game.snapshot;
   const me = snap.players.find((p) => p.username === getUsername());
 
