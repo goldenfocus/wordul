@@ -1,6 +1,7 @@
 // test/feed.test.ts
 import { describe, expect, it } from "vitest";
-import { buildDailyPost, grayOpenerRate, letterRevealRate } from "../src/feed.ts";
+import { buildDailyPost, grayOpenerRate, letterRevealRate, matchBrainNotes } from "../src/feed.ts";
+import { BRAIN_NOTES } from "../src/brain-notes.ts";
 import type { SciencePublicDailySummary } from "../src/science.ts";
 import type { World } from "../src/daily-core.ts";
 
@@ -52,6 +53,30 @@ describe("buildDailyPost — extended findings", () => {
     const kinds = post.findings.map((f) => f.kind);
     expect(kinds).not.toContain("gray_opener_rate");
     expect(kinds).not.toContain("letter_reveal_rate");
+  });
+});
+
+describe("brain notes", () => {
+  it("seeds a non-trivial library spanning all four pillars", () => {
+    const pillars = new Set(BRAIN_NOTES.map((n) => n.pillar));
+    expect(BRAIN_NOTES.length).toBeGreaterThanOrEqual(8);
+    expect([...pillars].sort()).toEqual(["body", "mind", "soul", "spirit"]);
+    for (const n of BRAIN_NOTES) { expect(n.id).toBeTruthy(); expect(n.note.length).toBeGreaterThan(0); }
+  });
+
+  it("matches notes by declarative trigger over findings and derives pillars", () => {
+    const findings = [{ kind: "letter_reveal_rate", value: 25, display: "25%", text: "" }] as const;
+    const note = { id: "offload", pillar: "mind", title: "Cognitive offloading",
+      note: "Reaching for a hint offloads memory to the tool.", trigger: { kind: "letter_reveal_rate", min: 15 } } as const;
+    const matched = matchBrainNotes(findings as any, [note as any]);
+    expect(matched.map((n) => n.id)).toEqual(["offload"]);
+  });
+
+  it("attaches matched notes + pillars to a past-day post", () => {
+    const post = buildDailyPost(summary("2026-06-02"), world(), BRAIN_NOTES, { todayUTC: "2026-06-03" });
+    expect(post.brainNotes.length).toBeGreaterThan(0);
+    expect(post.pillars.length).toBeGreaterThan(0);
+    for (const p of post.pillars) expect(["mind","body","spirit","soul"]).toContain(p);
   });
 });
 
