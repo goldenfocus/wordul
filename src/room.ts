@@ -1084,8 +1084,8 @@ export class Room extends DurableObject<Env> {
       kind: "propose", from: username, opponentIsBot: !!opponent.isBot, now: Date.now(),
     });
     this.state.rematch = rematch;
-    await this.applyRematchEffects(effects);
-    await this.persistAndBroadcast();
+    const started = await this.applyRematchEffects(effects);
+    if (!started) await this.persistAndBroadcast();
   }
 
   private async onRematchAccept(ws: WebSocket): Promise<void> {
@@ -1094,18 +1094,18 @@ export class Room extends DurableObject<Env> {
     if (!username) return;
     const { rematch, effects } = rematchReduce(this.state.rematch ?? null, { kind: "accept", from: username });
     this.state.rematch = rematch;
-    await this.applyRematchEffects(effects);
-    await this.persistAndBroadcast();
+    const started = await this.applyRematchEffects(effects);
+    if (!started) await this.persistAndBroadcast();
   }
 
   private async onRematchDecline(ws: WebSocket): Promise<void> {
-    if (this.state.isDaily) return;
+    if (this.state.isDaily || this.state.phase !== "finished") return;
     const username = this.userFor(ws);
     if (!username) return;
     const { rematch, effects } = rematchReduce(this.state.rematch ?? null, { kind: "decline" });
     this.state.rematch = rematch;
-    await this.applyRematchEffects(effects);
-    await this.persistAndBroadcast();
+    const started = await this.applyRematchEffects(effects);
+    if (!started) await this.persistAndBroadcast();
   }
 
   private async onChat(ws: WebSocket, textRaw: string): Promise<void> {
@@ -1166,8 +1166,9 @@ export class Room extends DurableObject<Env> {
 
   // Perform the side effects a rematchReduce() returned. `runStart` is the existing
   // round-restart (increment, word pick, GO!, bot tick) — the handshake's accept path.
-  private async applyRematchEffects(effects: RematchEffect[]): Promise<void> {
+  private async applyRematchEffects(effects: RematchEffect[]): Promise<boolean> {
     let starter = "someone";
+    let started = false;
     for (const e of effects) {
       switch (e.kind) {
         case "proposed":
@@ -1199,9 +1200,11 @@ export class Room extends DurableObject<Env> {
         case "start":
           this.clearRematchAlarms();
           await this.runStart(starter); // resets everyone, picks word, GO!, schedules bot tick
+          started = true;
           break;
       }
     }
+    return started;
   }
 
   private isGameOver(): boolean {
