@@ -61,11 +61,11 @@ function renderDaily() {
       <div class="mode-grid">
         <button id="modeSolo" class="mode-tile" type="button">
           <span class="mode-ico">${GLYPH.bolt}</span>
-          <span class="mode-text"><span class="mode-name">Solo</span><span class="mode-sub">Practice run</span></span>
+          <span class="mode-name">Solo</span>
         </button>
         <button id="modePvP" class="mode-tile" type="button">
           <span class="mode-ico">${GLYPH.duo}</span>
-          <span class="mode-text"><span class="mode-name">Head-to-head</span><span class="mode-sub">Live PvP</span></span>
+          <span class="mode-name">Head-to-head</span>
         </button>
       </div>
     </section>

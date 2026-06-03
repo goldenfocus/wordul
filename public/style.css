@@ -2223,31 +2223,6 @@ body.hub-home .topbar-stats { display: flex; }
 
 /* "Jump in" modes + Recent share the same vertical rhythm. */
 .hub-modes, .daily-recent { margin-top: 24px; display: block; }
-.mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
-/* Glass tiles — dissolved edges, soft radius. NOT pills, NOT hard chips. */
-.mode-tile {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
-  padding: 16px 16px 18px; text-align: left; cursor: pointer;
-  border-radius: 14px;
-  background: rgba(20, 14, 40, 0.5);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(124,58,237,0.18);
-  mask-image: radial-gradient(ellipse 92% 92% at 50% 45%, black 60%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse 92% 92% at 50% 45%, black 60%, transparent 100%);
-  transition: border-color 0.2s, transform 0.12s, box-shadow 0.2s;
-}
-.mode-tile:hover {
-  border-color: rgba(167,139,250,0.5);
-  transform: translateY(-2px);
-  box-shadow: 0 0 30px -12px rgba(167,139,250,0.7);
-}
-.mode-tile:active { transform: translateY(0); }
-.mode-emoji { font-size: 22px; }
-.mode-name { font-family: var(--font-display); font-size: 18px; }
-.mode-sub { font-size: 12px; color: rgba(255,255,255,0.5); }
-@media (prefers-reduced-motion: reduce) {
-  .mode-tile { transition: none !important; }
-}
 
 /* ═══ Home redesign: identity on top · one calm card · refined modes · Stats page ═══
    ADHD-calm: one focal point, generous breathing room, no instructional copy, no
@@ -2344,28 +2319,26 @@ body.hub-home .topbar-stats { display: flex; }
 .daily-done-btn .glyph { width: 16px; height: 16px; color: var(--accent); }
 
 /* Modes — bigger, calmer tiles: an icon chip + label. Not emoji, not pills. */
-.mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+/* Modes — shapeless glass fields, NOT bordered tiles or pills. Edges dissolve into
+   the background; the glyph is bare (no chip); just an icon + one word, no subtitle. */
+.mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
 .mode-tile {
-  display: flex; align-items: center; gap: 12px;
-  padding: 15px 14px; min-height: 74px; text-align: left; cursor: pointer;
-  border-radius: 16px;
-  background: rgba(20,14,40,0.5);
-  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
-  border: 1px solid rgba(124,58,237,0.18);
-  transition: border-color .2s, transform .12s, box-shadow .2s;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 12px;
+  padding: 22px 20px; min-height: 100px; text-align: left; cursor: pointer;
+  border: 0; border-radius: 24px;
+  background: rgba(30,21,56,0.40);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  /* dissolve every edge — a flowing glass field, never a hard box / pill */
+  -webkit-mask-image: radial-gradient(ellipse 115% 115% at 42% 40%, #000 56%, transparent 100%);
+  mask-image: radial-gradient(ellipse 115% 115% at 42% 40%, #000 56%, transparent 100%);
+  transition: transform .14s, background .25s;
 }
-.mode-tile:hover { border-color: rgba(167,139,250,0.5); transform: translateY(-2px); box-shadow: 0 0 30px -12px rgba(167,139,250,0.7); }
+.mode-tile:hover { transform: translateY(-2px); background: rgba(46,33,82,0.5); }
 .mode-tile:active { transform: translateY(0); }
-.mode-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.mode-ico {
-  flex: none; display: grid; place-items: center; width: 42px; height: 42px;
-  border-radius: 13px; color: var(--accent);
-  background: rgba(157,139,255,0.12); border: 1px solid rgba(157,139,255,0.25);
-}
-.mode-ico .glyph { width: 22px; height: 22px; }
-.mode-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.mode-name { font-family: var(--font-display); font-size: 17px; line-height: 1.1; }
-.mode-sub { font-size: 12px; color: rgba(255,255,255,0.5); }
+.mode-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 24px; }
+.mode-ico { color: var(--accent); opacity: .9; }   /* bare glyph — no chip, no pill */
+.mode-ico .glyph { width: 27px; height: 27px; }
+.mode-name { font-family: var(--font-display); font-size: 20px; line-height: 1.05; color: var(--fg); }
 @media (prefers-reduced-motion: reduce) {
   .daily-card, .daily-tile.is-cursor { animation: none !important; }
   .daily-card, .mode-tile { transition: none !important; }
