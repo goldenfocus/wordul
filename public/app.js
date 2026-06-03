@@ -211,6 +211,10 @@ function renderHomeIdentity() {
       onSolo: () => enterNewRoom({ autoStart: true }),
       onPvP: () => enterNewRoom({ autoStart: false }),
       onStats: () => navigate("/daily/" + todayUTC() + "/stats"),
+      onShareDaily: () => shareDailyResult(cbs.dailyResult),
+      // dailyResult is filled from the profile below: null until you've played today,
+      // then { won, guesses } — flips the home card to its post-play recap.
+      dailyResult: null,
       // Real "N played" for the day from public aggregates — never a fake number.
       fetchPlayed: () => fetch("/api/science/today")
         .then((r) => (r.ok ? r.json() : null))
@@ -223,6 +227,7 @@ function renderHomeIdentity() {
         // Populate homeRoomRows so renderRecentRoomsInto has data ready.
         homeRoomRows = buildRoomRows(profile, u);
         homeRoomVisible = HOME_ROOMS_PAGE;
+        cbs.dailyResult = dailyResultFor(profile);
         renderHub(profile, cbs);
       })
       .catch(() => renderHub({}, cbs));
@@ -232,6 +237,29 @@ function renderHomeIdentity() {
     if (rooms) rooms.hidden = true;
     const i = $("#usernameInput");
     if (i) i.focus();
+  }
+}
+
+// Today's daily result from the profile (no extra request): the finished game whose
+// roomPath is daily/<today>. Drives the home's post-play recap. null = not played yet.
+function dailyResultFor(profile) {
+  const g = (profile?.games || []).find((x) => x.roomPath === "daily/" + todayUTC());
+  return g ? { won: g.result === "won", guesses: g.guesses } : null;
+}
+
+// Share today's result from the home — a spoiler-free line + the day's link (no board
+// PNG here, since the game isn't loaded on the home). Native sheet, else clipboard.
+function shareDailyResult(result) {
+  const url = location.origin + "/daily/" + todayUTC();
+  const line = result && result.won
+    ? `I solved today's Wordul in ${result.guesses}.`
+    : "Today's Wordul got me.";
+  if (typeof navigator.share === "function") {
+    navigator.share({ title: "Wordul of the Day", text: line, url }).catch(() => {});
+  } else if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(`${line} ${url}`).then(() => toast("Copied — share it anywhere")).catch(() => {});
+  } else {
+    toast("Sharing isn't supported on this browser");
   }
 }
 

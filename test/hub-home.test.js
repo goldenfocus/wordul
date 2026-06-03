@@ -19,6 +19,7 @@ function makeCallbacks(over = {}) {
     onSolo: vi.fn(),
     onPvP: vi.fn(),
     onStats: vi.fn(),
+    onShareDaily: vi.fn(),
     fetchPlayed: () => Promise.resolve(null),
     renderRecentRooms: () => {},
     ...over,
@@ -66,5 +67,30 @@ describe("hub home (redesign)", () => {
     renderHub({}, makeCallbacks({ fetchPlayed: () => Promise.resolve(1248) }));
     await Promise.resolve(); await Promise.resolve();
     expect(document.getElementById("dailyStatsLabel").textContent).toBe("1,248 played");
+  });
+
+  it("after you've played today, shows the post-play recap — result + countdown + share, no play card", () => {
+    const cb = makeCallbacks({ dailyResult: { won: true, guesses: 4 } });
+    renderHub({}, cb);
+    expect(document.getElementById("dailyCard")).toBeNull();           // no replay surface
+    expect(document.querySelector(".daily-done")).toBeTruthy();
+    expect(document.querySelector(".daily-result-text").textContent).toMatch(/Solved in 4/);
+    expect(document.getElementById("dailyCountdown")).toBeTruthy();
+
+    document.getElementById("dailyStats").click();
+    expect(cb.onStats).toHaveBeenCalledTimes(1);
+    document.getElementById("dailyShare").click();
+    expect(cb.onShareDaily).toHaveBeenCalledTimes(1);
+
+    // Typing must NOT start a game once today's done.
+    homeTypeLetter("G");
+    expect(cb.onPlay).not.toHaveBeenCalled();
+  });
+
+  it("a loss reads calmly ('Missed today'), still no play card", () => {
+    renderHub({}, makeCallbacks({ dailyResult: { won: false, guesses: 6 } }));
+    expect(document.getElementById("dailyCard")).toBeNull();
+    expect(document.querySelector(".daily-result.is-lost")).toBeTruthy();
+    expect(document.querySelector(".daily-result-text").textContent).toMatch(/Missed today/);
   });
 });
