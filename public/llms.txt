@@ -27,10 +27,19 @@
 - Wordul of the Day (today): `/daily/<today>`
 - A specific day (eternal permalink): `/daily/<YYYY-MM-DD>` (e.g. `/daily/2026-06-02`)
 - Daily archive (every past day): `/daily/archive`
+- Community science latest JSON: `/science/latest.json`
+- Community science weekly JSON: `/science/weekly.json`
+- Community science day JSON: `/api/science/daily/<YYYY-MM-DD>.json`
 - How to play (full guide): `/how-to-play`
 - Profile + lifetime stats: `/@<username>` (e.g. `/@yan`)
 - Game room: `/@<username>/<room-name>` (e.g. `/@yan/friday-night`)
 - Profile data (machine-readable JSON): `/api/user/<username>`
+
+## Community Science
+- Wordul publishes privacy-preserving aggregate research data from gameplay.
+- Public science JSON does not include usernames, chat text, IP addresses, raw personal timelines, or active daily answer-level stats.
+- Past answer-level difficulty stats are released only when k-anonymity is met.
+- Players can disable player-level contribution with the Community science setting.
 
 ## Site
 - Home: https://wordul.com

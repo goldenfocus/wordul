@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS = {
   hardMode: false,
   colorBlind: false,
   reducedMotion: false,
+  communityScience: true,
   // "auto" = detect from browser/OS locale (fr-* → AZERTY) until the player picks
   // explicitly in settings; an explicit pick is persisted and always wins.
   keyboardLayout: "auto",
@@ -84,9 +85,11 @@ export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker,
   const hm = document.getElementById("setHardMode");
   const cb = document.getElementById("setColorBlind");
   const rm = document.getElementById("setReducedMotion");
+  const cs = document.getElementById("setCommunityScience");
   if (hm) hm.checked = s.hardMode;
   if (cb) cb.checked = s.colorBlind;
   if (rm) rm.checked = s.reducedMotion;
+  if (cs) cs.checked = s.communityScience;
 
   // Wire toggles every open (idempotent — replace old listeners by cloning so a
   // re-open never stacks duplicate change handlers that double-fire).
@@ -104,6 +107,7 @@ export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker,
   wire(hm, "hardMode");
   wire(cb, "colorBlind");
   wire(rm, "reducedMotion");
+  wire(cs, "communityScience");
 
   // Theme/edition picker. The theme is bound to the room, so a pick re-applies settings
   // locally AND notifies the caller (onEditionPick → set_edition for everyone). Locked

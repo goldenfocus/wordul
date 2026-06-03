@@ -980,6 +980,7 @@ function openSocket(url) {
       wordLength: getPreferredLength(),
       edition: getActiveEditionId(), // seeds a fresh room with the creator's theme
       mode: "race", // only valid selectable mode today
+      scienceOptOut: !getSettings().communityScience,
     });
     refreshGold(); // sync server-authoritative balance into HUD cache on join
     // Kick off heartbeat so the path stays warm.

@@ -23,6 +23,7 @@ export interface Env {
   USER: DurableObjectNamespace;
   CHALLENGE: DurableObjectNamespace;
   DAILY: DurableObjectNamespace;
+  SCIENCE: DurableObjectNamespace;
   DIRECTORY: KVNamespace;
   DESIGNS: R2Bucket;
   DAILY_ADMIN_TOKEN?: string; // wrangler secret; gates POST /daily/schedule
@@ -36,6 +37,9 @@ export type PlayerState = {
   guesses: GuessRow[];
   status: "playing" | "won" | "lost";
   isBot?: boolean;         // a worduler — born in Wordul, plays from public masks only
+  scienceOptOut?: boolean; // true = skip player-level research telemetry
+  revealHints?: number;    // per-round count, powers aggregate hint-use research
+  vowelHints?: number;     // per-round count, powers aggregate hint-use research
   points: number;        // live in-game points (earned − spent); reset each round
   pointsSpent: number;   // running power-up spend this round (internal accumulator)
   scored?: boolean;        // daily: this player's one result has been recorded (mint once)
@@ -75,7 +79,7 @@ export type RoomSnapshot = {
 };
 
 export type ClientMessage =
-  | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string }
+  | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string; scienceOptOut?: boolean }
   | { type: "start" }
   | { type: "guess"; word: string }
   | { type: "rematch" }

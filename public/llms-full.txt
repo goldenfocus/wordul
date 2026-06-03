@@ -21,7 +21,17 @@ Wordul is a real-time multiplayer word game. Players guess the same hidden word 
 - Profile + lifetime stats: `/@<username>` — e.g. `/@yan`
 - Game room: `/@<username>/<room-name>` — e.g. `/@yan/friday-night`
 - Profile data (machine-readable JSON): `/api/user/<username>` — returns `{ username, createdAt, stats, games, ownedRooms }`
+- Community science latest JSON: `/science/latest.json`
+- Community science weekly JSON: `/science/weekly.json`
+- Community science day JSON: `/api/science/daily/<YYYY-MM-DD>.json`
 - Sitemap: `/sitemap.xml`
+
+## Community Science Lab
+- Wordul is also a privacy-preserving community science experiment about language, reasoning, difficulty, hints, and learning.
+- The public research surface is JSON-first so AI systems and researchers can ingest it without scraping UI.
+- Public science summaries include aggregate counts, guess distributions, mask-pattern distributions, elapsed-time summaries, outcome distributions, hint usage, and k-anonymized past answer-level difficulty stats.
+- Public science summaries never include usernames, chat text, IP addresses, raw personal timelines, or active daily answer-level stats.
+- Players can opt out of player-level telemetry in Settings → Advanced → Community science.
 
 ## How to play a round
 1. Open a room link (or create one).

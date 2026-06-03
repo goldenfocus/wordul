@@ -35,9 +35,11 @@ Built for couches, group chats, and the kind of friendship that survives losing 
 All edge, no origin server, no client build step.
 
 - **Cloudflare Workers** — the whole app: serves static assets, routes WebSockets, renders meta.
-- **Durable Objects** — two of them:
+- **Durable Objects**:
   - `ROOM` — one instance per room, the authoritative game state and WebSocket fan-out. Rooms are content-addressed via `idFromName("owner/slug")`, so a link *always* resolves to the same room.
   - `USER` — one per username, owns the public profile and lifetime stats.
+  - `DAILY` — the Wordul of the Day schedule and archive source.
+  - `SCIENCE` — one aggregate shard per UTC date, publishing privacy-preserving community science JSON.
 - **Static front end** — `public/` is plain HTML/CSS/ES modules served straight off the Worker. No bundler, no framework, no build.
 - **WebSockets** — clients connect to `/ws?room=<owner>/<slug>` for live moves, chat, and presence, with automatic reconnect.
 
@@ -49,7 +51,10 @@ All edge, no origin server, no client build step.
 | `/@<username>/<room>` | A game room |
 | `/ws?room=<owner>/<slug>` | Room WebSocket |
 | `/api/user/<username>` | Profile data as JSON |
-| `/sitemap.xml` | Auto-generated from live rooms + profiles |
+| `/science/latest.json` | Today’s public community science aggregate |
+| `/science/weekly.json` | Rolling seven-day public science summary |
+| `/api/science/daily/<YYYY-MM-DD>.json` | Day-specific science aggregate |
+| `/sitemap.xml` | Auto-generated from profiles, rooms, daily pages, and science artifacts |
 
 ## Project layout
 

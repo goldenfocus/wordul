@@ -36,6 +36,10 @@
       {
         "name": "DAILY",
         "class_name": "Daily"
+      },
+      {
+        "name": "SCIENCE",
+        "class_name": "Science"
       }
     ]
   },
@@ -83,6 +87,12 @@
       // API, which is supported on new_sqlite_classes.
       "tag": "v4",
       "new_sqlite_classes": ["Daily"]
+    },
+    {
+      // Day-sharded public research rollups. Each date gets one Science DO; no database
+      // server required, and raw usernames never enter this storage.
+      "tag": "v5",
+      "new_sqlite_classes": ["Science"]
     }
   ],
 

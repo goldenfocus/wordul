@@ -2,17 +2,20 @@ import { Room } from "./room.ts";
 import { User } from "./user.ts";
 import { Challenge } from "./challenge.ts";
 import { Daily } from "./daily.ts";
+import { Science } from "./science-object.ts";
 import { makeChallengeId } from "./challenge-core.ts";
 import type { Env } from "./types.ts";
 import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts";
 import { activeDate } from "./daily-core.ts";
 import type { World } from "./daily-core.ts";
 import { buildDailyMeta, buildDailyJsonLd, dailyPrevNext, dailyDateFromPathname, dailySitemapUrls } from "./daily-seo.ts";
-export { Room, User, Challenge, Daily };
+import { buildWeeklyScienceSummary, type SciencePublicDailySummary } from "./science.ts";
+export { Room, User, Challenge, Daily, Science };
 
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;
 const CHALLENGE_RE = /^\/c\/([0-9A-Za-z]{5})$/;
+const SCIENCE_DAILY_RE = /^\/api\/science\/daily\/(\d{4}-\d{2}-\d{2})(?:\.json)?$/;
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -122,6 +125,19 @@ export default {
       return stub.fetch(new Request("https://do/dates", { method: "GET" }));
     }
 
+    // Public, privacy-preserving research artifacts. These are intentionally JSON-first
+    // so AI systems and researchers can ingest them without scraping the app UI.
+    if (url.pathname === "/science/latest.json" || url.pathname === "/api/science/today") {
+      return scienceDaily(env, activeDate(Date.now()));
+    }
+    const scienceMatch = url.pathname.match(SCIENCE_DAILY_RE);
+    if (scienceMatch && req.method === "GET") {
+      return scienceDaily(env, scienceMatch[1]);
+    }
+    if (url.pathname === "/science/weekly.json" || url.pathname === "/api/science/weekly") {
+      return scienceWeekly(env);
+    }
+
     // Legacy redirect: /r or /r/<code> -> home (rooms are owner-nested now).
     if (url.pathname === "/r" || url.pathname.startsWith("/r/")) {
       return Response.redirect(url.origin + "/", 301);
@@ -171,7 +187,7 @@ export default {
 };
 
 async function sitemap(env: Env, origin: string): Promise<Response> {
-  const urls: string[] = [origin + "/"];
+  const urls: string[] = [origin + "/", origin + "/science/latest.json", origin + "/science/weekly.json"];
   let cursor: string | undefined;
   do {
     const page = await env.DIRECTORY.list({ limit: 1000, cursor });
@@ -197,6 +213,41 @@ async function sitemap(env: Env, origin: string): Promise<Response> {
     urls.map((u) => `  <url><loc>${u}</loc></url>`).join("\n") +
     `\n</urlset>\n`;
   return new Response(body, { headers: { "content-type": "application/xml" } });
+}
+
+async function scienceDaily(env: Env, date: string): Promise<Response> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return new Response("bad date", { status: 400 });
+  const includeWords = date < activeDate(Date.now());
+  const stub = env.SCIENCE.get(env.SCIENCE.idFromName(date));
+  const res = await stub.fetch(`https://do/summary?date=${date}&includeWords=${includeWords ? "1" : "0"}`);
+  return withJsonCache(res, includeWords ? 300 : 60);
+}
+
+async function scienceWeekly(env: Env): Promise<Response> {
+  const today = activeDate(Date.now());
+  const dates = Array.from({ length: 7 }, (_, i) => shiftDate(today, -6 + i));
+  const daily = await Promise.all(dates.map(async (date) => {
+    const includeWords = date < today;
+    const stub = env.SCIENCE.get(env.SCIENCE.idFromName(date));
+    const res = await stub.fetch(`https://do/summary?date=${date}&includeWords=${includeWords ? "1" : "0"}`);
+    return (await res.json()) as SciencePublicDailySummary;
+  }));
+  return Response.json(buildWeeklyScienceSummary(daily, Date.now()), {
+    headers: { "cache-control": "public, max-age=300" },
+  });
+}
+
+function shiftDate(date: string, deltaDays: number): string {
+  const d = new Date(`${date}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
+
+function withJsonCache(res: Response, maxAge: number): Response {
+  const headers = new Headers(res.headers);
+  headers.set("content-type", "application/json; charset=utf-8");
+  headers.set("cache-control", `public, max-age=${maxAge}`);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
 async function injectMeta(

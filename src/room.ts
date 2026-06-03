@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { WORDS_BY_SIZE, isSupportedSize } from "./wordsbysize.ts";
-import { scoreGuess, countVowels, revealUngreened } from "./color.ts";
+import { scoreGuess, countVowels, revealUngreened, type Color } from "./color.ts";
 import { computeNextGuess } from "./solver.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { buildGameRecords, summarizeRoomGame } from "./records.ts";
@@ -8,6 +8,7 @@ import { normalizeSlug } from "./identity.ts";
 import { pointsEarned, goldFromPoints, POINTS } from "./economy.ts";
 import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
 import { activeDate } from "./daily-core.ts";
+import { countMask, maskToPattern, type ScienceBaseEvent, type ScienceEvent, type ScienceOutcome, type ScienceRoomKind } from "./science.ts";
 import type { RoomMode } from "./modes.ts";
 import type {
   ChatEntry,
@@ -96,7 +97,13 @@ export class Room extends DurableObject<Env> {
         if (!restored.mode) restored.mode = DEFAULT_MODE;
         if (!restored.edition) restored.edition = "default"; // pre-theme rooms
         if (restored.isDaily === undefined) restored.isDaily = false;
-        for (const p of restored.players) { if (typeof p.points !== "number") p.points = 0; if (typeof p.pointsSpent !== "number") p.pointsSpent = 0; }
+        for (const p of restored.players) {
+          if (typeof p.points !== "number") p.points = 0;
+          if (typeof p.pointsSpent !== "number") p.pointsSpent = 0;
+          if (typeof p.revealHints !== "number") p.revealHints = 0;
+          if (typeof p.vowelHints !== "number") p.vowelHints = 0;
+          if (typeof p.scienceOptOut !== "boolean") p.scienceOptOut = false;
+        }
         this.state = restored;
       }
     });
@@ -180,7 +187,7 @@ export class Room extends DurableObject<Env> {
   private async handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
       case "hello":
-        return this.onHello(ws, msg.username, msg.wordLength, msg.edition, msg.mode);
+        return this.onHello(ws, msg.username, msg.wordLength, msg.edition, msg.mode, msg.scienceOptOut);
       case "start":
         return this.onStart(ws);
       case "guess":
@@ -211,7 +218,14 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  private async onHello(ws: WebSocket, usernameRaw: string, wordLength?: number, edition?: string, mode?: RoomMode): Promise<void> {
+  private async onHello(
+    ws: WebSocket,
+    usernameRaw: string,
+    wordLength?: number,
+    edition?: string,
+    mode?: RoomMode,
+    scienceOptOut = false,
+  ): Promise<void> {
     // Trust model is intentional: identity is passwordless by product decision (a casual
     // word game — "kindness model", see spec 2026-05-31-username-identity). The client-
     // supplied username is taken at face value; control is shared, owner is bookkeeping only.
@@ -227,13 +241,24 @@ export class Room extends DurableObject<Env> {
     if (existing) {
       const wasOffline = !existing.connected;
       existing.connected = true;
+      existing.scienceOptOut = !!scienceOptOut;
       if (wasOffline) this.pushSystem(`${username} reconnected`);
     } else {
       if (!this.state.isDaily && this.state.players.length >= MAX_PLAYERS) {
         this.send(ws, { type: "error", message: "room full" });
         return;
       }
-      this.state.players.push({ username, connected: true, guesses: [], status: "playing", points: 0, pointsSpent: 0 });
+      this.state.players.push({
+        username,
+        connected: true,
+        guesses: [],
+        status: "playing",
+        scienceOptOut: !!scienceOptOut,
+        revealHints: 0,
+        vowelHints: 0,
+        points: 0,
+        pointsSpent: 0,
+      });
       // The room's default word length follows its owner's preference, and only in a
       // pristine lobby. Anyone can still change it mid-lobby via set_length (shared control).
       if (
@@ -329,6 +354,7 @@ export class Room extends DurableObject<Env> {
       this.state.phase = "playing";    // async one-shot: always live, no lobby
       this.state.round = 1;
       this.state.startedAt = this.state.startedAt ?? Date.now();
+      this.emitRoundStarted();
     } catch (e) {
       console.error("seedDaily failed", this.state.path, (e as Error).message);
       this.pushSystem("Today's Wordul is warming up — refresh in a sec.");
@@ -474,9 +500,12 @@ export class Room extends DurableObject<Env> {
       p.status = "playing";
       p.points = 0;
       p.pointsSpent = 0;
+      p.revealHints = 0;
+      p.vowelHints = 0;
     }
     const who = this.userFor(ws) ?? "someone";
     this.pushSystem(`${who} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
+    this.emitRoundStarted();
     if (this.state.players.some((p) => p.isBot && p.status === "playing")) this.scheduleBotTick();
     await this.persistAndBroadcast();
   }
@@ -511,6 +540,8 @@ export class Room extends DurableObject<Env> {
   // Shared guess core — both human onGuess (after validation) and the bot alarm call this,
   // so there is exactly ONE scoring/win path. Assumes `word` is a validated uppercase guess.
   private async applyGuess(player: PlayerState, word: string): Promise<void> {
+    const now = Date.now();
+    const priorStatus = player.status;
     const mask = scoreGuess(word, this.state.word!);
     player.guesses.push({ word, mask });
     player.points = pointsEarned(player.guesses, this.state.maxGuesses) - player.pointsSpent;
@@ -524,6 +555,10 @@ export class Room extends DurableObject<Env> {
       this.pushSystem(`${player.username} got it in ${player.guesses.length}!`);
     } else if (player.guesses.length >= this.state.maxGuesses) {
       player.status = "lost";
+    }
+    this.emitAcceptedGuess(player, mask, now);
+    if (priorStatus === "playing" && player.status !== "playing") {
+      this.emitPlayerFinished(player, player.status === "won" ? "won" : "lost", now);
     }
     if (this.state.challengeId && (player.status === "won" || player.status === "lost") && !player.isBot) {
       const solved = player.status === "won";
@@ -551,7 +586,18 @@ export class Room extends DurableObject<Env> {
     if (this.state.isDaily) return; // no worduler in the daily room
     if (this.state.players.some((p) => p.isBot)) return;
     if (this.state.players.length >= MAX_PLAYERS) return;
-    this.state.players.push({ username: BOT_NAME, connected: true, guesses: [], status: "playing", isBot: true, points: 0, pointsSpent: 0 });
+    this.state.players.push({
+      username: BOT_NAME,
+      connected: true,
+      guesses: [],
+      status: "playing",
+      isBot: true,
+      scienceOptOut: true,
+      revealHints: 0,
+      vowelHints: 0,
+      points: 0,
+      pointsSpent: 0,
+    });
     this.pushSystem(`🤖 ${BOT_NAME} powered on — knows the basics, holds no grudges.`);
   }
 
@@ -606,6 +652,7 @@ export class Room extends DurableObject<Env> {
     if (!player || player.status !== "playing") return;
     player.status = "lost";
     if (!this.isGameOver()) this.pushSystem(`${username} gave up`);
+    this.emitPlayerFinished(player, "resigned", Date.now());
     await this.afterPlayerStatus(player);
     await this.persistAndBroadcast();
   }
@@ -623,6 +670,8 @@ export class Room extends DurableObject<Env> {
     if (!hit) { this.send(ws, { type: "error", message: "nothing left to reveal" }); return; }
     player.pointsSpent += POINTS.revealCost;
     player.points -= POINTS.revealCost;
+    player.revealHints = (player.revealHints ?? 0) + 1;
+    this.emitPowerupUsed(player, "reveal_letter", POINTS.revealCost);
     this.send(ws, { type: "revealed_letter", index: hit.index, letter: hit.letter });
     await this.persistAndBroadcast();
   }
@@ -636,8 +685,106 @@ export class Room extends DurableObject<Env> {
     if (player.points < POINTS.vowelCost) { this.send(ws, { type: "error", message: "not enough points" }); return; }
     player.pointsSpent += POINTS.vowelCost;
     player.points -= POINTS.vowelCost;
+    player.vowelHints = (player.vowelHints ?? 0) + 1;
+    this.emitPowerupUsed(player, "vowel_count", POINTS.vowelCost);
     this.send(ws, { type: "vowels", count: countVowels(this.state.word) });
     await this.persistAndBroadcast();
+  }
+
+  private emitRoundStarted(): void {
+    const now = this.state.startedAt ?? Date.now();
+    this.emitScience({
+      ...this.scienceBase(now),
+      type: "round_started",
+      participantCount: this.state.players.filter((p) => this.scienceEnabled(p)).length,
+      botCount: this.state.players.filter((p) => p.isBot).length,
+    });
+  }
+
+  private emitAcceptedGuess(player: PlayerState, mask: Color[], at: number): void {
+    if (!this.scienceEnabled(player)) return;
+    const pattern = maskToPattern(mask);
+    const counts = countMask(pattern);
+    this.emitScience({
+      ...this.scienceBase(at),
+      type: "guess_accepted",
+      guessNumber: player.guesses.length,
+      elapsedMs: this.elapsedSinceStart(at),
+      mask: pattern,
+      green: counts.green,
+      yellow: counts.yellow,
+      gray: counts.gray,
+      statusAfter: player.status,
+      points: player.points,
+    });
+  }
+
+  private emitPlayerFinished(player: PlayerState, outcome: ScienceOutcome, at: number): void {
+    if (!this.scienceEnabled(player)) return;
+    this.emitScience({
+      ...this.scienceBase(at),
+      type: "player_finished",
+      outcome,
+      guesses: player.guesses.length,
+      elapsedMs: this.elapsedSinceStart(at),
+      points: player.points,
+      answer: this.state.word ?? undefined,
+      revealHints: player.revealHints ?? 0,
+      vowelHints: player.vowelHints ?? 0,
+    });
+  }
+
+  private emitPowerupUsed(player: PlayerState, powerup: "reveal_letter" | "vowel_count", pointsSpent: number): void {
+    if (!this.scienceEnabled(player)) return;
+    const at = Date.now();
+    this.emitScience({
+      ...this.scienceBase(at),
+      type: "powerup_used",
+      powerup,
+      guessNumber: player.guesses.length + 1,
+      pointsSpent,
+    });
+  }
+
+  private scienceBase(at: number): ScienceBaseEvent {
+    return {
+      at,
+      date: activeDate(at),
+      roomKind: this.scienceRoomKind(),
+      wordLength: this.state.wordLength,
+      maxGuesses: this.state.maxGuesses,
+      mode: this.state.mode,
+      edition: this.state.edition || "default",
+    };
+  }
+
+  private scienceRoomKind(): ScienceRoomKind {
+    if (this.state.isDaily) return "daily";
+    if (this.state.challengeId) return "challenge";
+    return "room";
+  }
+
+  private scienceEnabled(player: PlayerState): boolean {
+    return !player.isBot && !player.scienceOptOut;
+  }
+
+  private elapsedSinceStart(now: number): number | null {
+    return this.state.startedAt ? Math.max(0, now - this.state.startedAt) : null;
+  }
+
+  private emitScience(event: ScienceEvent): void {
+    const stub = this.env.SCIENCE.get(this.env.SCIENCE.idFromName(event.date));
+    this.ctx.waitUntil(
+      stub.fetch(new Request("https://do/event", {
+        method: "POST",
+        body: JSON.stringify(event),
+        headers: { "content-type": "application/json" },
+      })).then((res) => {
+        if (!res.ok) console.error("science event non-ok", event.type, event.date, res.status);
+      }).catch((e) => {
+        console.error("science event failed", event.type, event.date, (e as Error).message);
+      }),
+    );
   }
 
   /** On the finish transition: bump the room scoreboard, then report a personalized
@@ -774,6 +921,8 @@ export class Room extends DurableObject<Env> {
       p.status = "playing";
       p.points = 0;
       p.pointsSpent = 0;
+      p.revealHints = 0;
+      p.vowelHints = 0;
     }
     await this.persistAndBroadcast();
   }
