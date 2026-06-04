@@ -8,6 +8,7 @@ import { bumpScoreboard } from "./scoreboard.ts";
 import { buildGameRecords, summarizeRoomGame } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
 import { pointsEarned, goldFromPoints, POINTS } from "./economy.ts";
+import { topDaily } from "./leaderboard-core.ts";
 import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
 import { activeDate } from "./daily-core.ts";
 import { countMask, maskToPattern, type ScienceBaseEvent, type ScienceEvent, type ScienceOutcome, type ScienceRoomKind } from "./science.ts";
@@ -153,6 +154,20 @@ export class Room extends DurableObject<Env> {
         this.state.slug = this.state.path.split("/")[1] ?? "";
       }
       return this.handleUpgrade(req);
+    }
+    // Read-only daily leaderboard: top N by gold + the caller's own rank. No socket,
+    // no mutation — just a sort over the players already persisted in state.
+    if (req.method === "GET" && url.pathname.endsWith("/leaderboard")) {
+      const username = (url.searchParams.get("username") ?? "").toLowerCase().trim();
+      const n = Number(url.searchParams.get("n") ?? "3");
+      const players = this.state.players.map((p) => ({
+        username: p.username,
+        guessCount: p.guesses.length,
+        won: p.status === "won",
+        isBot: p.isBot,
+        goldAwarded: p.goldAwarded,
+      }));
+      return Response.json(topDaily(players, username, n));
     }
     return new Response("not found", { status: 404 });
   }
