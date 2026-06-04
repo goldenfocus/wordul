@@ -721,6 +721,8 @@ export class Room extends DurableObject<Env> {
       p.revealHints = 0;
       p.vowelHints = 0;
       p.pendingWord = undefined;
+      p.firstGuessAt = undefined;
+      p.finishedAt = undefined;
     }
     this.pushSystem(`${who} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
     this.emitRoundStarted();
@@ -955,6 +957,7 @@ export class Room extends DurableObject<Env> {
         const other = this.state.players.find((p) => p.username === username);
         if (other) {
           other.status = "lost";
+          if (other.finishedAt == null) other.finishedAt = now;
           this.emitPlayerFinished(other, "lost", now);
         }
       }
