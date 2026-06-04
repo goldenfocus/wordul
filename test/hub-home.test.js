@@ -121,7 +121,7 @@ describe("hub home (redesign)", () => {
     renderHub({}, makeCallbacks({
       dailyResult: { won: true, guesses: 2, solveGrid: ["xyxxg", "ggggg"], solveWords: ["SLATE", "GRAPE"] },
     }));
-    const hero = document.querySelector(".daily-result-hero");
+    const hero = document.querySelector(".daily-stamp-hero");
     expect(hero).toBeTruthy();
     expect(hero.getAttribute("aria-label")).toBe("Solved in 2");   // result conveyed to AT
     expect(document.querySelector(".daily-result-text")).toBeNull(); // no duplicate text line

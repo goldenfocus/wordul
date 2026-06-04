@@ -111,7 +111,7 @@ function renderLeaderboard(view, me) {
       : entry.resigned
         ? `<span class="daily-top-mark is-quit" role="img" aria-label="gave up" title="gave up">${GLYPH.skull}</span>`
         : `<span class="daily-top-mark is-out" role="img" aria-label="ran out of guesses" title="ran out of guesses">${GLYPH.cross}</span>`;
-    return `<li class="daily-top-row${mine ? " is-you" : ""}${opts.pinned ? " is-pinned" : ""}">
+    return `<li class="daily-top-row${mine ? " is-you" : ""}${opts.pinned ? " is-pinned" : ""}" data-user="${u}">
       <span class="daily-top-rank" aria-hidden="true">${badge}</span>
       <a class="daily-top-name" href="/@${u}" data-profile="${u}">${label}</a>
       <span class="daily-top-gold">${goldValue(entry.gold)}</span>
@@ -173,16 +173,16 @@ export function renderDailyCard({ themeId, result }) {
     const won = !!result.won;
     const caption = won ? `Solved in ${result.guesses}` : "Missed today";
     const stamp = renderStamp(result.solveGrid, result.solveWords);
-    // The player's own solved board IS the result — show the board image as the hero.
-    // Fall back to a text line only when there's no board to draw (e.g. an old record).
-    const hero = stamp
-      ? `<div class="daily-result-hero ${won ? "is-won" : "is-lost"}" role="img" aria-label="${caption}">${stamp}</div>`
+    // Featured card region — JS fills it (defaults to your own card) once wired. The
+    // immediate render shows your stamp so the recap never flashes empty.
+    const heroInner = stamp
+      ? `<div class="daily-stamp-hero ${won ? "is-won" : "is-lost"}" role="img" aria-label="${caption}">${stamp}</div>`
       : `<div class="daily-result ${won ? "is-won" : "is-lost"}">
         <span class="daily-result-mark" aria-hidden="true">${won ? GLYPH.check : GLYPH.cross}</span>
         <span class="daily-result-text">${caption}</span>
       </div>`;
     return `<article class="daily-card daily-done" data-theme="${themeId}">
-      ${hero}
+      <div class="daily-featured" id="dailyFeatured">${heroInner}</div>
       <section class="daily-top" id="dailyTop" hidden aria-label="Today's top players"></section>
       <div class="daily-next">
         <span class="daily-next-label">Next Wordul in</span>
@@ -230,11 +230,37 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
         if (board && html) {
           board.innerHTML = html;
           board.hidden = false;
-          if (onProfile) {
-            board.querySelectorAll("a[data-profile]").forEach((a) => {
-              a.addEventListener("click", (e) => { e.preventDefault(); onProfile(a.getAttribute("data-profile")); });
+          // Index every visible entry by username so a row tap can re-feature it.
+          const entries = new Map();
+          (view.top || []).forEach((e, i) => entries.set(e.username, { entry: e, rank: i + 1 }));
+          if (view.you) entries.set(view.you.username, { entry: view.you, rank: view.you.rank });
+          const featured = document.getElementById("dailyFeatured");
+          const rows = Array.from(board.querySelectorAll(".daily-top-row"));
+          const myWords = (result && result.solveWords) || undefined;
+          const setFeatured = (name) => {
+            const hit = entries.get(name);
+            if (!hit || !featured) return;
+            const isYou = name === username;
+            featured.innerHTML = renderFeaturedCard(hit.entry, { isYou, yourWords: myWords, rank: hit.rank });
+            rows.forEach((r) => r.classList.toggle("is-selected", r.getAttribute("data-user") === name));
+            // A featured "other" card's @name still navigates to their profile.
+            if (!isYou && onProfile) {
+              const a = featured.querySelector("a[data-profile]");
+              if (a) a.addEventListener("click", (e) => { e.preventDefault(); onProfile(a.getAttribute("data-profile")); });
+            }
+          };
+          // Row taps swap the featured card; the inner @name link still opens the profile.
+          rows.forEach((row) => {
+            const name = row.getAttribute("data-user");
+            row.addEventListener("click", () => setFeatured(name));
+            const a = row.querySelector("a[data-profile]");
+            if (a) a.addEventListener("click", (e) => {
+              e.preventDefault(); e.stopPropagation();
+              if (onProfile) onProfile(a.getAttribute("data-profile"));
             });
-          }
+          });
+          // Default the featured card to you, and mark your row selected.
+          if (entries.has(username)) setFeatured(username);
           // Fill the real "N played" count now that the header exists (best-effort).
           if (fetchPlayed) {
             fetchPlayed().then((n) => {
