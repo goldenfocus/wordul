@@ -31,6 +31,7 @@ export type PlayerState = {
   status: "playing" | "won" | "lost";
   isBot?: boolean;         // a worduler — born in Wordul, plays from public masks only
   ready: boolean;          // duel readiness — gates the countdown (set false on join/rematch)
+  role: "duelist" | "queued";  // duel seat; only two duelists play at a time
 };
 
 export type RoomPhase = "lobby" | "countdown" | "playing" | "finished";
@@ -59,6 +60,9 @@ export type RoomSnapshot = {
   scoreboard: RoomScore[];
   history: RoomGame[];     // finished games in this room, newest last (capped)
   edition: string;         // theme/edition id bound to the room — everyone in it sees this theme
+  rotation: "koth" | "host";              // next-opponent model; "koth" default ("host" is Plan 2b)
+  queue: string[];                        // waiting challenger usernames, front = next
+  throne: { username: string; streak: number } | null;  // current king + win streak (KOTH)
 };
 
 export type ClientMessage =
