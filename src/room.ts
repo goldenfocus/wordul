@@ -145,7 +145,8 @@ export class Room extends DurableObject<Env> {
         p.connected = false;
         this.pushSystem(`${p.username} left`);
       }
-      if (this.state.phase === "countdown") await this.cancelCountdown();
+      // Dropping mid-countdown aborts it; cancelCountdown persists + broadcasts itself.
+      if (this.state.phase === "countdown") { await this.cancelCountdown(); return; }
       await this.persistAndBroadcast();
     }
   }
@@ -407,6 +408,10 @@ export class Room extends DurableObject<Env> {
     this.state.phase = "countdown";
     this.state.goAt = Date.now() + COUNTDOWN_MS;
     this.pushSystem(`Get ready… round ${this.state.round}`);
+    // One DO alarm slot serves both this go-live timer and the bot tick. They never
+    // overlap in practice: bot ticks are only scheduled while phase === "playing", so
+    // none is pending in lobby/countdown when this setAlarm runs (or when
+    // cancelCountdown's deleteAlarm runs). The alarm() handler also dispatches by phase.
     await this.ctx.storage.setAlarm(this.state.goAt);
     await this.persistAndBroadcast();
   }
@@ -430,6 +435,7 @@ export class Room extends DurableObject<Env> {
     for (const p of this.state.players) p.ready = false;
     try { await this.ctx.storage.deleteAlarm(); } catch { /* no alarm pending */ }
     this.pushSystem("Countdown cancelled — ready up again");
+    await this.persistAndBroadcast();
   }
 
   private async onGuess(ws: WebSocket, wordRaw: string): Promise<void> {
