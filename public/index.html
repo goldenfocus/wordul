@@ -13,7 +13,7 @@
 <meta property="og:type" content="website" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="theme-color" content="#0e0e10" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23538d4e'/%3E%3Ctext x='50%25' y='52%25' text-anchor='middle' dominant-baseline='middle' fill='white' font-family='system-ui,sans-serif' font-weight='800' font-size='40'%3EW%3C/text%3E%3C/svg%3E" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <script>
   // Set the edition before first paint to avoid a flash of the wrong theme.
   try {
@@ -58,10 +58,15 @@
   ]
 }
 </script>
+<script type="application/ld+json" data-daily-jsonld></script>
+<script type="application/ld+json" data-feed-jsonld></script>
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">Wordul<span class="brand-dot">.</span></div>
+  <div class="topbar-left">
+    <button id="brandBtn" class="brand" type="button" title="Home" aria-label="Wordul — home">Wordul<span class="brand-dot">.</span></button>
+    <nav id="crumbs" class="crumbs" aria-label="Breadcrumb" hidden></nav>
+  </div>
   <!-- Immersive in-game header (C5): avatar + username + gold only. The avatar IS
        the hub — one tap opens settings / theme / mute / stats (+ share / rename /
        scoreboard in a room), replacing the old scattered ⚙ / 📊 / 🔊 icons. The
@@ -71,17 +76,31 @@
       💬<span id="chatTopBadge" class="topbar-chat-badge" hidden>0</span>
     </button>
     <div class="room-header" id="roomHeader"></div>
+    <!-- Home-only identity: gold + streak. Revealed by body.hub-home (the hub is up);
+         hidden in rooms, where #goldHud after #roomHeader owns the in-room gold. -->
+    <div class="topbar-stats" id="topbarStats">
+      <span class="hub-stat-glyph" id="hubGold" title="Gold">◆ <span id="hubGoldVal">0</span></span>
+      <span class="hub-stat-glyph" id="hubStreak" title="Streak" hidden>🔥 <span id="hubStreakVal">0</span></span>
+    </div>
     <button id="avatarBtn" class="avatar-btn" type="button" title="Menu" aria-label="Menu" aria-haspopup="true">◆</button>
   </div>
 </header>
 
 <main id="app">
   <!-- Screens injected by app.js -->
+  <!-- Crawlable daily prose: HTMLRewriter fills this for /daily/<date> (hidden from users;
+       the SPA replaces #app on boot). NOT wrapped in <noscript> — HTMLRewriter parses
+       noscript contents as raw text, so a selector inside it would never match. -->
+  <div data-daily-prose hidden></div>
+  <div data-feed-prose hidden></div>
 </main>
 
 <!-- Templates -->
 <template id="tpl-home">
   <section class="screen home">
+    <!-- Ambient gold orbs — pure decoration, reduced-motion safe. -->
+    <div class="home-aura" aria-hidden="true"><span class="orb orb-a"></span><span class="orb orb-b"></span></div>
+
     <!-- Returning user: greeting + switch-user. Hidden for new users. -->
     <div id="homeGreeting" class="home-greeting" hidden>
       <h1 class="greeting-title">👋 Welcome back, <span id="greetingName" class="greeting-name">@you</span></h1>
@@ -98,58 +117,47 @@
       </label>
     </div>
 
+    <!-- How to play — cleaner, near the top. -->
+    <a href="/how-to-play" class="home-howto link">How to play →</a>
+
     <div class="home-cta">
-      <button id="startPlayingBtn" class="btn primary block">▶ Start playing</button>
-      <p id="startHint" class="start-hint"></p>
-      <button id="inviteFriendBtn" class="btn ghost block">＋ Invite friend</button>
-      <label class="home-length">
-        <span class="label">Word length</span>
-        <select id="homeLengthSelect" class="length-select" aria-label="Word length"></select>
-      </label>
+      <button id="startPlayingBtn" class="btn primary block hero-btn"><span class="hero-btn-label">▶ Start playing</span></button>
     </div>
 
-    <!-- Returning user: rooms to rejoin. Hidden when empty or for new users. -->
+    <!-- Returning user: recent rooms to rejoin. Hidden when empty or for new users. -->
     <section id="homeRooms" class="home-rooms" hidden>
-      <div class="room-filter" role="tablist" aria-label="Which rooms">
-        <button id="roomFilterRecent" class="room-filter-btn selected" type="button" role="tab" aria-selected="true">Recent</button>
-        <button id="roomFilterYours" class="room-filter-btn" type="button" role="tab" aria-selected="false">Yours</button>
-      </div>
+      <span class="home-rooms-label">Recent</span>
       <ul id="roomList" class="room-list"></ul>
     </section>
 
-    <p class="muted small home-foot">One try per turn per player. First to guess wins.</p>
-    <a href="/how-to-play" class="home-howto link">New here? See how Wordul works →</a>
+    <!-- Hub shell — shown once the user has a profile; replaces the intro flow. -->
+    <div id="hub" class="hub" hidden>
+      <!-- Drifting aurora light orbs — pure decoration, reduced-motion safe. -->
+      <div class="hub-aurora" aria-hidden="true">
+        <span class="hub-orb hub-orb-uv"></span>
+        <span class="hub-orb hub-orb-gold"></span>
+        <span class="hub-orb hub-orb-teal"></span>
+      </div>
+      <main id="hubContent" class="hub-content"></main>
+    </div>
   </section>
 </template>
 
 <template id="tpl-room">
   <section class="screen room">
     <div class="lobby-bar">
+      <!-- The name IS the share: tap it to copy the room link. Rename + invite still
+           live in the avatar hub; length + theme in the gear. Three things only. -->
       <div class="room-info">
-        <span class="room-name" id="roomName"></span>
+        <button type="button" class="room-name" id="roomName" title="Copy room link"></button>
         <span id="modeChip" class="mode-chip" hidden></span>
-        <button id="renameBtn" class="icon-btn rename-btn" type="button" title="Rename room" aria-label="Rename room">✎</button>
-        <a id="roomOwner" class="room-owner link" href="#">@owner</a>
-        <button id="inviteBtn" class="btn small ghost invite-btn">
-          <span id="inviteLabel">Copy link</span>
-          <span class="invite-icon" aria-hidden="true">↗</span>
-        </button>
-        <span id="copyOk" class="copy-ok" hidden>Copied!</span>
       </div>
       <div id="lobbyControls" class="lobby-controls" hidden>
         <div id="modeControl" class="mode-control" hidden>
           <span class="label" id="modeHeading">Choose a mode</span>
           <ul id="modeList" class="mode-list" role="radiogroup" aria-label="Game mode"></ul>
         </div>
-        <div id="lengthControl" class="length-control" hidden>
-          <span class="label">Letters</span>
-          <select id="lengthSelect" class="length-select" aria-label="Word length"></select>
-        </div>
-        <div id="editionControl" class="edition-control" hidden>
-          <span class="label">Theme</span>
-          <div id="lobbyEditionPicker" class="edition-picker" role="group" aria-label="Room theme"></div>
-        </div>
-        <span id="lobbyHint" class="muted small"></span>
+        <button type="button" id="lobbySetup" class="lobby-setup" aria-label="Room setup" title="Length · theme" hidden>⚙</button>
         <button id="startBtn" class="btn primary small" hidden>Start game</button>
       </div>
       <div id="endControls" class="lobby-controls" hidden>
@@ -175,8 +183,17 @@
       </div>
       <p id="powerHints" class="power-hints" hidden></p>
 
+      <div id="queueStrip" class="queue-strip" hidden></div>
       <div id="boards" class="boards"></div>
       <div id="messageRow" class="message-row" aria-live="polite"></div>
+      <section id="dailyUnlock" class="daily-unlock" hidden>
+        <p class="daily-goody" id="dailyGoody"></p>
+        <article class="daily-story" id="dailyStory"></article>
+        <div class="daily-bridge">
+          <a href="/" class="btn primary block daily-bridge-btn" id="dailyBridgeBtn"></a>
+          <a href="/daily/archive" class="link daily-bridge-link" id="dailyArchiveLink"></a>
+        </div>
+      </section>
       <div id="keyboard" class="keyboard" aria-label="On-screen keyboard"></div>
     </div>
 
@@ -229,10 +246,20 @@
     <h3 class="modal-subtitle">GUESS DISTRIBUTION</h3>
     <div id="dist" class="dist"></div>
     <div id="endgameMsg" class="endgame" hidden></div>
+    <p id="challengeRecordLine" class="challenge-record"></p>
     <div class="modal-actions">
-      <button id="modalPlayAgain" class="btn primary block" hidden>PLAY AGAIN! ⟳</button>
-      <div class="modal-divider"></div>
-      <button id="modalShare" class="btn ghost block">SHARE ↗</button>
+      <button id="modalChallenge" class="btn block challenge-cta" type="button">Challenge a friend</button>
+      <button id="modalPlayAgain" class="btn ghost block" hidden>Play again <span class="cta-replay">⟳</span></button>
+      <!-- Arena-only actions; CSS .is-arena orders them Join next → Rematch → Create → Main menu → Challenge. -->
+      <button id="modalJoinNext" class="btn block" type="button" hidden>Join next game →</button>
+      <button id="modalCreateGame" class="btn ghost block" type="button" hidden>Create your own game</button>
+      <button id="modalMainMenu" class="btn ghost block" type="button" hidden>Main menu</button>
+      <div class="modal-divider"><span>or share the link</span></div>
+      <div class="share-row">
+        <input class="share-url" id="shareUrl" readonly />
+        <button class="share-copy" id="shareCopy" type="button">Copy</button>
+        <button class="share-native" id="modalShare" type="button">Share</button>
+      </div>
     </div>
   </div>
 </div>
@@ -246,6 +273,24 @@
 
     <!-- Collapsible chevron sections (C6) — all collapsed on open ("calm"). Less
          colour and noise; keyboard layout tucked under "Advanced". -->
+
+    <!-- Room setup — shown only when you're in a room. Word length lives here now
+         (moved out of the lobby); theme is in Appearance below. Disabled mid-game. -->
+    <section class="settings-section" id="roomSettingsSection" hidden>
+      <button type="button" class="settings-section-head" aria-expanded="false">
+        <span class="settings-section-title">Room</span>
+        <span class="settings-chevron" aria-hidden="true">›</span>
+      </button>
+      <div class="settings-section-body">
+        <div class="setting-row">
+          <div class="setting-text">
+            <div class="setting-name">Word length</div>
+            <div class="setting-desc">Letters per word — set before the game starts</div>
+          </div>
+          <select id="lengthSelect" class="length-select" aria-label="Word length"></select>
+        </div>
+      </div>
+    </section>
 
     <section class="settings-section">
       <button type="button" class="settings-section-head" aria-expanded="false">
@@ -308,28 +353,22 @@
         <span class="settings-chevron" aria-hidden="true">›</span>
       </button>
       <div class="settings-section-body">
+        <label class="setting-row" for="setCommunityScience">
+          <div class="setting-text">
+            <div class="setting-name">Community science</div>
+            <div class="setting-desc">Contribute anonymized gameplay patterns to public research</div>
+          </div>
+          <span class="switch">
+            <input type="checkbox" id="setCommunityScience" />
+            <span class="switch-slider" aria-hidden="true"></span>
+          </span>
+        </label>
         <div class="setting-row stack">
           <div class="setting-text">
             <div class="setting-name">Keyboard</div>
             <div class="setting-desc">Auto-detects QWERTY / AZERTY — pick one to pin it</div>
           </div>
           <div id="layoutPicker" class="edition-picker"></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="settings-section">
-      <button type="button" class="settings-section-head" aria-expanded="false">
-        <span class="settings-section-title">Data</span>
-        <span class="settings-chevron" aria-hidden="true">›</span>
-      </button>
-      <div class="settings-section-body">
-        <div class="setting-row danger">
-          <div class="setting-text">
-            <div class="setting-name">Reset Stats</div>
-            <div class="setting-desc">Clears Played / Streak / Distribution</div>
-          </div>
-          <button id="resetStatsBtn" class="btn ghost small">Reset</button>
         </div>
       </div>
     </section>

@@ -1,5 +1,6 @@
-# Dependencies
-node_modules/
+# Dependencies — bare pattern (no trailing slash) also ignores the per-worktree
+# `node_modules` *symlink*; a dir-only `node_modules/` let the symlink get committed.
+node_modules
 
 # Claude Code worktrees (dispatched/isolated sessions)
 .claude/worktrees/
@@ -39,3 +40,4 @@ yarn-error.log*
 .claire/
 wrangler.v2.jsonc
 .intel-staging/
+.gstack/

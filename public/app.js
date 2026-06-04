@@ -2,17 +2,26 @@
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
-import { applyEdition, getActiveEditionId, getGold, drainGold, companionReact, renderEditionPicker } from "/edition.js";
-import { speakLine } from "/voice.js";
+import { applyEdition, applyColorScheme, getActiveEditionId, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
+import { pickGuessEvent } from "/roomConfig.js";
+import { speakLine, speakTemplated } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
 import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence } from "/gold.js";
 import { createHacklog } from "/hacklog.js";
 import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, surfaceGiveUp, checkBankruptcy } from "/powerups.js";
 import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, detectLayout } from "/keyboard.js";
 import { getSettings, saveSettings, applySettings, openSettings, openHub } from "/settings.js";
+import { buildShareCardModel, renderShareCard } from "/share-card.js";
+import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
+import { mountArenaList, pickNextGame } from "/arena-panel.js";
+import { computeDailyStatsView } from "/daily-stats.js";
+import { computeFeedStreamView, computeFeedPostView } from "/feed.js";
+import { EDITIONS, getEdition } from "/editions/index.js";
 import { MODES, isAvailableMode } from "/modes.js";
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
+import { pickInspire } from "/inspire.js";
+import { lossKind } from "/race-copy.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
 
@@ -21,10 +30,29 @@ applyEdition(getActiveEditionId());
 
 const LS = {
   username: "wr.username",
-  stats: "wr.stats",
   preferredLength: "wr.length",
   replay: "wr.replay", // structured per-guess payout log, keyed per game (slug:round)
+  clearHint: "wr.clearHint", // one-time "press Esc / hold ⌫ to clear the row" nudge
+  dailySolve: "wr.dailySolve", // your own daily solve (letters + colors), per date — CLIENT-ONLY
+                               // so the home stamp shows real letters without the public
+                               // profile ever leaking today's answer.
 };
+
+const SOLVE_CELL = { green: "g", yellow: "y", gray: "x" };
+// Stash this browser's own finished daily (letters + color grid) so the home recap can
+// draw a crystallized stamp with real letters. Never sent to the server.
+function captureDailySolve(date, me) {
+  if (!date || !me || !Array.isArray(me.guesses)) return;
+  try {
+    const solve = {
+      won: me.status === "won",
+      guesses: me.guesses.length,
+      words: me.guesses.map((g) => String(g.word || "").toUpperCase()),
+      grid: me.guesses.map((g) => (g.mask || []).map((c) => SOLVE_CELL[c] || "x").join("")),
+    };
+    localStorage.setItem(`${LS.dailySolve}:${date}`, JSON.stringify(solve));
+  } catch { /* storage full / disabled — stamp falls back to the server color grid */ }
+}
 
 const SUPPORTED_LENGTHS = [4, 5, 6, 7, 8, 9, 10, 11, 12];
 const DEFAULT_LENGTH = 5;
@@ -54,66 +82,31 @@ function getUsername() {
 function setUsername(u) {
   const clean = normalizeUsername(u);
   localStorage.setItem(LS.username, clean);
-  // Cookie cache so the server can recognise returning players if needed.
-  document.cookie = `wr_user=${clean}; path=/; max-age=31536000; samesite=lax`;
   syncAvatar(); // keep the hub avatar glyph in sync with the chosen name
   return clean;
 }
 function clearUsername() {
   localStorage.removeItem(LS.username);
-  document.cookie = "wr_user=; path=/; max-age=0";
   syncAvatar();
-}
-
-// One-time device-stats import guard. The backend exposes no /import endpoint
-// (User DO only has /append + /room), and the legacy localStorage stats shape
-// (aggregate counts, no per-game records) can't be cleanly mapped onto the
-// server's per-game applyGame model. Per the plan's G4 fallback, we ship without
-// import and just set the guard flag so the server profile starts fresh. The
-// local stats stay on-device and still power the existing stats modal.
-function importLocalStatsOnce(username) {
-  const flag = "wr.imported." + username;
-  if (localStorage.getItem(flag)) return;
-  localStorage.setItem(flag, "1");
-}
-
-// --- stats ---
-const DEFAULT_STATS = {
-  played: 0, wins: 0,
-  currentStreak: 0, maxStreak: 0,
-  distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 },
-};
-function getStats() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(LS.stats) || "{}");
-    return { ...DEFAULT_STATS, distribution: { ...DEFAULT_STATS.distribution }, ...raw };
-  } catch {
-    return { ...DEFAULT_STATS, distribution: { ...DEFAULT_STATS.distribution } };
-  }
-}
-function saveStats(s) { localStorage.setItem(LS.stats, JSON.stringify(s)); }
-function recordResult(won, guessCount) {
-  const s = getStats();
-  s.played += 1;
-  if (won) {
-    s.wins += 1;
-    s.currentStreak += 1;
-    s.maxStreak = Math.max(s.maxStreak, s.currentStreak);
-    if (guessCount >= 1 && guessCount <= 6) {
-      s.distribution[guessCount] = (s.distribution[guessCount] || 0) + 1;
-    }
-  } else {
-    s.currentStreak = 0;
-  }
-  saveStats(s);
-  return s;
 }
 
 // --- routing ---
 // Owner-nested rooms (/@owner/<slug>) and public profiles (/@username).
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;
+function todayUTC() { return new Date().toISOString().slice(0, 10); }
 function parseRoute() {
+  const challenge = location.pathname.match(/^\/c\/([0-9A-Za-z]{5})$/);
+  if (challenge) return { kind: "challenge", id: challenge[1] };
+  if (location.pathname === "/daily/archive") return { kind: "daily-archive" };
+  const dailyStats = location.pathname.match(/^\/daily\/(\d{4}-\d{2}-\d{2})\/stats$/);
+  if (dailyStats) return { kind: "daily-stats", date: dailyStats[1] };
+  const daily = location.pathname.match(/^\/daily\/(\d{4}-\d{2}-\d{2})$/);
+  if (daily) return { kind: "daily", date: daily[1] };
+  if (location.pathname === "/daily") return { kind: "daily", date: todayUTC() };
+  if (location.pathname === "/feed") return { kind: "feed" };
+  const feedPost = location.pathname.match(/^\/feed\/(\d{4}-\d{2}-\d{2})$/);
+  if (feedPost) return { kind: "feed-post", date: feedPost[1] };
   const room = location.pathname.match(ROOM_RE);
   if (room) return { kind: "room", owner: room[1], slug: room[2] };
   const prof = location.pathname.match(PROFILE_RE);
@@ -129,49 +122,87 @@ function mount(tplId) {
   const app = $("#app");
   app.innerHTML = "";
   app.appendChild(tpl.content.cloneNode(true));
+  // Every screen change drops the home-only topbar stats; renderHub re-adds it.
+  document.body.classList.remove("hub-home");
+}
+
+// Type-to-play: a bare letter pressed on the home (hub up, nothing focused) carries
+// into today's board as a seed. Held here between the home keypress and the daily
+// board becoming interactive; applied once by seedDailyOnce, then cleared.
+let pendingDailySeed = null;
+// Arena-origin handoff: set just before navigating INTO a room reached through the Arena
+// (open-games row tap or public host). showRoom consumes it into game.fromArena and mirrors
+// it to sessionStorage so a mid-game refresh still resolves the Arena end screen.
+let pendingArenaOrigin = false;
+// Set when a flow wants the home hub to open straight into the Arena list once it renders
+// (the "Join next game → none waiting" fallback). Consumed after renderHub.
+let pendingOpenArena = false;
+
+// One persistent listener: while the home screen is up and no field is focused, a
+// letter key starts today's word seeded with it (the card's own keydown handles
+// Enter/Space). Guarded so it never steals typing from the username field or rooms.
+document.addEventListener("keydown", (e) => {
+  if (parseRoute().kind !== "home") return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const el = document.activeElement;
+  if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+  if (/^[a-zA-Z]$/.test(e.key)) homeTypeLetter(e.key.toUpperCase());
+});
+
+// Best-effort seed of the daily board with the letter typed on the home. Self-
+// contained and harmless: it only types through the real input path once an input
+// row exists, and gives up quietly after a couple of seconds (e.g. slow WS).
+function seedDailyOnce(letter) {
+  if (!/^[A-Za-z]$/.test(letter || "")) return;
+  let tries = 0;
+  const tick = () => {
+    if (parseRoute().kind !== "daily") return; // navigated away — abandon
+    const ready = document.querySelector("#boards .input-row");
+    if (ready) { try { typeLetter(letter.toUpperCase()); } catch (_) {} return; }
+    if (++tries < 20) setTimeout(tick, 120);
+  };
+  setTimeout(tick, 120);
+}
+
+// Play today's word as an in-place BLOOM, not a hard cut to a new screen: wrap the
+// client-side nav in a View Transition so the home card morphs/grows into the board
+// (showDaily tags #tabPlay with the same view-transition-name as .daily-card).
+// Progressive + reduced-motion safe: no API or reduce-motion → plain instant nav.
+function bloomIntoDaily(voiceId) {
+  const target = "/daily/" + todayUTC();
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Apply the daily's voice INSIDE the transition's DOM-swap so the captured "old"
+  // frame is still the elegant default home and the "new" frame is the themed board.
+  // That difference is what the View Transition morphs through (square→rounded,
+  // ultraviolet→the day's accent). Applying it earlier made old==new — a hard cut.
+  // The daily room re-applies its voice from the server snapshot, so a reload is fine.
+  const swap = () => { if (voiceId) applyEdition(voiceId); navigate(target); };
+  if (typeof document.startViewTransition === "function" && !reduce) {
+    document.startViewTransition(swap);
+  } else {
+    swap();
+  }
 }
 
 // --- screens ---
 
-// Cheeky rotating lines under the Start button — a third nudge type-to-start.
-const START_PHRASES = [
-  "The keyboard is already listening. Just start typing.",
-  "No need to click. Type your first guess and go.",
-  "Psst, your keyboard works right now. Try a word.",
-  "Five letters, six tries, infinite bragging rights.",
-  "Just type. We are listening for that first letter.",
-  "Go on, type a word. The board is ready when you are.",
-  "Your fingers know what to do. Start typing.",
-  "Skip the click. Just spell something and watch it light up.",
-  "A fresh word is waiting. Your move, smarty.",
-  "Green is the goal. Yellow is a flirt. Gray is honest feedback.",
-  "One word a day keeps the boredom away.",
-  "Type now, gloat later.",
-  "Trust your gut, then type the word that proves it.",
-  "Warning, mild brilliance may occur.",
-  "Start typing. The keyboard has been waiting all morning.",
-  "Big brain energy starts with one little word.",
-];
-
 function showHome() {
   history.replaceState(null, "", "/");
   mount("tpl-home");
-  const hint = $("#startHint");
-  if (hint) hint.textContent = START_PHRASES[Math.floor(Math.random() * START_PHRASES.length)];
   // No chat available outside a room.
   const topBtn = $("#chatTopBtn");
   if (topBtn) topBtn.hidden = true;
 
   const input = $("#usernameInput");
   input.value = getUsername();
-  buildHomeLengthSelect();
 
-  // Both intents land in the lobby (never auto-start) so you can set your theme +
-  // word length before the board goes live — the edition picker locks once playing.
-  // Invite differs only by handing over the share link in the same click gesture.
-  $("#startPlayingBtn").addEventListener("click", () => enterNewRoom({ autoStart: false }));
-  $("#inviteFriendBtn").addEventListener("click", () => enterNewRoom({ autoStart: false }));
-  // Enter in the username field is the spontaneous path → into the lobby.
+  // Registration commit: set the username and reveal the hub so the new player can
+  // choose Wordul of the Day / Solo / Head-to-head — rather than being dropped
+  // straight into a personal room.
+  $("#startPlayingBtn").addEventListener("click", () => {
+    if (commitUsername()) renderHomeIdentity();
+  });
+  // Enter in the username field mirrors the CTA → into the hub.
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") $("#startPlayingBtn").click();
   });
@@ -187,26 +218,70 @@ function showHome() {
     };
   }
 
-  // Filter tabs.
-  $("#roomFilterRecent").addEventListener("click", () => setRoomFilter("recent"));
-  $("#roomFilterYours").addEventListener("click", () => setRoomFilter("yours"));
-
   renderHomeIdentity();
 }
 
-// Toggle greeting vs. intro based on whether we know who the player is, and kick
-// off the rooms fetch for returning users.
+// Toggle greeting vs. intro based on whether we know who the player is.
+// For returning users, render the Hub (hides the legacy greeting/rooms sections).
 function renderHomeIdentity() {
+  // The home wears the app's signature look, never a daily's voice. Reset to the
+  // default edition here so today's voice (Tactile, etc.) doesn't bleed onto the
+  // hub — it only takes over when you START the WOTD, as a morph (see bloomIntoDaily).
+  // This also re-persists "default", so a leftover voice can't leak into a Solo game.
+  applyEdition("default");
+  applyColorScheme(null); // drop any curated day palette so the hub never wears yesterday's vibe
   const u = getUsername();
   const greeting = $("#homeGreeting");
   const intro = $("#homeIntro");
   const rooms = $("#homeRooms");
   if (u) {
-    if (greeting) greeting.hidden = false;
+    // Hide legacy home sections — the Hub takes over.
+    if (greeting) greeting.hidden = true;
     if (intro) intro.hidden = true;
-    const nameEl = $("#greetingName");
-    if (nameEl) nameEl.textContent = `@${u}`;
-    loadHomeRooms(u);
+    if (rooms) rooms.hidden = true;
+    // Also hide the CTA button and how-to link — hub has its own play action.
+    const cta = $(".home-cta");
+    if (cta) cta.hidden = true;
+    const howto = $(".home-howto");
+    if (howto) howto.hidden = true;
+
+    const cbs = {
+      username: u,
+      editions: EDITIONS,
+      editionName: (id) => getEdition(id).name,
+      // Tap or type-to-play: drop into today's board (client-side, no reload). A
+      // typed letter is carried as a seed so "start playing right here" feels real.
+      onPlay: (editionId, seed) => { pendingDailySeed = seed || null; bloomIntoDaily(editionId); },
+      onSolo: () => enterNewRoom({ autoStart: true }),
+      onPvP: () => enterNewRoom({ autoStart: false }),
+      onArena: () => showArena(),
+      onStats: () => navigate("/daily/" + todayUTC() + "/stats"),
+      onShareDaily: () => shareDailyResult(cbs.dailyResult),
+      onProfile: (name) => navigate("/@" + name),
+      fetchLeaderboard: (username) =>
+        fetch(`/api/daily/${todayUTC()}/leaderboard?username=${encodeURIComponent(username)}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+      // dailyResult is filled from the profile below: null until you've played today,
+      // then { won, guesses } — flips the home card to its post-play recap.
+      dailyResult: null,
+      // Real "N played" for the day from public aggregates — never a fake number.
+      fetchPlayed: () => fetch("/api/science/today")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((s) => s?.totals?.roundsStarted ?? s?.totals?.playerFinishes ?? null),
+      renderRecentRooms: (mountEl) => renderRecentRoomsInto(mountEl, 3),
+    };
+    fetch(`/api/user/${encodeURIComponent(u)}`)
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((profile) => {
+        // Populate homeRoomRows so renderRecentRoomsInto has data ready.
+        homeRoomRows = buildRoomRows(profile, u);
+        homeRoomVisible = HOME_ROOMS_PAGE;
+        cbs.dailyResult = dailyResultFor(profile);
+        renderHub(profile, cbs);
+        maybeOpenArena();
+      })
+      .catch(() => { renderHub({}, cbs); maybeOpenArena(); });
   } else {
     if (greeting) greeting.hidden = true;
     if (intro) intro.hidden = false;
@@ -216,27 +291,47 @@ function renderHomeIdentity() {
   }
 }
 
-function buildHomeLengthSelect() {
-  const sel = $("#homeLengthSelect");
-  if (!sel) return;
-  sel.textContent = "";
-  const pref = getPreferredLength();
-  for (const n of SUPPORTED_LENGTHS) {
-    const opt = document.createElement("option");
-    opt.value = String(n);
-    opt.textContent = `${n} letters`;
-    if (n === pref) opt.selected = true;
-    sel.appendChild(opt);
-  }
-  sel.addEventListener("change", () => {
-    const n = parseInt(sel.value, 10);
-    if (SUPPORTED_LENGTHS.includes(n)) setPreferredLength(n);
-  });
+// Today's daily result from the profile (no extra request): the finished game whose
+// roomPath is daily/<today>. Drives the home's post-play recap. null = not played yet.
+function dailyResultFor(profile) {
+  const date = todayUTC();
+  const g = (profile?.games || []).find((x) => x.roomPath === "daily/" + date);
+  if (!g) return null;
+  // Colors come from the server record (cross-device, no spoiler); the real LETTERS come
+  // only from THIS browser's own solve (never the public profile). Local wins when present.
+  let grid = g.solveGrid ?? null;
+  let words = null;
+  try {
+    const raw = localStorage.getItem(`${LS.dailySolve}:${date}`);
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (Array.isArray(s.grid) && s.grid.length) grid = s.grid;
+      if (Array.isArray(s.words) && s.words.length) words = s.words;
+    }
+  } catch { /* ignore */ }
+  return { won: g.result === "won", guesses: g.guesses, solveGrid: grid, solveWords: words };
 }
 
-// Shared create flow for both CTAs. autoStart=true → solo game begins on the
-// first lobby snapshot (see onServerMessage); false → land in the lobby to invite.
-function enterNewRoom({ autoStart }) {
+// Share today's result from the home — a spoiler-free line + the day's link (no board
+// PNG here, since the game isn't loaded on the home). Native sheet, else clipboard.
+function shareDailyResult(result) {
+  const url = location.origin + "/daily/" + todayUTC();
+  const line = result && result.won
+    ? `I solved today's Wordul in ${result.guesses}.`
+    : "Today's Wordul got me.";
+  if (typeof navigator.share === "function") {
+    navigator.share({ title: "Wordul of the Day", text: line, url }).catch(() => {});
+  } else if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(`${line} ${url}`).then(() => toast("Copied — share it anywhere")).catch(() => {});
+  } else {
+    toast("Sharing isn't supported on this browser");
+  }
+}
+
+// Validate + persist the typed username. Returns the committed username, or "" when
+// it fails the min-length gate (with inline feedback). Shared by the registration
+// CTA and the room-create flow.
+function commitUsername() {
   const input = $("#usernameInput");
   const username = setUsername(input ? input.value : getUsername());
   if (username.length < 3) {
@@ -246,26 +341,31 @@ function enterNewRoom({ autoStart }) {
       setTimeout(() => (input.style.outline = ""), 700);
     }
     toast("Pick a username — at least 3 letters", { error: true, duration: 1800 });
-    return;
+    return "";
   }
-  importLocalStatsOnce(username);
+  return username;
+}
+
+// Shared create flow for the hub CTAs. autoStart=true → solo game begins on the
+// first lobby snapshot (see onServerMessage); false → land in the lobby to invite.
+function enterNewRoom({ autoStart, publicArena = false }) {
+  const username = commitUsername();
+  if (!username) return;
   const slug = generateRoomCode();
   history.pushState(null, "", `/@${username}/${slug}`);
+  // Hosting a public Arena room IS an Arena-origin entry — flag it before showRoom consumes it.
+  if (publicArena) pendingArenaOrigin = true;
   showRoom(username, slug);
-  // showRoom resets game state, so set the one-shot flag after it.
-  if (autoStart) {
-    game.autoStart = true;
-  } else {
-    // Invite path: hand over the link immediately (still in the click gesture, so
-    // navigator.share is allowed) rather than making them find the lobby button.
-    shareRoomInvite();
-  }
+  // showRoom resets game state, so set the one-shot flags after it.
+  // Invite path lands quietly in the lobby; the explicit invite button shares on demand.
+  if (autoStart) game.autoStart = true;
+  // Public Arena host: tell the room (via hello) to list itself in the open-games index.
+  if (publicArena) game.publicArena = true;
 }
 
 // --- Home rooms list ---
 
 let homeRoomRows = [];
-let homeRoomFilter = "recent";
 const HOME_ROOMS_PAGE = 6; // show this many at first; "Show more" reveals another page
 let homeRoomVisible = HOME_ROOMS_PAGE;
 
@@ -328,30 +428,27 @@ function buildRoomRows(profile, username) {
   return Array.from(byPath.values()).sort((a, b) => b.ts - a.ts);
 }
 
-function setRoomFilter(filter) {
-  homeRoomFilter = filter;
-  homeRoomVisible = HOME_ROOMS_PAGE; // switching tabs starts the list fresh
-  const recentBtn = $("#roomFilterRecent");
-  const yoursBtn = $("#roomFilterYours");
-  const isRecent = filter === "recent";
-  if (recentBtn) { recentBtn.classList.toggle("selected", isRecent); recentBtn.setAttribute("aria-selected", String(isRecent)); }
-  if (yoursBtn) { yoursBtn.classList.toggle("selected", !isRecent); yoursBtn.setAttribute("aria-selected", String(!isRecent)); }
-  renderRoomList();
+// Render homeRoomRows into an arbitrary <ul> mount element (defaults to #roomList).
+// The hub calls this with #hubRoomList so it can embed the list in The Daily panel.
+function renderRecentRoomsInto(mountEl, limit) {
+  renderRoomList(mountEl, limit);
 }
 
-function renderRoomList() {
-  const list = $("#roomList");
+function renderRoomList(mountEl, limit) {
+  const list = mountEl || $("#roomList");
   if (!list) return;
-  const rows = homeRoomFilter === "yours" ? homeRoomRows.filter((r) => r.owned) : homeRoomRows;
+  const rows = homeRoomRows;
   list.textContent = "";
   if (rows.length === 0) {
     const li = document.createElement("li");
     li.className = "room-empty muted small";
-    li.textContent = homeRoomFilter === "yours" ? "You haven't created any rooms yet." : "No rooms yet.";
+    li.textContent = "No rooms yet.";
     list.appendChild(li);
     return;
   }
-  const shown = rows.slice(0, homeRoomVisible);
+  // A hard `limit` (the hub) shows exactly N with no "Show more"; the legacy paged
+  // list (#roomList) falls back to homeRoomVisible and keeps its reveal control.
+  const shown = rows.slice(0, limit || homeRoomVisible);
   for (const row of shown) {
     const li = document.createElement("li");
     li.className = "room-row";
@@ -384,8 +481,9 @@ function renderRoomList() {
     list.appendChild(li);
   }
   // "Show more" — reveal the next page rather than scrolling a wall of rooms.
+  // Suppressed when a hard `limit` is set (the hub shows exactly N, no reveal).
   const remaining = rows.length - shown.length;
-  if (remaining > 0) {
+  if (!limit && remaining > 0) {
     const more = document.createElement("li");
     more.className = "room-row room-more";
     more.tabIndex = 0;
@@ -444,15 +542,13 @@ function showRoomEntry(owner, slug) {
   $("#homeIntro").hidden = false;
   $(".tagline").textContent = `Join @${owner}'s Wordul room.`;
   $(".sub").textContent = "Pick a username to join.";
-  // Length is decided by the room, so the picker is irrelevant here.
-  $("#homeLengthSelect").hidden = true;
-  $("#inviteFriendBtn").hidden = true;
 
   const input = $("#usernameInput");
   input.value = getUsername();
   input.focus();
   const btn = $("#startPlayingBtn");
-  btn.textContent = "Join room →";
+  const label = btn.querySelector(".hero-btn-label") || btn;
+  label.textContent = "Join room →";
   const join = () => {
     const username = setUsername(input.value);
     if (username.length < 3) {
@@ -460,7 +556,6 @@ function showRoomEntry(owner, slug) {
       toast("Pick a username — at least 3 letters", { error: true, duration: 1800 });
       return;
     }
-    importLocalStatsOnce(username);
     showRoom(owner, slug);
   };
   btn.addEventListener("click", join);
@@ -473,6 +568,11 @@ function showRoomEntry(owner, slug) {
 
 const game = {
   ws: null,
+  challengeId: null,   // /c/<id> solo-replay: the challenge being raced (null in normal rooms)
+  challengeMeta: null, // cached { owner, ownerScore, record, ... } from /api/challenge/<id>/meta
+  isDaily: false,      // /daily/<date>: async one-shot, gated "underneath"
+  dailyDate: null,
+  fromArena: false,    // reached through the Arena (open-games join or public host) → Arena end screen
   owner: null,
   slug: null,
   path: null,
@@ -482,6 +582,7 @@ const game = {
   toastTimer: null,
   hasShownEndStats: false,
   lastGuessCounts: new Map(),
+  typing: new Map(), // username -> # letters in their live (uncommitted) row, for opponent ghost fill
   // Chat state: how many entries we'd already rendered so we can flag new ones for
   // the unread badge while the panel is collapsed.
   lastChatLen: 0,
@@ -489,6 +590,8 @@ const game = {
   chatCollapsed: false,
   exploding: false,
   reconnectToastTimer: null,
+  reconnectTimer: null, // pending openSocket() after an unintended close
+  socketSession: null,  // { ws, reconnect } — stale close handlers bail when !== this
   heartbeatTimer: null,
   autoStart: false,  // one-shot: "Start playing" auto-begins the solo game on first lobby snapshot
   shareImage: null,  // { file, url, text, canvas } — pre-rendered result card for sharing
@@ -605,7 +708,15 @@ function showRoom(owner, slug) {
   game.unreadChat = 0;
   game.chatCollapsed = false;
   game.lastGuessCounts = new Map();
+  game.typing = new Map();
   game.autoStart = false;
+  game.publicArena = false; // never carry a public-host intent into the next room
+  // Arena origin: the pending flag (set at entry) OR a sessionStorage marker (survives a
+  // mid-game refresh, which loses the in-memory flag). Persist it so a reload still resolves
+  // the Arena end screen. seed is stripped from snapshots, so origin can't be read off the wire.
+  game.fromArena = pendingArenaOrigin || sessionStorage.getItem("arena:" + game.path) === "1";
+  pendingArenaOrigin = false;
+  if (game.fromArena) { try { sessionStorage.setItem("arena:" + game.path, "1"); } catch {} }
   game.roomTab = "play";
   game.shareImage = null;
   game.replay = [];
@@ -615,20 +726,306 @@ function showRoom(owner, slug) {
   hacklog = null;
   mount("tpl-room");
   renderRoomHeader();
-  const hasNativeShare = typeof navigator.share === "function";
-  const inviteLabel = $("#inviteLabel");
-  if (inviteLabel) inviteLabel.textContent = hasNativeShare ? "Share" : "Copy link";
-  $("#inviteBtn").addEventListener("click", () => shareRoomInvite());
   $("#startBtn").addEventListener("click", () => send({ type: "start" }));
-  $("#rematchBtn").addEventListener("click", () => {
-    game.hasShownEndStats = false;
-    closeStats();
-    send({ type: "rematch" });
-  });
+  $("#rematchBtn").addEventListener("click", () => { proposeRematch(); });
   wireChat();
   wireRoomTabs();
   buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
   connect();
+}
+
+// A challenge link (/c/<id>): solo board on the owner's exact word, racing their
+// standing record. Reuses the room engine via a per-player challenge WS.
+async function showChallenge(id) {
+  // Gate: a challenge WS needs a username (it's the player's identity + score key).
+  if (!getUsername()) { showChallengeEntry(id); return; }
+  let meta;
+  try {
+    const res = await fetch(`/api/challenge/${id}/meta`);
+    if (!res.ok) throw new Error("gone");
+    meta = await res.json();
+  } catch {
+    toast("That challenge link has expired.", { error: true, duration: 3000 });
+    navigate("/");
+    return;
+  }
+  // Stand up the room view (same engine; challenge chrome instead of owner/slug).
+  leaveRoom();
+  game.challengeId = id;
+  game.challengeMeta = meta;
+  game.owner = meta.owner;
+  game.slug = null;
+  game.path = null;
+  game.name = `@${meta.owner}'s challenge`;
+  game.snapshot = null;
+  game.pending = "";
+  game.hasShownEndStats = false;
+  game.lastChatLen = 0;
+  game.unreadChat = 0;
+  game.chatCollapsed = false;
+  game.lastGuessCounts = new Map();
+  game.typing = new Map();
+  game.autoStart = true; // challenge boards go live immediately — no lobby ceremony
+  game.roomTab = "play";
+  game.shareImage = null;
+  game.replay = [];
+  game.payingOut = false;
+  hacklog = null;
+  mount("tpl-room");
+  renderRoomHeader();
+  wireChat();
+  wireRoomTabs();
+  buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
+
+  const target = meta.record
+    ? `${meta.record.username} holds the record at ${meta.record.score}`
+    : `@${meta.owner} scored ${meta.ownerScore}`;
+  toast(`Challenge from @${meta.owner} — ${target}. Beat it.`, { duration: 4200 });
+  connectChallenge(id);
+}
+
+// No-username gate for a challenge link — pick a name, then resolve the challenge.
+// Mirrors showRoomEntry's join flow.
+function showChallengeEntry(id) {
+  mount("tpl-home");
+  const topBtn = $("#chatTopBtn");
+  if (topBtn) topBtn.hidden = true;
+  $("#homeGreeting").hidden = true;
+  $("#homeRooms").hidden = true;
+  $("#homeIntro").hidden = false;
+  $(".tagline").textContent = "You've been challenged on Wordul.";
+  $(".sub").textContent = "Pick a username to take the challenge.";
+
+  const input = $("#usernameInput");
+  input.value = getUsername();
+  input.focus();
+  const btn = $("#startPlayingBtn");
+  const label = btn.querySelector(".hero-btn-label") || btn;
+  label.textContent = "Take the challenge →";
+  const go = () => {
+    const username = setUsername(input.value);
+    if (username.length < 3) {
+      input.focus();
+      toast("Pick a username — at least 3 letters", { error: true, duration: 1800 });
+      return;
+    }
+    showChallenge(id);
+  };
+  btn.addEventListener("click", go);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") go();
+  });
+}
+
+// The Wordul of the Day: a SHARED room at daily/<date> (everyone joins the same DO).
+// Reuses the room engine; daily chrome + the gated unlock are render()-driven.
+function showDaily(date) {
+  if (!getUsername()) { showDailyEntry(date); return; }
+  document.title = `Wordul of the Day — ${date}`;
+  showRoom("daily", date);                       // connects to /ws?room=daily/<date>
+  game.isDaily = true; game.dailyDate = date;    // AFTER showRoom resets state (mirrors enterNewRoom's autoStart)
+  // Morph target: the home's .daily-card grows into the play panel (View Transition).
+  // Set synchronously after mount so the transition snapshot picks it up.
+  const tabPlay = document.getElementById("tabPlay");
+  if (tabPlay) tabPlay.style.viewTransitionName = "wotd-bloom";
+  if (pendingDailySeed) { seedDailyOnce(pendingDailySeed); pendingDailySeed = null; }
+}
+
+// Username gate for a cold deep-link to /daily/<date> (the hub path already has a username).
+function showDailyEntry(date) {
+  mount("tpl-home");
+  const hub = $("#hub"); if (hub) hub.hidden = true;
+  $("#homeGreeting").hidden = true; $("#homeRooms").hidden = true;
+  $("#homeIntro").hidden = false;
+  $(".tagline").textContent = t("daily.entryTitle");
+  $(".sub").textContent = t("daily.entrySub");
+  const cta = $(".home-cta"); if (cta) cta.hidden = false;
+  const input = $("#usernameInput"); input.value = getUsername(); input.focus();
+  const btn = $("#startPlayingBtn"); const label = btn.querySelector(".hero-btn-label") || btn;
+  label.textContent = t("daily.entryCta");
+  const play = () => {
+    const u = setUsername(input.value);
+    if (u.length < 3) { input.focus(); toast("Pick a username — at least 3 letters", { error: true, duration: 1800 }); return; }
+    showDaily(date);
+  };
+  btn.addEventListener("click", play);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") play(); });
+}
+
+// Today's Wordul — its own Stats page (premium, easy back). Real public aggregates
+// only: played / solved / averages / guess distribution + the day's Studio title and
+// "glow". Usernames are withheld by design, so the top-10 leaderboard is a fast-follow.
+async function showDailyStats(date) {
+  document.title = `Wordul — Stats · ${date}`;
+  const app = $("#app");
+  app.innerHTML = "";
+  document.body.classList.remove("hub-home");
+  const dShort = new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", { day: "numeric", month: "short", timeZone: "UTC" });
+  const ed = getEdition(dayTheme(new Date(), EDITIONS.map((e) => e.id)));
+  const glow = ed.companion?.lines?.idle?.[0] ?? "A quiet day on the board.";
+  const screen = document.createElement("section");
+  screen.className = "screen daily-stats-screen";
+  screen.innerHTML = `
+    <a href="/" class="link daily-stats-back" id="dailyStatsBack">← Home</a>
+    <header class="daily-stats-head">
+      <span class="daily-kicker">Today's Wordul · Stats</span>
+      <h1 class="daily-stats-title">${dShort}</h1>
+      <p class="daily-stats-studio">${ed.name} <span class="muted">· from the Studio</span></p>
+      <p class="daily-stats-glow">${glow}</p>
+    </header>
+    <div class="daily-stats-body" id="dailyStatsBody"><p class="muted small">Loading today's numbers…</p></div>
+    <a href="/feed" class="link lab-entry" id="dailyLabLink">🧠 See what the lab learned →</a>`;
+  app.appendChild(screen);
+  $("#dailyStatsBack").addEventListener("click", (e) => { e.preventDefault(); navigate("/"); });
+  $("#dailyLabLink").addEventListener("click", (e) => { e.preventDefault(); navigate("/feed"); });
+  let summary = null;
+  try {
+    const res = await fetch(`/api/science/daily/${date}`);
+    if (res.ok) summary = await res.json();
+  } catch (_) { /* offline / cold day — render the empty state */ }
+  if (parseRoute().kind !== "daily-stats") return; // navigated away mid-fetch
+  renderDailyStatsBody(summary);
+}
+
+function renderDailyStatsBody(summary) {
+  const body = $("#dailyStatsBody");
+  if (!body) return;
+  if (!summary || !summary.totals) {
+    body.innerHTML = `<p class="muted daily-stats-empty">No numbers yet today — be the first to finish.</p>`;
+    return;
+  }
+  const v = computeDailyStatsView(summary);
+  const fmt = (n) => (n == null ? "—" : n.toLocaleString());
+  const stat = (num, label) => `<div class="dstat"><div class="dstat-num">${num}</div><div class="dstat-label">${label}</div></div>`;
+  const rows = v.distRows.filter((r) => r.count > 0).map((r) => {
+    const pct = v.maxCount > 0 ? Math.round((r.count / v.maxCount) * 100) : 0;
+    return `<div class="ddist-row"><span class="ddist-g">${r.guesses}</span><span class="ddist-bar" style="width:${Math.max(pct, 8)}%">${r.count}</span></div>`;
+  }).join("");
+  body.innerHTML = `
+    <div class="dstat-grid">
+      ${stat(fmt(v.played), "Played")}
+      ${stat(v.winRate == null ? "—" : v.winRate + "%", "Solved")}
+      ${stat(v.avgGuesses == null ? "—" : v.avgGuesses.toFixed(2), "Avg guesses")}
+      ${stat(v.avgScore == null ? "—" : Math.round(v.avgScore).toLocaleString(), "Avg score")}
+    </div>
+    <h2 class="daily-stats-sub">Guess distribution</h2>
+    <div class="ddist">${rows || '<p class="muted small">No solves yet.</p>'}</div>
+    <p class="daily-stats-foot muted small">Failed today: ${fmt(v.losses)} · Top-10 leaderboard coming soon.</p>`;
+}
+
+// The Living Lab reader — human-readable, blog-style discoveries over the same
+// /feed.json the worker serves crawlers. Built with textContent (XSS-safe), so the
+// admin editorial intro and authored notes can't inject markup. View-models live in
+// feed.js (unit-tested); these functions just fetch + paint into #app.
+function showFeed() {
+  document.title = "Wordul — The Living Lab";
+  const app = $("#app");
+  app.innerHTML = "";
+  document.body.classList.remove("hub-home");
+  const screen = document.createElement("section");
+  screen.className = "screen lab-screen";
+  const back = document.createElement("a");
+  back.href = "/"; back.className = "link lab-back"; back.textContent = "← Home";
+  back.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); });
+  const head = document.createElement("header");
+  head.className = "lab-head";
+  const kicker = document.createElement("span"); kicker.className = "daily-kicker"; kicker.textContent = "The Living Lab";
+  const h1 = document.createElement("h1"); h1.className = "lab-title"; h1.textContent = "Discoveries";
+  const sub = document.createElement("p"); sub.className = "lab-sub muted"; sub.textContent = "Honest, privacy-preserving notes on how we all play — one day at a time.";
+  head.append(kicker, h1, sub);
+  const body = document.createElement("div"); body.className = "lab-body"; body.id = "labBody";
+  const loading = document.createElement("p"); loading.className = "muted small"; loading.textContent = "Loading the latest discoveries…";
+  body.appendChild(loading);
+  screen.append(back, head, body);
+  app.appendChild(screen);
+  loadFeedStream();
+}
+
+async function loadFeedStream() {
+  let feed = null;
+  try { const res = await fetch("/feed.json"); if (res.ok) feed = await res.json(); } catch (_) { /* offline → empty state */ }
+  if (parseRoute().kind !== "feed") return; // navigated away mid-fetch
+  const body = $("#labBody"); if (!body) return;
+  const v = computeFeedStreamView(feed);
+  body.innerHTML = "";
+  if (v.empty) {
+    const empty = document.createElement("p");
+    empty.className = "muted lab-empty";
+    empty.textContent = "The lab hasn't published a discovery yet — play a few days and check back.";
+    body.appendChild(empty);
+    return;
+  }
+  for (const card of v.cards) {
+    const a = document.createElement("a");
+    a.className = "lab-card"; a.href = "/feed/" + card.date;
+    a.addEventListener("click", (e) => { e.preventDefault(); navigate("/feed/" + card.date); });
+    const h = document.createElement("h2"); h.className = "lab-card-title"; h.textContent = card.title; a.appendChild(h);
+    if (card.intro) { const p = document.createElement("p"); p.className = "lab-card-intro"; p.textContent = card.intro; a.appendChild(p); }
+    const more = document.createElement("span"); more.className = "lab-more"; more.textContent = "Read →"; a.appendChild(more);
+    body.appendChild(a);
+  }
+}
+
+async function showFeedPost(date) {
+  document.title = "Wordul — Lab · " + date;
+  const app = $("#app");
+  app.innerHTML = "";
+  document.body.classList.remove("hub-home");
+  const screen = document.createElement("section");
+  screen.className = "screen lab-screen lab-post-screen";
+  const back = document.createElement("a");
+  back.href = "/feed"; back.className = "link lab-back"; back.textContent = "← The Lab feed";
+  back.addEventListener("click", (e) => { e.preventDefault(); navigate("/feed"); });
+  const body = document.createElement("div"); body.className = "lab-body"; body.id = "labPostBody";
+  const loading = document.createElement("p"); loading.className = "muted small"; loading.textContent = "Loading…";
+  body.appendChild(loading);
+  screen.append(back, body);
+  app.appendChild(screen);
+  let post = null; let status = 0;
+  try { const res = await fetch("/feed/" + date + ".json"); status = res.status; if (res.ok) post = await res.json(); } catch (_) { /* network error → message */ }
+  if (parseRoute().kind !== "feed-post") return; // navigated away mid-fetch
+  renderFeedPostBody(post, status);
+}
+
+function renderFeedPostBody(post, status) {
+  const body = $("#labPostBody"); if (!body) return;
+  body.innerHTML = "";
+  if (!post) {
+    const msg = document.createElement("p");
+    msg.className = "muted lab-empty";
+    msg.textContent = status === 404
+      ? "This day's discovery isn't published yet — today's word is never spoiled. Check back tomorrow."
+      : "Couldn't load this discovery. Please try again in a moment.";
+    body.appendChild(msg);
+    return;
+  }
+  const v = computeFeedPostView(post);
+  const article = document.createElement("article"); article.className = "lab-post";
+  const h1 = document.createElement("h1"); h1.className = "lab-post-title"; h1.textContent = v.title; article.appendChild(h1);
+  if (v.intro) { const intro = document.createElement("p"); intro.className = "lab-post-intro"; intro.textContent = v.intro; article.appendChild(intro); }
+  if (v.findings.length) {
+    const ul = document.createElement("ul"); ul.className = "lab-findings";
+    for (const f of v.findings) { const li = document.createElement("li"); li.textContent = f; ul.appendChild(li); }
+    article.appendChild(ul);
+  }
+  for (const n of v.notes) {
+    const aside = document.createElement("aside"); aside.className = "lab-note"; aside.dataset.pillar = n.pillar || "";
+    const nt = document.createElement("h3"); nt.className = "lab-note-title"; nt.textContent = n.title || ""; aside.appendChild(nt);
+    const np = document.createElement("p"); np.textContent = n.note || ""; aside.appendChild(np);
+    if (n.citation) { const c = document.createElement("cite"); c.textContent = n.citation; aside.appendChild(c); }
+    article.appendChild(aside);
+  }
+  body.appendChild(article);
+}
+
+// Connect the per-player challenge WS — an isolated solo room seeded with the
+// challenge's pinned word. Username is guaranteed by showChallenge's gate.
+function connectChallenge(id) {
+  const username = getUsername();
+  if (!username) { showChallengeEntry(id); return; }
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const url = `${proto}//${location.host}/ws?challenge=${id}&username=${encodeURIComponent(username)}`;
+  openSocket(url);
 }
 
 // Hand the player the invite link with minimum ceremony: native share sheet on
@@ -642,7 +1039,7 @@ async function shareRoomInvite() {
     try {
       await navigator.share({
         title: `Wordul — ${game.name || game.slug}`,
-        text: `Race me on Wordle in ${game.owner}'s room!`,
+        text: `Race me on Wordul in ${game.owner}'s room!`,
         url: inviteUrl,
       });
       return;
@@ -653,29 +1050,35 @@ async function shareRoomInvite() {
   }
   try {
     await navigator.clipboard.writeText(inviteUrl);
-    const ok = $("#copyOk");
-    if (ok) { ok.hidden = false; setTimeout(() => (ok.hidden = true), 1500); }
     toast("Link copied — send it to a friend!", { duration: 2400 });
   } catch {
     prompt("Copy this link:", inviteUrl);
   }
 }
 
-// Render the room name + owner + a rename affordance. Control is shared (anyone
-// present can rename), matching the server's "kindness model".
+// Render the room name. The name IS the share affordance — tapping it copies the
+// room link. Rename + invite live in the avatar hub now (nothing lost, just moved).
 function renderRoomHeader() {
   const nameEl = $("#roomName");
-  const ownerEl = $("#roomOwner");
-  if (nameEl) nameEl.textContent = game.name || game.slug;
-  if (ownerEl) {
-    ownerEl.textContent = `@${game.owner}`;
-    ownerEl.href = `/@${game.owner}`;
-    ownerEl.onclick = (e) => { e.preventDefault(); navigate(`/@${game.owner}`); };
+  if (nameEl) {
+    nameEl.textContent = game.name || game.slug;
+    nameEl.onclick = copyRoomLink;
   }
-  const renameBtn = $("#renameBtn");
-  if (renameBtn) renameBtn.onclick = renameRoom;
   renderHeaderIdentity();
   renderGoldHud();
+  renderH2HBadge();
+}
+
+// Copy the room link with a subtle confirmation. The whole share/copy surface
+// collapsed into one gesture: tap the name.
+async function copyRoomLink() {
+  const url = `${location.origin}/@${game.owner}/${game.slug}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("Link copied ✓", { duration: 1200 });
+  } catch {
+    prompt("Copy this link:", url);
+  }
 }
 
 // The immersive in-game header (C5) shows username + gold beside the avatar. The
@@ -692,7 +1095,8 @@ function renderHeaderIdentity() {
     header.prepend(nameEl);
   }
   const u = getUsername();
-  nameEl.textContent = u ? `@${u}` : "";
+  nameEl.textContent = "";
+  if (u) nameEl.appendChild(userLink(u, { at: true }));
   nameEl.hidden = !u;
 }
 
@@ -738,18 +1142,23 @@ function celebrateCombo(discoveries, mult) {
 }
 
 // Surface the active edition's companion line for an event, reusing the toast.
-function showCompanion(event, ctx) {
-  const { text, raw, speak } = companionReact(event, ctx);
+function showCompanion(event, ctx = {}) {
+  const { text, raw, tier, speak } = companionReact(event, ctx);
   if (!text) return;
-  toast(text, { duration: 3200 });
-  // Look up the clip by the RAW template; fall back to speaking the substituted text.
-  if (speak) speakLine(getActiveEditionId(), raw, text);
+  // Big moments linger; routine lines stay snappy.
+  const big = tier && !(event === "wrong" && tier === "normal");
+  toast(text, { duration: big ? 4200 : 3200 });
+  // The wipe aside is text-only — it fires often enough that voicing it would grate.
+  if (!speak || event === "wipe") return;
+  // Templated lines (the loss reveal) split across Yan's voice + the robot.
+  if (raw.includes("{answer}")) speakTemplated(VOICE_EDITION, raw, ctx);
+  else speakLine(VOICE_EDITION, raw, text);
 }
 
 // --- Idle taunts: the companion checks in when you go quiet mid-game. ---
 let idleTimer = null;
-const IDLE_FIRST_MS = 22000;
-const IDLE_REPEAT_MS = 34000;
+const IDLE_FIRST_MS = 180000; // 3 min of silence before the companion checks in
+const IDLE_REPEAT_MS = 180000; // …and every 3 min after that
 
 function isMyTurn() {
   const me = game.snapshot?.players.find((p) => p.username === getUsername());
@@ -784,8 +1193,90 @@ function armGiveUpTimer() {
 
 // SPA navigation: pushState + re-dispatch the router.
 function navigate(path) {
+  stopArenaPoll(); // any route change tears down the Arena open-games poll
   history.pushState(null, "", path);
   route();
+}
+
+// The Arena (bots-in-PvP) open-games poll handle. mountArenaList returns a stop() we MUST
+// call on teardown (Back, row-tap → navigate, or any nav) so the 8s poll can't leak.
+let arenaPollStop = null;
+function stopArenaPoll() {
+  if (arenaPollStop) { arenaPollStop(); arenaPollStop = null; }
+}
+
+// The Arena: open games anyone can jump into — bots now, public human rooms too (a host
+// opts in via "Host a public game"). Rendered into #hubContent (home stays mounted); Back
+// restores the launcher. Distinct from Head-to-head, which makes a private invite-link room.
+function showArena() {
+  const content = document.getElementById("hubContent");
+  if (!content) return;
+  stopArenaPoll();
+  content.innerHTML =
+    `<section class="hub-panel arena-view">
+      <button id="arenaBack" class="hub-textlink" type="button">← Back</button>
+      <h1 class="pvp-title">Arena</h1>
+      <p class="arena-blurb muted">Jump into an open game — beat a worduler or take on whoever's waiting.</p>
+      <div id="arenaList" class="arena-mount"></div>
+      <button id="arenaHost" class="btn block">Host a public game →</button>
+    </section>`;
+  const back = document.getElementById("arenaBack");
+  if (back) back.addEventListener("click", () => { stopArenaPoll(); renderHomeIdentity(); });
+  const host = document.getElementById("arenaHost");
+  if (host) host.addEventListener("click", () => { stopArenaPoll(); enterNewRoom({ autoStart: false, publicArena: true }); });
+  arenaPollStop = mountArenaList(document.getElementById("arenaList"), {
+    onJoin: (routePath) => { pendingArenaOrigin = true; navigate(routePath); }, // navigate() calls stopArenaPoll()
+  });
+}
+
+// --- Arena end-screen actions (the "keep playing the Arena" set) --------------
+// "Join next game →": jump straight to the next waiting open game (not the one just
+// played). If nothing else is waiting, fall back to the Arena list on the home hub.
+function joinNextArena() {
+  const current = `/@${game.owner}/${game.slug}`;
+  fetch("/api/arena/open")
+    .then((r) => (r.ok ? r.json() : []))
+    .then((games) => {
+      const next = pickNextGame(games, current);
+      closeStats();
+      if (next) { pendingArenaOrigin = true; navigate(next); }
+      else { pendingOpenArena = true; navigate("/"); } // none waiting → open the Arena list
+    })
+    .catch(() => { closeStats(); pendingOpenArena = true; navigate("/"); });
+}
+
+// "Create your own game": leave this finished room and host a fresh public Arena room,
+// listed in the open-games index for the next person (or bot) to join.
+function hostPublicArena() {
+  closeStats();
+  enterNewRoom({ autoStart: false, publicArena: true });
+}
+
+// "Main menu": close out to the home hub (route() handles leaveRoom + home render).
+function backToMenu() {
+  closeStats();
+  navigate("/");
+}
+
+// After the home hub renders, open straight into the Arena list if a flow requested it
+// (the "Join next → none waiting" fallback). One-shot; #hubContent only exists post-render.
+function maybeOpenArena() {
+  if (!pendingOpenArena) return;
+  pendingOpenArena = false;
+  showArena();
+}
+
+// Render a username as a clickable link to their public profile (/@username).
+// Single source of truth so every @handle — greeting, chat, scoreboard, player
+// boards, owner byline — is a one-tap hop to that player. The name goes through
+// textContent (XSS-safe); the click stays in the SPA via navigate().
+function userLink(username, { at = false, suffix = "" } = {}) {
+  const a = document.createElement("a");
+  a.className = "userlink";
+  a.href = `/@${username}`;
+  a.textContent = (at ? "@" : "") + username + suffix;
+  a.addEventListener("click", (e) => { e.preventDefault(); navigate(`/@${username}`); });
+  return a;
 }
 
 function wireChat() {
@@ -878,10 +1369,20 @@ const HEARTBEAT_MS = 25_000;
 function connect() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const url = `${proto}//${location.host}/ws?room=${encodeURIComponent(game.path)}`;
+  openSocket(url);
+}
+
+// Open (and auto-reconnect) a game WebSocket to `url`, wiring the shared hello /
+// snapshot / heartbeat handlers. Used by both the room path (connect) and the
+// challenge path (connectChallenge); reconnect re-opens the SAME url.
+function openSocket(url) {
   const ws = new WebSocket(url);
+  const session = { ws, reconnect: true };
+  game.socketSession = session;
   game.ws = ws;
 
   ws.addEventListener("open", () => {
+    if (game.socketSession !== session) return; // superseded by leaveRoom() / a newer socket
     // Clear any "reconnecting" UI state once we're back.
     clearTimeout(game.reconnectToastTimer);
     game.reconnectToastTimer = null;
@@ -892,12 +1393,16 @@ function connect() {
       wordLength: getPreferredLength(),
       edition: getActiveEditionId(), // seeds a fresh room with the creator's theme
       mode: "race", // only valid selectable mode today
+      scienceOptOut: !getSettings().communityScience,
+      public: game.publicArena === true, // host opted into the public Arena open-games list
     });
+    refreshGold(); // sync server-authoritative balance into HUD cache on join
     // Kick off heartbeat so the path stays warm.
     startHeartbeat();
   });
 
   ws.addEventListener("message", (e) => {
+    if (game.socketSession !== session) return;
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
     if (msg.type === "pong") return; // heartbeat reply — no-op
@@ -905,6 +1410,10 @@ function connect() {
   });
 
   ws.addEventListener("close", () => {
+    // Stale or intentional close — leaveRoom() cleared socketSession/reconnect, or a
+    // newer socket replaced this one. Reconnecting would resurrect a zombie WS that
+    // streams snapshots into home/hub/profile where the room scaffold is gone.
+    if (game.socketSession !== session || !session.reconnect) return;
     stopHeartbeat();
     setConnectionStatus("reconnecting");
     // Only show the toast if the reconnect actually takes a while. Most close
@@ -914,7 +1423,11 @@ function connect() {
       () => toast("Reconnecting…", { duration: 4000 }),
       RECONNECT_TOAST_AFTER_MS,
     );
-    setTimeout(connect, RECONNECT_DELAY_MS);
+    game.reconnectTimer = setTimeout(() => {
+      game.reconnectTimer = null;
+      if (game.socketSession !== session || !session.reconnect) return;
+      openSocket(url);
+    }, RECONNECT_DELAY_MS);
   });
 }
 
@@ -952,17 +1465,79 @@ function send(msg) {
   }
 }
 
+// Pull the server-authoritative gold balance into the HUD cache. The server (USER
+// ledger) is the source of truth; localStorage is just a display mirror now.
+function refreshGold() {
+  const name = getUsername();
+  if (!name) return;
+  fetch(`/api/user/${encodeURIComponent(name)}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((p) => {
+      if (!p) return;
+      if (typeof p.gold === "number") { setGold(p.gold); renderGoldHud(); }
+      // Cache the head-to-head map so the in-room badge can show "You vs <opp> W–L".
+      // It only ever contains personas (the server writes h2h for seeded rooms only), so
+      // looking up a live opponent's username naturally scopes the badge to bot rooms.
+      game.myH2H = p.h2h || {};
+      renderH2HBadge();
+    })
+    .catch(() => {});
+}
+
+// In-room head-to-head record against the current opponent, shown beside the room name.
+// Keyed off the opponent's VISIBLE username (no bot-only field on the wire) — present in
+// game.myH2H only for personas the player has faced before.
+function renderH2HBadge() {
+  const nameEl = $("#roomName");
+  if (!nameEl) return;
+  let badge = $("#roomH2H");
+  const snap = game.snapshot;
+  const me = getUsername();
+  const h2h = game.myH2H || {};
+  let text = "";
+  if (snap && me) {
+    const opp = (snap.players || []).find((p) => p.username !== me);
+    const rec = opp && h2h[opp.username];
+    if (rec) {
+      const oppName = opp.username.charAt(0).toUpperCase() + opp.username.slice(1);
+      text = `You vs ${oppName} ${rec.w}–${rec.l}`;
+    }
+  }
+  if (!text) { if (badge) badge.remove(); return; }
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.id = "roomH2H";
+    badge.className = "room-h2h";
+    nameEl.insertAdjacentElement("afterend", badge);
+  }
+  badge.textContent = text;
+}
+
 function onServerMessage(msg) {
   if (msg.type === "snapshot") {
     const prev = game.snapshot;
     game.snapshot = msg.room;
+    // Live-typing ghosts are transient: drop a player's ghost the moment they commit a guess
+    // (their row advanced) or leave the race (won / out / away), so no phantom fill lingers on
+    // the new empty row. Done here, before render(), so the board never flashes a stale ghost.
+    if (game.typing.size) {
+      for (const p of msg.room.players) {
+        const before = prev?.players.find((q) => q.username === p.username);
+        const committed = before && p.guesses.length > before.guesses.length;
+        if (committed || p.status !== "playing" || !p.connected) game.typing.delete(p.username);
+      }
+    }
     // The room owns the theme: adopt it whenever it differs from what's applied. This is
     // how invitees inherit the host's theme and how a live change reaches everyone. applyEdition
     // also persists it locally, so your last room's vibe sticks into your next solo game.
-    if (msg.room.edition && msg.room.edition !== getActiveEditionId()) {
-      applyEdition(msg.room.edition);
-      applySettings(getSettings()); // re-layer colorblind/contrast on the new palette
-    }
+    const wantEd = game.isDaily
+      ? (msg.room.edition && msg.room.edition !== "default" ? msg.room.edition : getActiveEditionId())
+      : msg.room.edition;
+    if (wantEd && wantEd !== getActiveEditionId()) { applyEdition(wantEd); applySettings(getSettings()); }
+    // Vibe Studio: a curated daily ships a colorScheme — re-theme the whole day page from it
+    // (a1 → --accent re-lights all the chrome; a1/a2/a3 atoms drive the bespoke palette layers).
+    // Non-daily rooms and legacy days pass null → falls back to the active edition's own accent.
+    applyColorScheme(game.isDaily ? msg.room.colorScheme : null);
     // EZ-mode hints belong to a single round — wipe them on any new round (start,
     // rematch, or reconnecting into a different round).
     if (msg.room.phase === "playing" && msg.room.round !== game.ezRound) {
@@ -985,6 +1560,7 @@ function onServerMessage(msg) {
     }
     const me = msg.room.players.find((p) => p.username === getUsername());
     const prevMe = prev?.players.find((p) => p.username === getUsername());
+    renderH2HBadge(); // opponent may have just joined; refresh the "You vs X W–L" badge
     // Server accepted our guess → clear pending letters.
     if (me && prevMe && me.guesses.length > prevMe.guesses.length) {
       game.pending = "";
@@ -1036,6 +1612,7 @@ function onServerMessage(msg) {
           goldDrain(penalty, reducedMotion, playChime);
           const log = getHacklog();
           for (const line of penaltyLines) log?.logLine(line, { tone: "loss" });
+          mistakeFx(activeMistakeFx(), wasted.letters); // sensory punishment for the sloppy reuse (room-themed)
           checkBankruptcy(powerupsCtx); // C4: a wasted-letter drain may bankrupt Hard Mode
         };
 
@@ -1085,11 +1662,13 @@ function onServerMessage(msg) {
           // No discoveries this guess — no payout to wait on; drain once the row flips.
           deferPayout(runDrain, flipDoneMs);
         }
-        // Yang keeps its green party; other editions only get nudged on a dud guess.
-        if (getActiveEditionId() === "yang" && ng >= 1) {
-          setTimeout(() => celebrateGreens(ng), flipDoneMs);
-        } else if (discoveries === 0) {
-          showCompanion("wrong");
+        // Never silent: every accepted guess resolves to exactly ONE companion event,
+        // on EVERY edition. Yang's green confetti stays Yang-only + cosmetic; voice is global.
+        const { event: guessEvent, ctx: guessCtx } = pickGuessEvent(ng, ny, wasted.letters.length > 0);
+        if (getActiveEditionId() === "yang" && guessEvent === "greens") {
+          setTimeout(() => celebrateGreens(ng), flipDoneMs); // celebrateGreens internally showCompanion("greens",{count})
+        } else {
+          setTimeout(() => showCompanion(guessEvent, guessCtx), flipDoneMs);
         }
         resetIdle();
       }
@@ -1102,8 +1681,19 @@ function onServerMessage(msg) {
     const phaseEnded = prev && prev.phase !== "finished" && msg.room.phase === "finished";
     const personallyLost = prevMe?.status === "playing" && me?.status === "lost";
     const personallyWon = prevMe?.status === "playing" && me?.status === "won";
-    if ((phaseEnded || personallyLost || personallyWon) && !game.hasShownEndStats) {
+    // Daily owns its OWN reveal (#dailyUnlock: goody + curated story + bridge), so the
+    // generic stats/challenge/share modal must NOT also fire for daily — it would stack
+    // over and bury the curated reveal.
+    if ((phaseEnded || personallyLost || personallyWon) && !game.hasShownEndStats && !game.isDaily) {
       handleGameOver(msg.room);
+    }
+    if (msg.room.phase === "finished") refreshGold(); // reconcile persistent balance after cash-out
+    // Daily rooms never globally "finish" (per-player async scoring) — so reconcile the
+    // gold HUD the moment YOU personally complete, the same way the race path does on
+    // finish, so the daily goody mint actually shows up in the HUD.
+    if (game.isDaily && (personallyWon || personallyLost)) {
+      refreshGold();
+      captureDailySolve(game.dailyDate, me); // client-only — powers the home's letter stamp
     }
     render();
   } else if (msg.type === "invalid_guess") {
@@ -1132,8 +1722,25 @@ function onServerMessage(msg) {
     // tip Hard Mode into bankruptcy).
     bumpErrorCount(powerupsCtx);
     checkBankruptcy(powerupsCtx);
+  } else if (msg.type === "typing") {
+    // An opponent's live row length (anonymous — count only). Patch just their ghost row
+    // in place; a full render() per keystroke would nuke in-flight board animations.
+    if (msg.username && msg.username !== getUsername()) {
+      const len = Math.max(0, msg.len | 0);
+      if (len > 0) game.typing.set(msg.username, len);
+      else game.typing.delete(msg.username);
+      updateOpponentGhost(msg.username);
+    }
   } else if (msg.type === "revealed_letter" || msg.type === "vowels") {
     handlePowerupMessage(powerupsCtx, msg);
+  } else if (msg.type === "rematch_proposed") {
+    if (msg.proposer !== getUsername()) renderRematchPrompt(msg.proposer);
+  } else if (msg.type === "rematch_accepted") {
+    game.hasShownEndStats = false;
+    renderRematchIdle();
+    closeStats();
+  } else if (msg.type === "rematch_cancelled") {
+    settleRematchHome(msg.reason, opponentName());
   } else if (msg.type === "error") {
     toast(msg.message || "Error", { error: true });
   }
@@ -1182,6 +1789,88 @@ function applyTabVisibility(playing) {
   play.hidden = game.roomTab !== "play";
   games.hidden = game.roomTab !== "games";
   players.hidden = game.roomTab !== "players";
+}
+
+// The "underneath", revealed once you finish today's word: a goody line, the story behind
+// the word, and a one-tap bridge back to the hub. Idempotent per snapshot.
+// snap.story may be null (house day / World fetch failed) — goody + bridge still render.
+function renderDailyUnlock(snap, me) {
+  const box = $("#dailyUnlock");
+  if (!box) return;
+  const done = me && me.status !== "playing";
+  box.hidden = !done;
+  if (!done) return;
+  // The curated day's name (vibeTitle) crowns the reveal — a palette-gradient hero on a
+  // themed day (see .daily-vibe-title), inserted once above the goody. Absent on legacy days.
+  if (snap.vibeTitle && !box.dataset.vibeTitled) {
+    const h = document.createElement("h2");
+    h.className = "daily-vibe-title";
+    h.id = "dailyVibeTitle";
+    h.textContent = snap.vibeTitle;
+    box.insertBefore(h, box.firstChild);
+    box.dataset.vibeTitled = "1";
+  }
+  const won = me.status === "won";
+  // Only a CONFIRMED gold mint sets player.goldAwarded (a number). Drive both the
+  // copy and the celebration off it — never claim/float gold the server didn't grant.
+  const award = (me && typeof me.goldAwarded === "number") ? me.goldAwarded : 0;
+  const goody = $("#dailyGoody");
+  if (goody && !goody.dataset.filled) {
+    const word = snap.word || "";
+    goody.textContent = won
+      ? (award > 0 ? t("daily.goodySolved", { word, gold: award }) : t("daily.goodySolvedNoGold", { word }))
+      : (award > 0 ? t("daily.goodyMissed", { word, gold: award }) : t("daily.goodyMissedNoGold", { word }));
+    if (won) goody.classList.add("is-win"); // gold halo (CSS) — solve only
+    goody.dataset.filled = "1";
+    // GOLD-FLIGHT: celebrate a confirmed gold solve once — bump the HUD + send a few
+    // floaters rising toward it. Reuses the existing .gold-floater / gold-bump system;
+    // skip entirely under reduced motion (the calm CSS appear covers that case), and
+    // skip when the mint credited 0 (no coins for a zero/failed award).
+    if (won && award > 0 && !getSettings().reducedMotion) celebrateDailyUnlock();
+  }
+  const story = $("#dailyStory");
+  if (story && snap.story && !story.dataset.filled) {
+    const kicker = document.createElement("span"); kicker.className = "daily-story-kicker"; kicker.textContent = t("daily.storyKicker");
+    const h = document.createElement("h3"); h.textContent = snap.story.title || t("daily.storyFallbackTitle");
+    const p = document.createElement("p"); p.textContent = snap.story.body || "";
+    story.append(kicker, h, p);
+    if (snap.story.tip) { const tip = document.createElement("p"); tip.className = "daily-tip"; tip.textContent = "💡 " + snap.story.tip; story.appendChild(tip); }
+    story.dataset.filled = "1";
+  }
+  const bridge = $("#dailyBridgeBtn");
+  if (bridge && !bridge.dataset.wired) {
+    bridge.textContent = "▶ " + t("daily.keepPlaying");
+    bridge.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); }); bridge.dataset.wired = "1";
+  }
+  const arch = $("#dailyArchiveLink");
+  if (arch && !arch.dataset.wired) {
+    arch.textContent = t("daily.browsePast");
+    arch.addEventListener("click", (e) => { e.preventDefault(); navigate("/daily/archive"); }); arch.dataset.wired = "1";
+  }
+}
+
+// The daily solve's gold-flight: pulse the gold HUD and float a few coins from the
+// goody line up toward it. Pure presentation, reuses the room's existing gold-motion
+// vocabulary (.gold-floater + .gold-hud.gold-bump). Caller guards reduced-motion.
+function celebrateDailyUnlock() {
+  const hud = $("#goldHud");
+  if (hud) { hud.classList.remove("gold-bump"); void hud.offsetWidth; hud.classList.add("gold-bump"); }
+  const goody = $("#dailyGoody");
+  const origin = (goody || $("#dailyUnlock"))?.getBoundingClientRect();
+  if (!origin) return;
+  // a small, intentional flight — 5 coins, staggered, drifting up (the .gold-floater
+  // keyframe rises and fades; that reads as coins lifting toward the HUD).
+  for (let i = 0; i < 5; i++) {
+    setTimeout(() => {
+      const f = document.createElement("div");
+      f.className = "gold-floater";
+      f.textContent = "◆";
+      f.style.left = `${origin.left + origin.width * (0.3 + Math.random() * 0.4)}px`;
+      f.style.top = `${origin.top + origin.height * 0.5}px`;
+      document.body.appendChild(f);
+      setTimeout(() => f.remove(), 800);
+    }, i * 90);
+  }
 }
 
 function renderGames(snap) {
@@ -1251,8 +1940,26 @@ function gameRow(g) {
 
 function render() {
   if (!game.snapshot) return;
+  // A late snapshot can land after we've left the room view: tpl-room is unmounted
+  // on home/hub/profile, so the room scaffold (#boards, #lobbyControls, …) is gone.
+  // With nothing to draw, bail before dereferencing room-only elements that would
+  // throw against the wrong template. #boards is the room scaffold's signature node.
+  if (!$("#boards")) return;
   const snap = game.snapshot;
   const me = snap.players.find((p) => p.username === getUsername());
+
+  // Daily hard-gate: until YOU finish (win/give up), only your board is visible.
+  // me.status flips to won/lost on completion → the whole "underneath" unlocks.
+  const dailyLocked = game.isDaily && (!me || me.status === "playing");
+  if (game.isDaily) {
+    document.body.classList.add("daily");
+    const tabs = $("#roomTabs"); if (tabs) tabs.hidden = dailyLocked; // no leaderboard/games until done
+    const nameBtn = $("#roomName"); if (nameBtn) nameBtn.textContent = t("daily.boardTitle", { date: game.dailyDate });
+    // The lobby bar's controls (choose-mode / start / play-again) are all meaningless for
+    // the daily (it auto-starts, never resets) — hide the otherwise-empty bar entirely.
+    const lobbyBar = $(".lobby-bar"); if (lobbyBar) lobbyBar.hidden = true;
+  }
+  if (game.isDaily) renderDailyUnlock(snap, me);
 
   // Keep the header name (and tab title) in sync with server renames.
   if (snap.name && snap.name !== game.name) {
@@ -1280,13 +1987,9 @@ function render() {
   if (snap.phase === "lobby") {
     lobby.hidden = false;
     endControls.hidden = true;
-    syncLengthSelect(snap);
     syncModePicker(snap);
-    syncLobbyEdition();
+    syncLobbySetup(snap);
     startBtn.hidden = false;
-    $("#lobbyHint").textContent = snap.players.length < 2
-      ? `Waiting for friends · start solo anytime`
-      : `${snap.players.length} players in`;
   } else if (snap.phase === "playing") {
     lobby.hidden = true;
     endControls.hidden = true;
@@ -1304,11 +2007,12 @@ function render() {
   // surface it (inline on desktop, 💬 button on mobile) once someone else is in
   // the room. `me` is always in snap.players, so >= 2 means real company.
   const hasCompany = snap.players.length >= 2;
+  const showSocial = game.isDaily ? !dailyLocked : hasCompany;
   const chatPanel = $("#chatPanel");
   const chatTopBtn = $("#chatTopBtn");
-  if (chatPanel) chatPanel.hidden = !hasCompany;
-  if (chatTopBtn) chatTopBtn.hidden = !hasCompany;
-  if (!hasCompany) closeChatSheet();
+  if (chatPanel) chatPanel.hidden = !showSocial;
+  if (chatTopBtn) chatTopBtn.hidden = !showSocial;
+  if (!showSocial) closeChatSheet();
 
   // Immersive UI (C5): mid-play, the in-game header collapses to just avatar +
   // username + gold. Room name, ✎ rename, Share ↗, and the scoreboard hide while
@@ -1405,11 +2109,10 @@ function renderChatRow(entry) {
   } else {
     const mine = entry.from && entry.from === getUsername();
     row.className = "chat-row user" + (mine ? " mine" : "");
-    const from = document.createElement("span");
-    from.className = "from";
-    from.textContent = entry.from + ":";
+    const from = userLink(entry.from);
+    from.classList.add("from");
     row.appendChild(from);
-    row.appendChild(document.createTextNode(entry.text));
+    row.appendChild(document.createTextNode(": " + entry.text));
   }
   return row;
 }
@@ -1442,12 +2145,17 @@ function syncModePicker(snap) {
   const list = $("#modeList");
   const control = $("#modeControl");
   if (!list || !control) return;
-  control.hidden = false;
   $("#modeHeading").textContent = t("mode.heading");
+
+  // Only show modes that are actually online — no locked "coming soon" teasers cluttering
+  // the lobby. With a single playable mode there's nothing to pick, so hide the whole
+  // control; the picker only earns its space once a second mode ships.
+  const availableIds = Object.keys(MODES).filter(isAvailableMode);
+  control.hidden = availableIds.length <= 1;
 
   // Build rows once.
   if (list.children.length === 0) {
-    for (const id of Object.keys(MODES)) {
+    for (const id of availableIds) {
       const li = document.createElement("li");
       li.className = "mode-row";
       li.dataset.mode = id;
@@ -1467,18 +2175,12 @@ function syncModePicker(snap) {
       tag.className = "mode-row-tag";
       li.append(main, tag);
 
-      if (isAvailableMode(id)) {
-        li.tabIndex = 0;
-        const choose = () => send({ type: "set_mode", mode: id });
-        li.addEventListener("click", choose);
-        li.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(); }
-        });
-      } else {
-        li.classList.add("locked");
-        li.setAttribute("aria-disabled", "true");
-        tag.textContent = `${t("mode.comingSoon")} 🔒`;
-      }
+      li.tabIndex = 0;
+      const choose = () => send({ type: "set_mode", mode: id });
+      li.addEventListener("click", choose);
+      li.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(); }
+      });
       list.appendChild(li);
     }
   }
@@ -1494,18 +2196,19 @@ function syncModePicker(snap) {
 function syncModeChip(snap) {
   const chip = $("#modeChip");
   if (!chip) return;
+  if (game.isDaily) { chip.hidden = true; return; } // daily has its own title; no mode chip
   chip.textContent = t(`mode.${snap.mode}.label`);
   // Read-only chip shows whenever the interactive picker is hidden (playing /
   // finished) — late-joiners mid-play still see the mode.
   chip.hidden = snap.phase === "lobby";
 }
 
+// Word-length picker — now mounted in the Settings "Room" section (out of the lobby).
+// Called when the gear opens in a room. Builds options once, reflects the room's current
+// length (server is source of truth), and disables once the game starts (length is locked).
 function syncLengthSelect(snap) {
-  const wrap = $("#lengthControl");
   const sel = $("#lengthSelect");
-  if (!wrap || !sel) return;
-  wrap.hidden = false;
-  // Build options once.
+  if (!sel || !snap) return;
   if (sel.options.length === 0) {
     for (const n of SUPPORTED_LENGTHS) {
       const opt = document.createElement("option");
@@ -1521,22 +2224,20 @@ function syncLengthSelect(snap) {
       }
     });
   }
+  sel.disabled = snap.phase !== "lobby"; // can't resize the words under a live/finished board
   if (parseInt(sel.value, 10) !== snap.wordLength) sel.value = String(snap.wordLength);
 }
 
-// Theme picker in the lobby — set the room's vibe before you start or invite. Picking
-// sends set_edition so it themes everyone (same path as the Settings picker). The active
-// chip tracks the room's edition because the snapshot handler applies it before we render.
-function syncLobbyEdition() {
-  const wrap = $("#editionControl");
-  const mount = $("#lobbyEditionPicker");
-  if (!wrap || !mount) return;
-  wrap.hidden = false;
-  renderEditionPicker(mount, (id) => {
-    applySettings(getSettings()); // re-layer colorblind/contrast on the new palette
-    send({ type: "set_edition", edition: id });
-    if (game.snapshot) render();
-  });
+// The lobby gear — one bare ⚙ that opens Settings (where length + theme live). The
+// "5 letters · Theme" label is gone; the gear is the whole affordance.
+function syncLobbySetup() {
+  const btn = $("#lobbySetup");
+  if (!btn) return;
+  btn.hidden = false;
+  if (!btn.dataset.wired) {
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", () => showSettings());
+  }
 }
 
 // Per-room cumulative scoreboard (wins/played across rounds), sorted by wins desc.
@@ -1560,7 +2261,7 @@ function renderScoreboard(snap) {
     row.className = "score-row" + (e.username === me ? " mine" : "");
     const name = document.createElement("span");
     name.className = "score-name";
-    name.textContent = e.username + (e.username === me ? " (you)" : "");
+    name.appendChild(userLink(e.username, { suffix: e.username === me ? " (you)" : "" }));
     const tally = document.createElement("span");
     tally.className = "score-tally";
     tally.textContent = `${e.wins}W · ${e.played}P`;
@@ -1572,10 +2273,15 @@ function renderScoreboard(snap) {
 
 function renderBoards(snap, me) {
   const root = $("#boards");
-  const ordered = [
-    ...(me ? [me] : []),
-    ...snap.players.filter((p) => p.username !== getUsername()),
-  ];
+  // The daily is a focused, personal puzzle (the whole world plays the same word, but
+  // you see only YOUR board) — the shared standings live in the gated leaderboard, not
+  // a wall of strangers' boards. Live race rooms still show everyone.
+  const ordered = game.isDaily
+    ? (me ? [me] : [])
+    : [
+        ...(me ? [me] : []),
+        ...snap.players.filter((p) => p.username !== getUsername()),
+      ];
   // While my board's tiles are mid-explosion OR mid-payout (glow/floater anchored to
   // them), preserve the existing DOM so the animations don't get nuked by a snapshot
   // from another player's guess. Update everyone else's boards as normal.
@@ -1583,6 +2289,10 @@ function renderBoards(snap, me) {
   if (preserveMine) {
     for (const board of root.querySelectorAll(".player-board")) {
       if (board.dataset.player !== getUsername()) board.remove();
+      // My board is frozen to protect the animating row + coin floaters, but the input
+      // row below it has no animation to guard. Sync it in place so letters typed mid-
+      // payout actually paint — otherwise fast play looks like it eats the next word.
+      else if (me) syncMyInputRow(board, snap, me);
     }
   } else {
     root.textContent = "";
@@ -1594,9 +2304,8 @@ function renderBoards(snap, me) {
     board.dataset.player = p.username;
     const name = document.createElement("div");
     name.className = "player-name";
-    const nameSpan = document.createElement("span");
-    if (p.username === getUsername()) nameSpan.className = "me";
-    nameSpan.textContent = p.username + (p.username === getUsername() ? " (you)" : "");
+    const nameSpan = userLink(p.username, { suffix: p.username === getUsername() ? " (you)" : "" });
+    if (p.username === getUsername()) nameSpan.classList.add("me");
     name.appendChild(nameSpan);
 
     if (p.status === "won") {
@@ -1651,15 +2360,21 @@ function renderBoards(snap, me) {
         ) {
           // Blinking cursor on the next slot so you always know where you're typing.
           tile.classList.add("cursor");
+        } else if (!isMe && isCurrentRow && snap.phase === "playing" && p.status === "playing") {
+          // Opponent's LIVE typing (anonymous): ghost-fill the letters they've entered, with a
+          // soft pulse on the slot they're about to fill. No letters — same hidden-word rule as
+          // the rest of the spectator board. Driven by game.typing; updateOpponentGhost() patches
+          // this in place between full renders.
+          const tlen = Math.min(game.typing.get(p.username) ?? 0, cols);
+          if (c < tlen) tile.classList.add("ghost");
+          else if (c === tlen && tlen > 0) tile.classList.add("ghost-cursor");
         }
         row.appendChild(tile);
       }
       // One-shot line clear: tap your active row to wipe the whole guess (no Delete button).
       if (isMe && isCurrentRow && snap.phase === "playing" && p.status === "playing") {
         row.classList.add("input-row");
-        row.addEventListener("click", () => {
-          if (game.pending.length) { game.pending = ""; render(); resetIdle(); }
-        });
+        row.addEventListener("click", clearRow);
       }
       grid.appendChild(row);
     }
@@ -1667,6 +2382,50 @@ function renderBoards(snap, me) {
     root.appendChild(board);
     game.lastGuessCounts.set(p.username, p.guesses.length);
   }
+}
+
+// Patch a single opponent's live-typing ghost row in place — far cheaper than a full render()
+// and it never disturbs another board or an in-flight animation. game.typing is already updated
+// by the caller; here we just re-paint the ghost / ghost-cursor classes on their current input
+// row. No-ops silently if their board isn't on screen yet (a later full render picks it up).
+function updateOpponentGhost(username) {
+  const snap = game.snapshot;
+  if (!snap || snap.phase !== "playing" || game.isDaily) return;
+  const p = snap.players.find((q) => q.username === username);
+  if (!p || p.status !== "playing") return;
+  const root = $("#boards");
+  const board = root && $$(".player-board", root).find((b) => b.dataset.player === username);
+  if (!board) return;
+  const rowEl = board.querySelectorAll(".grid-row")[p.guesses.length];
+  if (!rowEl) return; // their current row is off the board (shouldn't happen while playing)
+  const len = Math.min(game.typing.get(username) ?? 0, snap.wordLength);
+  rowEl.querySelectorAll(".tile").forEach((tile, c) => {
+    tile.classList.toggle("ghost", c < len);
+    tile.classList.toggle("ghost-cursor", c === len && len > 0);
+  });
+}
+
+// During a preserved render (mid-payout / mid-explosion) the board DOM is frozen so the
+// flipping row's coin floaters stay anchored. The input row has nothing to protect, so we
+// patch its tiles in place to mirror game.pending. We only rewrite tiles that actually
+// changed, so an existing letter never re-fires its pop animation on each new keystroke.
+function syncMyInputRow(board, snap, me) {
+  if (snap.phase !== "playing" || me.status !== "playing") return;
+  const inputRow = board.querySelectorAll(".grid-row")[me.guesses.length];
+  if (!inputRow) return;
+  const pending = game.pending;
+  inputRow.querySelectorAll(".tile").forEach((tile, c) => {
+    const want = pending[c] ?? "";
+    const isCursor = c === pending.length;
+    if (tile.textContent === want && tile.classList.contains("filled") === !!want) {
+      tile.classList.toggle("cursor", isCursor); // letter unchanged — just move the cursor
+      return;
+    }
+    tile.className = "tile";
+    tile.textContent = "";
+    if (want) { tile.classList.add("filled", "pop"); tile.textContent = want; }
+    else if (isCursor) tile.classList.add("cursor");
+  });
 }
 
 function scheduleReveal(tile, color, colIdx) {
@@ -1690,12 +2449,21 @@ function resolvedLayoutId() {
 }
 
 // Handlers injected into the on-screen keyboard's delegated click listener.
-const keyboardHandlers = { onEnter: submitGuess, onBack: backspace, onLetter: typeLetter };
+const keyboardHandlers = { onEnter: submitGuess, onBack: backspace, onLetter: typeLetter, onClear: clearRow };
 
 function onPhysicalKey(e) {
   // Don't hijack typing in any input fields, with modifiers, or while a modal is open.
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+  // End-game: when the stats modal is up with Play Again showing, Enter starts a
+  // new game — so the instinctive "tap Enter to keep going" just works.
+  if (e.key === "Enter") {
+    const playAgain = $("#modalPlayAgain");
+    if (playAgain && !playAgain.hidden && playAgain.offsetParent !== null) {
+      e.preventDefault(); playAgain.click(); return;
+    }
+  }
   if (document.querySelector(".modal:not([hidden])")) return;
 
   const isLetter = /^[a-zA-Z]$/.test(e.key);
@@ -1724,8 +2492,26 @@ function onPhysicalKey(e) {
   if (game.hasShownEndStats) return;
 
   if (isEnter) { submitGuess(); e.preventDefault(); }
+  else if (e.key === "Escape") { clearRow(); e.preventDefault(); }
   else if (e.key === "Backspace") { backspace(); e.preventDefault(); }
   else if (isLetter) { typeLetter(e.key.toUpperCase()); e.preventDefault(); }
+}
+
+// Broadcast my current row LENGTH (never the letters) so opponents see a live ghost fill.
+// Coalesced to one send per frame — fast typing or a held ⌫ collapses into the latest length —
+// and only sent in a live race that actually has someone else watching; solo/daily skip it.
+let _typingRaf = 0;
+let _typingLen = -1;
+function sendTyping(len = game.pending.length) {
+  const snap = game.snapshot;
+  if (!snap || snap.phase !== "playing" || game.isDaily) return;
+  if (!snap.players.some((p) => p.username !== getUsername())) return; // nobody to show it to
+  _typingLen = len;
+  if (_typingRaf) return;
+  _typingRaf = requestAnimationFrame(() => {
+    _typingRaf = 0;
+    send({ type: "typing", len: _typingLen });
+  });
 }
 
 function typeLetter(l) {
@@ -1733,13 +2519,59 @@ function typeLetter(l) {
   if (game.pending.length >= game.snapshot.wordLength) return;
   game.pending += l.toUpperCase();
   render();
+  sendTyping();
   resetIdle();
+}
+let lastWipeReactAt = 0;
+function clearRow() {
+  if (!game.pending.length) return;
+  const cleared = game.pending.length;
+  resetIdle();
+  sendTyping(0); // tell opponents the row emptied the instant the wipe starts
+
+  // A meaningful wipe (most of a word, not one stray letter) earns a dry companion
+  // aside — throttled so rapid retries don't turn it into a chatterbox. Text-only:
+  // the wipe is frequent enough that voicing it would wear thin fast.
+  if (cleared >= 3 && Date.now() - lastWipeReactAt > 8000) {
+    lastWipeReactAt = Date.now();
+    showCompanion("wipe", { cleared });
+  }
+
+  const row = activeInputRow();
+  if (!row || getSettings().reducedMotion) { game.pending = ""; render(); return; }
+
+  // Sweep the tiles away left-to-right, THEN clear + re-render once the gesture lands.
+  const tiles = row.querySelectorAll(".tile");
+  tiles.forEach((t, i) => t.style.setProperty("--wipe-delay", `${i * 22}ms`));
+  row.classList.add("wipe");
+  const total = 180 + (tiles.length - 1) * 22;
+  setTimeout(() => { game.pending = ""; render(); }, total);
+}
+// The active (unplayed) input row for me — sits right after my played guesses.
+function activeInputRow() {
+  const myBoard = $$(".player-board")[0];
+  const me = game.snapshot?.players.find((p) => p.username === getUsername());
+  if (!myBoard || !me) return null;
+  return myBoard.querySelectorAll(".grid-row")[me.guesses.length] || null;
 }
 function backspace() {
   if (game.pending.length === 0) return;
   game.pending = game.pending.slice(0, -1);
   render();
+  sendTyping();
   resetIdle();
+  maybeShowClearHint();
+}
+// One-time nudge: the first time someone backspaces, reveal the faster way to bail
+// on a whole guess. Shown once ever (localStorage), never nags again.
+function maybeShowClearHint() {
+  if (localStorage.getItem(LS.clearHint) === "1") return;
+  localStorage.setItem(LS.clearHint, "1");
+  const tip = isTouch() ? "Tip: hold ⌫ to clear the whole row" : "Tip: press Esc to clear the whole row";
+  setTimeout(() => toast(tip, { duration: 3200 }), 500);
+}
+function isTouch() {
+  return window.matchMedia?.("(pointer: coarse)").matches || "ontouchstart" in window;
 }
 function submitGuess() {
   resetIdle();
@@ -1898,15 +2730,93 @@ function playChime(notes) {
   } catch { /* ignore — audio is a nice-to-have */ }
 }
 
+// A short filtered-noise burst for mistake feedback. "glass" = bright, fast decay;
+// "shock" = a buzzy zap; "buzz" = a low dull thud. WebAudio-only, no asset files.
+function playNoise(kind) {
+  if (localStorage.getItem("wordul.muted") === "1") return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const t0 = audioCtx.currentTime;
+    const dur = kind === "buzz" ? 0.18 : 0.3;
+    const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * dur), audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const filter = audioCtx.createBiquadFilter();
+    if (kind === "glass") { filter.type = "highpass"; filter.frequency.value = 2200; }
+    else if (kind === "shock") { filter.type = "bandpass"; filter.frequency.value = 900; filter.Q.value = 6; }
+    else { filter.type = "lowpass"; filter.frequency.value = 500; }
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.28, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(filter).connect(gain).connect(audioCtx.destination);
+    src.start(t0); src.stop(t0 + dur);
+  } catch { /* ignore — audio is a nice-to-have */ }
+}
+
+// Sensory feedback for a committed sloppy mistake (reused dead letter). Config comes
+// from the active edition (activeMistakeFx); reduced motion suppresses shake + flash
+// but keeps the non-motion cues (sound, haptics). No-ops when the edition opts out.
+function mistakeFx(cfg, letters) {
+  if (!cfg) return;
+  if (cfg.sound) playNoise(cfg.sound);
+  if (cfg.haptics && navigator.vibrate) navigator.vibrate([30, 40, 30]);
+  if (getSettings().reducedMotion) return;
+  const boards = $("#boards");
+  if (cfg.shake && boards) {
+    boards.classList.remove("fx-shake");
+    void boards.offsetWidth; // restart the animation
+    boards.classList.add("fx-shake");
+    setTimeout(() => boards.classList.remove("fx-shake"), 360);
+  }
+  if (cfg.crack && letters && letters.length) crackTiles(letters);
+  if (cfg.flash) {
+    const flash = document.createElement("div");
+    flash.className = "fx-flash";
+    document.body.appendChild(flash);
+    setTimeout(() => flash.remove(), 320);
+  }
+}
+
+// Shatter just the reused dead-letter tiles in MY fresh row (matched by letter).
+// Same bottom-up "is it filled?" walk as getMyFreshTile so a mid-payout repaint
+// can't target a detached node.
+function crackTiles(letters) {
+  const up = new Set([...letters].map((l) => l.toUpperCase()));
+  const myBoard = document.querySelector("#boards .player-board:not(.spectator)");
+  if (!myBoard) return;
+  const rows = myBoard.querySelectorAll(".grid .grid-row");
+  for (let r = rows.length - 1; r >= 0; r--) {
+    const tiles = rows[r].querySelectorAll(".tile");
+    const filled = tiles[0] && (tiles[0].classList.contains("reveal") ||
+      tiles[0].classList.contains("green") || tiles[0].classList.contains("yellow") ||
+      tiles[0].classList.contains("gray"));
+    if (!filled) continue;
+    tiles.forEach((t) => {
+      if (!up.has((t.textContent || "").toUpperCase())) return;
+      t.classList.remove("fx-break");
+      void t.offsetWidth; // restart the animation
+      t.classList.add("fx-break");
+      setTimeout(() => t.classList.remove("fx-break"), 600);
+    });
+    return; // only the fresh row
+  }
+}
+
 // Yang's scaled green celebration. 1 new green → spark + soft chime; 2+ → confetti
 // + an ascending chime + a hyped voice line. Visual bits respect reduced motion.
+// Yang's scaled green celebration. 1 new green → spark + soft chime; 2+ → confetti
+// + chime + a hyped voice line whose words match the real count. Respects reduced motion.
 function celebrateGreens(count) {
   const reduced = getSettings().reducedMotion;
   const boards = $("#boards");
   if (count >= 2) {
-    playChime([[523, 0], [659, 0.09], [784, 0.18]]);
-    if (!reduced) spawnConfetti(28);
-    showCompanion("rush");
+    if (count >= 3) playChime([[523, 0], [659, 0.08], [784, 0.16], [1047, 0.26]]);
+    else playChime([[523, 0], [659, 0.09], [784, 0.18]]);
+    if (!reduced) spawnConfetti(count >= 3 ? 28 + (count - 2) * 18 : 28); // 3→46, 4→64, 5→82
+    showCompanion("greens", { count });
   } else {
     playChime([[660, 0], [880, 0.08]]);
     if (boards && !reduced) {
@@ -1920,61 +2830,10 @@ function celebrateGreens(count) {
 
 // --- End of game ---
 
-// Generic "you ate the L" jokes — when you ran out of guesses on your own.
-const SOLO_LOSE_JOKES = [
-  "Plot twist: the word was inside you all along. ...nope, never mind, it wasn't.",
-  "Five letters. Six guesses. Infinite regret.",
-  "Statistically, this happens to exactly one in one of you.",
-  "Your dictionary called. It wants a refund.",
-  "Even the alphabet feels bad for you right now.",
-  "There are no losers here. Just you, specifically.",
-  "Wordle: 1. You: 0. The scoreboard speaks.",
-  "Take comfort — somewhere, an etymologist is also crying.",
-  "Your guesses formed a strong, structured wall of wrongness.",
-  "An L isn't great. But it IS one of the letters.",
-  "Have you considered just guessing the right word? Wild idea, I know.",
-  "Reminder: crosswords give you the words for free.",
-  "Don't worry, the word also doesn't know how to find you.",
-  "You came so close. Then very, very far.",
-];
-
-// Tease-the-loser jokes — used when someone else won first. {who} = winner nickname.
-const RACE_LOSE_JOKES = [
-  "{who} just smoked you. Like, athletically.",
-  "{who} solved it. Maybe try standing closer to the screen next time.",
-  "{who} got the W. You got the L. The L is for Learning.",
-  "{who} is faster than you at words. And probably other things too.",
-  "{who} cooked. You watched.",
-  "{who} knew the word. You knew vibes.",
-  "{who} found it first. You found out about it.",
-  "Imagine losing to {who}. Couldn't be me. (Wait — it was you.)",
-  "{who} touched grass. The grass spelled the answer.",
-  "{who} is now in your contacts as \"better at Wordle\".",
-];
-
-// C4: self-inflicted ends get their own roast. Tapping 💀 to give up…
-const GAVE_UP_JOKES = [
-  "You tapped the skull. The skull respects your honesty.",
-  "Strategic retreat! …is one way to put it.",
-  "Quitting: technically a decision. Bold of you.",
-  "You folded. The word never even broke a sweat.",
-  "Surrender accepted. Your dignity has been refunded in full.",
-  "Some words aren't worth fighting. This one definitely was. Oops.",
-];
-// …and bankrupting yourself in Hard Mode.
-const BANKRUPT_JOKES = [
-  "Bankrupt. You spent gold like it grew on tiles.",
-  "◆ in the red. Hard Mode sends its regards (and an invoice).",
-  "You bought your way to a loss. Truly the premium experience.",
-  "Negative gold, negative result. At least it's consistent.",
-  "The bank called. They'd like their gold back. All of it.",
-  "Hard Mode finally has teeth, and it just ate your wallet.",
-];
-
-function pickJoke(arr, winnerName) {
-  const j = arr[Math.floor(Math.random() * arr.length)];
-  return winnerName ? j.replace("{who}", winnerName) : j;
-}
+// Losing used to summon a skull and a roast. Now every loss — ran out of guesses,
+// beaten in a race, gave up, or went bankrupt — ends on a constructive, encouraging
+// line drawn from the great minds of humanity (and a few AIs). The pool lives in
+// /inspire.js; pickInspire() returns one formatted “quote” — author string.
 
 // C4: forfeit — give-up or bankruptcy ends the game from MY side WITHOUT a server
 // status change. Mirrors handleGameOver's bookkeeping (record the loss, guard
@@ -1988,7 +2847,6 @@ function forfeit(reason) {
   clearIdle();
   clearGiveUpTimer();
   game.finishReason = reason;
-  recordResult(false, me.guesses.length); // a forfeit is a loss for local stats
   game.hasShownEndStats = true;
   // Tell the server we're out: it marks us lost (others see OUT) and the next snapshot
   // reveals the word to US, so the end-screen word card has it by the time it opens.
@@ -2004,7 +2862,6 @@ function handleGameOver(snap) {
   clearGiveUpTimer();
   const won = me.status === "won";
   const guessCount = me.guesses.length;
-  recordResult(won, guessCount);
   game.hasShownEndStats = true;
   // C4: record how the game ended (give-up / bankruptcy already set theirs before
   // reaching here via forfeit, which short-circuits this path).
@@ -2034,7 +2891,7 @@ function handleGameOver(snap) {
     }
     triggerWinCelebration();
     playChime([[523, 0], [659, 0.1], [784, 0.2], [1047, 0.32]]);
-    showCompanion("win");
+    showCompanion("win", { guessesUsed: me.guesses.length });
     // Same gentle pacing as before — wait for the final row's flip to finish.
     setTimeout(
       () => openStats({ snap, me, won, justFinished: true, lastGuessCount: guessCount }),
@@ -2050,15 +2907,9 @@ function handleGameOver(snap) {
 
 function triggerLoseSequence(snap, me) {
   game.exploding = true;
-  const winner = snap.winner;
-  const beatenBySomeone = winner && winner !== getUsername();
-  // C4: self-inflicted ends (gave up / went bankrupt) own the roast even in a race —
-  // you ended your own game, so the joke is about you, not the winner.
-  let joke;
-  if (game.finishReason === "gave_up") joke = pickJoke(GAVE_UP_JOKES);
-  else if (game.finishReason === "bankrupt") joke = pickJoke(BANKRUPT_JOKES);
-  else if (beatenBySomeone) joke = pickJoke(RACE_LOSE_JOKES, winner);
-  else joke = pickJoke(SOLO_LOSE_JOKES);
+  // However the round ended, the player gets a lift, not a roast: one random line
+  // from the great-minds pool.
+  const inspire = pickInspire();
 
   // 1. Screen flash.
   const flash = document.createElement("div");
@@ -2113,49 +2964,12 @@ function triggerLoseSequence(snap, me) {
       won: false,
       justFinished: true,
       lastGuessCount: me.guesses.length,
-      joke,
+      inspire,
     });
   }, 1500);
 }
 
 // --- Stats modal ---
-
-// "Your run, line by line." Render the captured replay (game.replay) into the
-// end-screen as a small monospace log — the same structured events the payout typed,
-// now a scannable summary. Skips silently when there's nothing to show.
-function renderReplayInto(parent) {
-  if (!game.replay || game.replay.length === 0) return;
-  // Tuck the per-beat breakdown behind a collapsed disclosure — it's there for the
-  // curious, but the win moment shouldn't open onto a wall of "+100 / +50" lines.
-  const details = document.createElement("details");
-  details.className = "endgame-replay-details";
-  const summary = document.createElement("summary");
-  summary.textContent = t("endscreen.goldBreakdown");
-  details.appendChild(summary);
-  const box = document.createElement("div");
-  box.className = "endgame-replay";
-  for (const turn of game.replay) {
-    for (const ev of turn.events || []) {
-      const line = document.createElement("div");
-      line.className = `endgame-replay-line ${ev.delta >= 0 ? "gain" : "loss"}`;
-      const sign = ev.delta >= 0 ? "+" : "−";
-      // Tile events carry a letter + index; the solve/speed bonuses don't — render them plainly.
-      const label = String(ev.letter || "").toUpperCase();
-      const pos = Number.isInteger(ev.index) ? ` pos ${ev.index + 1}` : "";
-      line.textContent =
-        `${ev.kind}${label ? " " + label : ""}${pos}  ${sign}${Math.abs(ev.delta)}`;
-      box.appendChild(line);
-    }
-    if (turn.combo && turn.combo.discoveries >= 2) {
-      const c = document.createElement("div");
-      c.className = "endgame-replay-line combo";
-      c.textContent = `✦ ${turn.combo.mult}× COMBO  +${turn.combo.bonus}`;
-      box.appendChild(c);
-    }
-  }
-  details.appendChild(box);
-  parent.appendChild(details);
-}
 
 // "The word — and a reason to remember it." Shows the answer big plus a reason to
 // remember it: a definition, a surprising fact, and a quote from a great mind. Pulls
@@ -2235,23 +3049,26 @@ function renderWordCard(parent, word) {
     });
 }
 
-function openStats(opts = {}) {
-  const modal = $("#statsModal");
-  modal.hidden = false;
-  modal.removeAttribute("hidden");
-  const s = getStats();
-  $("#statPlayed").textContent = s.played;
-  $("#statWinPct").textContent = s.played ? Math.round((s.wins / s.played) * 100) : 0;
-  $("#statCurStreak").textContent = s.currentStreak;
-  $("#statMaxStreak").textContent = s.maxStreak;
-
+const STAT_BOX_IDS = ["statPlayed", "statWinPct", "statCurStreak", "statMaxStreak"];
+// Replace the distribution area with a single muted note (no username / load fail).
+function setStatsNote(msg) {
+  for (const id of STAT_BOX_IDS) $("#" + id).textContent = "–";
   const dist = $("#dist");
   dist.textContent = "";
-  const counts = [1,2,3,4,5,6].map((i) => s.distribution[i] || 0);
+  const note = document.createElement("p");
+  note.className = "muted dist-note";
+  note.textContent = msg;
+  dist.appendChild(note);
+}
+
+// Render the 1–6 guess-distribution bars from a {guesses: count} map.
+function renderDist(distribution, highlight) {
+  const dist = $("#dist");
+  dist.textContent = "";
+  const counts = [1,2,3,4,5,6].map((i) => distribution[i] || 0);
   const maxDist = Math.max(1, ...counts);
-  const highlight = opts.justFinished && opts.won ? opts.lastGuessCount : null;
   for (let i = 1; i <= 6; i++) {
-    const v = s.distribution[i] || 0;
+    const v = distribution[i] || 0;
     const isEmpty = v === 0;
     const row = document.createElement("div");
     row.className = "dist-row" + (i === highlight ? " current" : "") + (isEmpty ? " empty" : "");
@@ -2274,19 +3091,133 @@ function openStats(opts = {}) {
     row.appendChild(track);
     dist.appendChild(row);
   }
+}
+
+// Fetch the server profile and fill the stats boxes + distribution. The just-
+// finished append may land a beat after the modal opens (room broadcasts finish
+// and reports in parallel) — we accept eventual consistency; the next open is
+// correct. No username → prompt to pick one; fetch failure → honest note.
+async function fillStatsPanel(opts = {}) {
+  const username = getUsername();
+  if (!username) { setStatsNote(t("stats.needUsername")); return; }
+  let stats;
+  try {
+    const res = await fetch(`/api/user/${encodeURIComponent(username)}`);
+    if (!res.ok) throw new Error(String(res.status));
+    stats = (await res.json()).stats;
+  } catch {
+    setStatsNote(t("stats.loadFailed"));
+    return;
+  }
+  const played = stats.gamesPlayed || 0;
+  $("#statPlayed").textContent = played;
+  $("#statWinPct").textContent = played ? Math.round((stats.wins / played) * 100) : 0;
+  $("#statCurStreak").textContent = stats.currentStreak || 0;
+  $("#statMaxStreak").textContent = stats.bestStreak || 0;
+  renderDist(stats.guessDistribution || {}, opts.justFinished && opts.won ? opts.lastGuessCount : null);
+}
+
+// --- Rematch handshake (client) ---------------------------------------------
+// One source of truth for proposing + rendering the four end-screen states.
+function opponentName() {
+  const snap = game.snapshot;
+  const me = getUsername();
+  const other = snap?.players.find((p) => p.username !== me);
+  return other?.username ?? "your opponent";
+}
+
+// The idle rematch button reads "Rematch" in the Arena (where it sits beside Join next /
+// Create / Main menu) and "Play again" on friend/daily end screens.
+function rematchLabel() {
+  return t(game.fromArena ? "endscreen.rematch" : "endscreen.playAgain");
+}
+
+// Propose a rematch and morph the action into a cancellable waiting state. The
+// waiting/accept/decline UI lives in the stats modal, so make sure it's open
+// (proposing from the lobby #rematchBtn while the modal is closed otherwise gives
+// no visible "Waiting…" feedback).
+function proposeRematch() {
+  send({ type: "rematch_propose" });
+  // Solo room: there's no opponent to wait on. The server starts a fresh game at
+  // once and the round-start snapshot (plus rematch_accepted → closeStats) resets the
+  // board — so skip the "Waiting for your opponent" state entirely and keep replay smooth.
+  if ((game.snapshot?.players?.length ?? 1) <= 1) return;
+  const modal = document.getElementById("statsModal");
+  if (modal && modal.hidden) openStats();
+  renderRematchWaiting(opponentName());
+}
+
+// Render helpers operate on the stats-modal action row (#modalPlayAgain) so the
+// handshake lives where the player already is post-game. The button is reused;
+// a sibling #rematchDecline is created on demand for the recipient prompt.
+function rematchControls() {
+  const play = document.getElementById("modalPlayAgain");
+  let decline = document.getElementById("rematchDecline");
+  if (!decline && play) {
+    decline = document.createElement("button");
+    decline.id = "rematchDecline";
+    decline.className = play.className;
+    play.parentNode.insertBefore(decline, play.nextSibling);
+  }
+  return { play, decline };
+}
+
+function renderRematchIdle() {
+  const { play, decline } = rematchControls();
+  if (decline) decline.hidden = true;
+  if (play) { play.hidden = false; play.disabled = false; play.textContent = rematchLabel(); play.onclick = proposeRematch; }
+}
+
+function renderRematchWaiting(who) {
+  const { play, decline } = rematchControls();
+  if (decline) decline.hidden = true;
+  if (play) {
+    play.hidden = false;
+    play.disabled = false;
+    play.textContent = t("rematch.waiting", { who });
+    play.onclick = () => { send({ type: "rematch_decline" }); renderRematchIdle(); }; // ✕ cancels my own
+  }
+}
+
+function renderRematchPrompt(who) {
+  const { play, decline } = rematchControls();
+  if (play) { play.hidden = false; play.disabled = false; play.textContent = t("rematch.accept"); play.onclick = () => send({ type: "rematch_accept" }); }
+  if (decline) { decline.hidden = false; decline.textContent = t("rematch.decline"); decline.onclick = () => { send({ type: "rematch_decline" }); renderRematchIdle(); }; }
+  const eg = document.getElementById("endgameMsg");
+  if (eg && !eg.querySelector(".rematch-prompt")) {
+    eg.hidden = false;
+    const line = document.createElement("div");
+    line.className = "endgame-status rematch-prompt";
+    line.textContent = t("rematch.prompt", { who });
+    eg.prepend(line);
+  }
+}
+
+// A cancelled proposal: one friendly line keyed to reason, then fade Home (~2s).
+function settleRematchHome(reason, who) {
+  const key = reason === "timeout" ? "rematch.timeout" : reason === "left" ? "rematch.left" : "rematch.declined";
+  const { play, decline } = rematchControls();
+  if (decline) decline.hidden = true;
+  if (play) { play.disabled = true; play.textContent = t(key, { who }); }
+  clearTimeout(game.rematchSettleTimer);
+  game.rematchSettleTimer = setTimeout(() => {
+    game.rematchSettleTimer = null;
+    closeStats(); leaveRoom(); showHub();
+  }, 2000);
+}
+
+function openStats(opts = {}) {
+  const modal = $("#statsModal");
+  modal.hidden = false;
+  modal.removeAttribute("hidden");
+  // Stats are server-truth: the room reports every finished game to the player's
+  // User DO, so we fetch the profile rather than keep a parallel local tally.
+  // Async-fill the four boxes + distribution; the rest of the modal renders now.
+  fillStatsPanel(opts);
 
   const eg = $("#endgameMsg");
   eg.textContent = "";
   eg.className = "endgame";
-  // Your score is your gold. Headline the run's earnings + the running balance.
-  if (opts.justFinished) {
-    const goldLine = document.createElement("div");
-    goldLine.className = "endgame-gold";
-    goldLine.textContent = `◆ +${game.goldThisRound || 0} this game · ◆ ${getGold()} total`;
-    eg.appendChild(goldLine);
-    // Your run, line by line — the captured replay (client-side now; server viewer gated).
-    renderReplayInto(eg);
-  }
   if (opts.justFinished && opts.snap) {
     const snap = opts.snap;
     const winner = snap.winner; // winner username (string) or null
@@ -2294,14 +3225,24 @@ function openStats(opts = {}) {
     // word card below, so we never repeat "the word was X" here.
     const status = document.createElement("span");
     status.className = "endgame-status";
-    if (opts.joke) {
-      eg.classList.add("joke");
-      status.classList.add("roast");
-      status.textContent = `💀 ${opts.joke}`;
+    if (opts.inspire) {
+      eg.classList.add("inspire");
+      status.classList.add("inspire-line");
+      status.textContent = opts.inspire;
     } else if (opts.won && winner && winner === getUsername()) {
       status.textContent = t("endscreen.youWon", { n: opts.lastGuessCount });
     } else if (winner) {
-      status.textContent = t("endscreen.someoneWon", { who: winner });
+      const me = snap.players.find((p) => p.username === getUsername());
+      const kind = me ? lossKind({
+        status: me.status,
+        guessCount: me.guesses?.length ?? 0,
+        maxGuesses: snap.maxGuesses,
+        winner,
+        me: getUsername(),
+      }) : "exhausted";
+      status.textContent = kind === "outpaced"
+        ? t("endscreen.outpaced", { who: winner })
+        : t("endscreen.someoneWon", { who: winner });
     } else {
       status.textContent = t("endscreen.nobodyWon");
     }
@@ -2313,23 +3254,70 @@ function openStats(opts = {}) {
     eg.hidden = true;
   }
 
+  const finished = !!(game.snapshot && game.snapshot.phase === "finished");
+  // Arena games get the "keep playing the Arena" action set; everyone else keeps the
+  // plain Challenge + Play-again pair. .is-arena flips the CSS order so the buttons read
+  // Join next → Rematch → Create → Main menu → Challenge (DOM order stays friend-screen).
+  const arena = finished && game.fromArena === true;
+  const actions = document.querySelector(".modal-actions");
+  if (actions) actions.classList.toggle("is-arena", arena);
+
   const playAgain = $("#modalPlayAgain");
-  const snap = game.snapshot;
-  if (snap && snap.phase === "finished") {
+  if (finished) {
     playAgain.hidden = false;
-    playAgain.onclick = () => {
-      game.hasShownEndStats = false;
-      closeStats();
-      send({ type: "rematch" });
-    };
+    playAgain.onclick = proposeRematch;
+    // Reset to the plain idle state; hide any stale decline button from a prior prompt.
+    const stale = document.getElementById("rematchDecline");
+    if (stale) stale.hidden = true;
+    playAgain.textContent = rematchLabel(); // "Rematch" in the Arena, else "Play again"
+    playAgain.disabled = false;
   } else {
     playAgain.hidden = true;
   }
 
+  // The three Arena-only actions. Hidden (and inert) on every non-Arena end screen.
+  const joinNext = document.getElementById("modalJoinNext");
+  if (joinNext) { joinNext.hidden = !arena; joinNext.textContent = t("endscreen.joinNext"); joinNext.onclick = joinNextArena; }
+  const createGame = document.getElementById("modalCreateGame");
+  if (createGame) { createGame.hidden = !arena; createGame.textContent = t("endscreen.createGame"); createGame.onclick = hostPublicArena; }
+  const mainMenu = document.getElementById("modalMainMenu");
+  if (mainMenu) { mainMenu.hidden = !arena; mainMenu.textContent = t("endscreen.mainMenu"); mainMenu.onclick = backToMenu; }
+
   // Pre-render the share card now (modal open) so the Share click can fire
   // navigator.share synchronously — iOS rejects share() after an async toBlob.
-  prepareShareCard();
+  void prepareShareCard();
+
+  // Challenge end screen: show how I did vs the standing record (re-fetched fresh —
+  // my own run may have just set/beaten it). Cleared for non-challenge games.
+  const recEl = document.getElementById("challengeRecordLine");
+  if (recEl) recEl.textContent = "";
+  if (game.challengeId && recEl) {
+    const me = game.snapshot?.players.find((p) => p.username === getUsername());
+    const myScore = me?.status === "won" ? `${me.guesses.length}/${game.snapshot.maxGuesses}` : `X/${game.snapshot.maxGuesses}`;
+    fetch(`/api/challenge/${game.challengeId}/meta`).then((r) => r.json()).then((m) => {
+      const rec = m.record ? `Record: @${m.record.username} ${m.record.score}` : "You set the first record!";
+      const el = document.getElementById("challengeRecordLine");
+      if (el) el.textContent = `You: ${myScore} · ${rec}`;
+    }).catch(() => {});
+  }
+
   $("#modalShare").onclick = () => shareResult();
+  // The headline CTA: same share, explicit "throw down the gauntlet" framing.
+  const challengeBtn = $("#modalChallenge");
+  if (challengeBtn) challengeBtn.onclick = () => shareResult();
+
+  const urlEl = $("#shareUrl");
+  const copyBtn = $("#shareCopy");
+  const row = $(".share-row");
+  if (urlEl) urlEl.value = game.shareImage?.url ?? location.href;
+  if (row) row.classList.toggle("no-native", typeof navigator.share !== "function");
+  if (copyBtn) copyBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(game.shareImage?.url ?? location.href);
+      copyBtn.textContent = "✓ Copied"; copyBtn.classList.add("ok");
+      setTimeout(() => { copyBtn.textContent = "Copy"; copyBtn.classList.remove("ok"); }, 1600);
+    } catch { prompt("Copy this link:", game.shareImage?.url ?? location.href); }
+  };
 
   modal.addEventListener("click", onModalClick);
 }
@@ -2349,7 +3337,7 @@ function closeStats() {
 
 // Build the card and cache a PNG File so shareResult() can call navigator.share
 // synchronously inside the click gesture (iOS requirement). Called on modal open.
-function prepareShareCard() {
+async function prepareShareCard() {
   game.shareImage = null;
   const snap = game.snapshot;
   if (!snap || snap.phase !== "finished") return;
@@ -2359,23 +3347,48 @@ function prepareShareCard() {
   const maxG = snap.maxGuesses ?? 6;
   const won = me.status === "won";
   const score = won ? `${me.guesses.length}/${maxG}` : `X/${maxG}`;
-  const roomUrl = `${location.origin}/@${game.owner}/${game.slug}`;
-  const canvas = renderResultCanvas({
-    guesses: me.guesses || [],
-    won,
-    score,
-    cols: snap.wordLength ?? 5,
-    word: (snap.word || "").toUpperCase(),
-    shortUrl: roomUrl.replace(/^https?:\/\//, ""),
+
+  // Mint (or reuse) a challenge for THIS word so the card's CTA is a real replay link.
+  // If we arrived via a challenge link already, reuse that id (don't re-mint the same word).
+  let challengeId = game.challengeId;
+  if (!challengeId) {
+    try {
+      const res = await fetch("/api/challenge", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          word: (snap.word || "").toUpperCase(),
+          wordLength: snap.wordLength ?? 5,
+          owner: getUsername(),
+          ownerScore: score,
+          ownerGrid: (me.guesses || []).map((g) => g.mask),
+        }),
+      });
+      challengeId = (await res.json()).id;
+    } catch { /* offline / mint failed — fall back to the room link below */ }
+  }
+  const cardUrl = challengeId
+    ? `${location.origin}/c/${challengeId}`
+    : `${location.origin}/@${game.owner}/${game.slug}`;
+
+  // The card draws ONLY the color grid (no letters, no answer) — the model is the
+  // no-spoiler guarantee, unit-tested in test/share-card.test.js.
+  const model = buildShareCardModel({
+    username: getUsername(), guesses: me.guesses || [], won, score,
+    challengeUrl: cardUrl.replace(/^https?:\/\//, ""),
   });
+  const canvas = renderShareCard(model, snap.wordLength ?? 5);
   const text = won
     ? `Solved Wordul in ${score} — beat me?`
     : `Wordul got me. Your turn?`;
   // Sync essentials available immediately; the File arrives a tick later.
-  game.shareImage = { file: null, url: roomUrl, text, canvas };
+  game.shareImage = { file: null, url: cardUrl, text, canvas };
+  // The share row may have rendered before the mint resolved — backfill its URL field.
+  const urlEl = $("#shareUrl");
+  if (urlEl) urlEl.value = cardUrl;
   canvas.toBlob((blob) => {
     if (blob && game.shareImage && game.shareImage.canvas === canvas) {
-      game.shareImage.file = new File([blob], "wordle-race.png", { type: "image/png" });
+      game.shareImage.file = new File([blob], "wordul.png", { type: "image/png" });
     }
   }, "image/png");
 }
@@ -2385,7 +3398,10 @@ async function shareResult() {
   // Best: native share of the image card + room link.
   if (img?.file && navigator.canShare?.({ files: [img.file] })) {
     try {
-      await navigator.share({ files: [img.file], text: img.text, url: img.url });
+      // iOS Messages drops a standalone `url` when a file is attached — the only
+      // "link" left is the one painted into the PNG (not tappable). Fold the URL
+      // into the text so the message body carries a real, tappable link.
+      await navigator.share({ files: [img.file], text: `${img.text} ${img.url}` });
       return;
     } catch (e) {
       if (e && e.name === "AbortError") return;
@@ -2433,119 +3449,6 @@ function downloadCanvas(canvas, name) {
   a.remove();
 }
 
-// Draw the result card. Portrait, dark-themed to match the app; retina-sharp via dpr.
-function renderResultCanvas({ guesses, won, score, cols, word, shortUrl }) {
-  const dpr = 2;
-  const W = 560;
-  const P = 40;
-  const gap = 8;
-  const tile = Math.min(64, Math.floor((W - 2 * P - (cols - 1) * gap) / cols));
-  const gridW = cols * tile + (cols - 1) * gap;
-  const gridX = (W - gridW) / 2;
-  const rows = guesses.length;
-  const gridH = rows > 0 ? rows * tile + (rows - 1) * gap : 0;
-
-  const SEC = { header: 38, score: 46, word: word ? 30 : 0, cta: 64 };
-  const H = P + SEC.header + 22 + SEC.score + 24 + gridH
-    + (word ? 22 + SEC.word : 0) + 26 + SEC.cta + P;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-  const ctx = canvas.getContext("2d");
-  ctx.scale(dpr, dpr);
-  ctx.fillStyle = "#121213";
-  ctx.fillRect(0, 0, W, H);
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
-  let cy = P;
-
-  // Header: WORDLE ● RACE
-  drawHeader(ctx, W / 2, cy + SEC.header / 2, FONT);
-  cy += SEC.header + 22;
-
-  // Score line
-  ctx.font = `800 36px ${FONT}`;
-  ctx.fillStyle = won ? "#538d4e" : "#a6a6a8";
-  ctx.fillText(won ? `Solved in ${score}` : `Stumped · ${score}`, W / 2, cy + SEC.score / 2);
-  cy += SEC.score + 24;
-
-  // Grid of guesses
-  const COLORS = { green: "#538d4e", yellow: "#b59f3b", gray: "#565758" };
-  let gy = cy;
-  for (let r = 0; r < rows; r++) {
-    const g = guesses[r];
-    for (let c = 0; c < cols; c++) {
-      const x = gridX + c * (tile + gap);
-      roundRect(ctx, x, gy, tile, tile, 6);
-      ctx.fillStyle = COLORS[g.mask[c]] || "#3a3a3c";
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.font = `800 ${Math.floor(tile * 0.5)}px ${FONT}`;
-      ctx.fillText((g.word[c] || "").toUpperCase(), x + tile / 2, gy + tile / 2 + 1);
-    }
-    gy += tile + gap;
-  }
-  cy += gridH;
-
-  // The word
-  if (word) {
-    cy += 22;
-    ctx.font = `600 23px ${FONT}`;
-    ctx.fillStyle = "#bdbdbf";
-    ctx.fillText(`The word: ${word}`, W / 2, cy + SEC.word / 2);
-    cy += SEC.word;
-  }
-
-  // CTA pill: "Beat my score →" + link
-  cy += 26;
-  roundRect(ctx, P, cy, W - 2 * P, SEC.cta, 12);
-  ctx.fillStyle = "#538d4e";
-  ctx.fill();
-  ctx.fillStyle = "#fff";
-  ctx.font = `800 22px ${FONT}`;
-  ctx.fillText("Beat my score →", W / 2, cy + SEC.cta / 2 - 11);
-  ctx.font = `600 18px ${FONT}`;
-  ctx.fillText(shortUrl, W / 2, cy + SEC.cta / 2 + 13);
-
-  return canvas;
-}
-
-function drawHeader(ctx, cx, cy, font) {
-  ctx.font = `800 30px ${font}`;
-  const left = "WORDLE";
-  const right = "RACE";
-  const lw = ctx.measureText(left).width;
-  const rw = ctx.measureText(right).width;
-  const dot = 14;
-  const sp = 12;
-  const total = lw + sp + dot + sp + rw;
-  let x = cx - total / 2;
-  ctx.textAlign = "left";
-  ctx.fillStyle = "#fff";
-  ctx.fillText(left, x, cy);
-  x += lw + sp;
-  ctx.fillStyle = "#538d4e";
-  ctx.beginPath();
-  ctx.arc(x + dot / 2, cy, dot / 2, 0, Math.PI * 2);
-  ctx.fill();
-  x += dot + sp;
-  ctx.fillStyle = "#fff";
-  ctx.fillText(right, x, cy);
-  ctx.textAlign = "center";
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
 
 // --- top-level UI wiring ---
 document.addEventListener("DOMContentLoaded", () => {
@@ -2558,6 +3461,9 @@ document.addEventListener("DOMContentLoaded", () => {
     syncAvatar();
     avatarBtn.addEventListener("click", () => showHub(avatarBtn));
   }
+  // Clicking the logo always takes you home — the universal escape hatch.
+  const brandBtn = $("#brandBtn");
+  if (brandBtn) brandBtn.addEventListener("click", () => navigate("/"));
   // Global physical-keyboard handler — drives type-to-start on home/lobby and typing in-game.
   document.addEventListener("keydown", onPhysicalKey);
   route();
@@ -2577,7 +3483,11 @@ function syncAvatar() {
 // settings.js owns the modal chrome (chevron sections, toggle persistence, close);
 // app.js only supplies callbacks for state it owns (game.snapshot, render, stats).
 function showSettings() {
+  const snap = game.snapshot;
   openSettings({
+    inRoom: !!snap,
+    // Mount the room's word-length picker into the gear's "Room" section (in a room only).
+    mountRoomLength: snap ? () => syncLengthSelect(snap) : null,
     onChange: () => { if (game.snapshot) render(); },
     renderEditionPicker,
     // Theme is bound to the room: picking sends set_edition so the server rethemes
@@ -2586,7 +3496,6 @@ function showSettings() {
     onEditionPick: (id) => send({ type: "set_edition", edition: id }),
     editionLocked: game.snapshot?.phase === "playing",
     toast: (t, o) => toast(t, o),
-    resetStats: () => saveStats({ ...DEFAULT_STATS, distribution: { ...DEFAULT_STATS.distribution } }),
     // Mount the keyboard layout picker into the Advanced section. Owning the
     // save → rebuild → re-render here keeps settings.js free of a keyboard import
     // (keyboard.js imports settings.js, not the reverse — no cycle).
@@ -2629,14 +3538,47 @@ function toggleMute() {
 
 // Tear down any live room connection when leaving a room view.
 function leaveRoom() {
+  if (game.rematchSettleTimer) { clearTimeout(game.rematchSettleTimer); game.rematchSettleTimer = null; }
   stopHeartbeat();
+  game.challengeId = null;
+  game.challengeMeta = null;
   clearPayoutTimers(); // cancel any pending payout/drain so it can't fire off-screen + mutate gold
-  if (game.ws) {
-    try { game.ws.onclose = null; game.ws.close(); } catch {}
+  clearTimeout(game.reconnectToastTimer);
+  game.reconnectToastTimer = null;
+  clearTimeout(game.reconnectTimer);
+  game.reconnectTimer = null;
+  if (game.socketSession) {
+    game.socketSession.reconnect = false;
+    const ws = game.socketSession.ws;
+    game.socketSession = null;
     game.ws = null;
+    try { ws.close(); } catch {}
   }
   clearHeaderIdentity(); // drop the in-room username + gold from the topbar header
   document.body.classList.remove("playing"); // restore full chrome outside a room
+  document.body.classList.remove("daily");
+  game.isDaily = false; game.dailyDate = null;
+}
+
+// The archive: every past day as a clickable list (data from /api/daily/dates).
+async function showDailyArchive() {
+  leaveRoom();
+  mount("tpl-profile");
+  const back = $("#profileBack"); if (back) back.onclick = (e) => { e.preventDefault(); navigate("/"); };
+  document.title = "Wordul Daily — Archive";
+  const mountEl = $("#profileMount");
+  if (mountEl) mountEl.innerHTML = `<h1>${t("daily.archiveTitle")}</h1><ul class="daily-archive-list" id="dailyArchiveList"></ul>`;
+  try {
+    const res = await fetch("/api/daily/dates");
+    const { dates } = res.ok ? await res.json() : { dates: [] };
+    const list = $("#dailyArchiveList");
+    if (list) for (const d of dates.slice().reverse()) {
+      const li = document.createElement("li");
+      const a = document.createElement("a"); a.href = `/daily/${d}`; a.textContent = d; a.className = "link";
+      a.addEventListener("click", (e) => { e.preventDefault(); navigate(`/daily/${d}`); });
+      li.appendChild(a); list.appendChild(li);
+    }
+  } catch { /* empty archive degrades to just the heading */ }
 }
 
 function showProfile(username) {
@@ -2650,8 +3592,57 @@ function showProfile(username) {
   renderProfile(username, $("#profileMount"));
 }
 
+// Breadcrumb trail under the brand — the one place that always knows "where am I".
+// Home shows nothing (the brand alone is enough); rooms/profiles show a clickable
+// "Home › <here>" so you can never get stranded deep in the app.
+function renderCrumbs(r) {
+  const nav = $("#crumbs");
+  if (!nav) return;
+  if (r.kind === "home") {
+    nav.hidden = true;
+    nav.innerHTML = "";
+    return;
+  }
+  const here =
+    r.kind === "room" ? r.slug.replace(/-/g, " ")
+    : r.kind === "challenge" ? "challenge"
+    : r.kind === "daily" ? "Daily"
+    : r.kind === "daily-stats" ? "Stats"
+    : r.kind === "daily-archive" ? "Archive"
+    : r.kind === "feed" ? "Lab"
+    : r.kind === "feed-post" ? "Lab · " + r.date
+    : `@${r.username}`;
+  nav.hidden = false;
+  nav.innerHTML = "";
+  const home = document.createElement("button");
+  home.type = "button";
+  home.className = "crumb crumb-link";
+  home.textContent = "Home";
+  home.addEventListener("click", () => navigate("/"));
+  const sep = document.createElement("span");
+  sep.className = "crumb-sep";
+  sep.setAttribute("aria-hidden", "true");
+  sep.textContent = "›";
+  const cur = document.createElement("span");
+  cur.className = "crumb crumb-current";
+  cur.setAttribute("aria-current", "page");
+  cur.textContent = here;
+  nav.append(home, sep, cur);
+}
+
 function route() {
+  stopArenaPoll(); // leaving the in-place Arena view (incl. browser Back / popstate) kills its poll
   const r = parseRoute();
+  renderCrumbs(r);
+  if (r.kind === "challenge") {
+    showChallenge(r.id);
+    return;
+  }
+  if (r.kind === "daily") { showDaily(r.date); return; }
+  if (r.kind === "daily-stats") { showDailyStats(r.date); return; }
+  if (r.kind === "daily-archive") { showDailyArchive(); return; }
+  if (r.kind === "feed") { showFeed(); return; }
+  if (r.kind === "feed-post") { showFeedPost(r.date); return; }
   if (r.kind === "room") {
     if (getUsername()) {
       showRoom(r.owner, r.slug);

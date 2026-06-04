@@ -1,5 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { buildGameRecords } from "../src/records.ts";
+import { buildGameRecords, encodeSolveGrid } from "../src/records.ts";
+
+describe("encodeSolveGrid", () => {
+  it("encodes each guess mask as a g/y/x row string", () => {
+    const grid = encodeSolveGrid([
+      { mask: ["gray", "yellow", "gray", "gray", "green"] },
+      { mask: ["green", "green", "green", "green", "green"] },
+    ]);
+    expect(grid).toEqual(["xyxxg", "ggggg"]);
+  });
+
+  it("returns an empty array for no rows", () => {
+    expect(encodeSolveGrid([])).toEqual([]);
+  });
+});
 
 describe("buildGameRecords", () => {
   it("builds one personalized record per player with the others as opponents", () => {

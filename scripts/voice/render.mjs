@@ -38,10 +38,29 @@ if (!existsSync(GV_EXPORT)) {
 
 mkdirSync(OUT_DIR, { recursive: true });
 
-// All companion lines, deduped. Skip lines with a {token}: their word is dynamic
-// at runtime and can't be pre-rendered — they fall back to speechSynthesis.
-const lines = [...new Set(Object.values(edition.companion.lines).flat())]
-  .filter((l) => !l.includes("{"));
+// Walk the (now nested) line banks into a flat list of strings.
+function collectLines(node, out = []) {
+  if (typeof node === "string") out.push(node);
+  else if (Array.isArray(node)) for (const n of node) collectLines(n, out);
+  else if (node && typeof node === "object") for (const n of Object.values(node)) collectLines(n, out);
+  return out;
+}
+
+// Static lines render whole. Templated lines ("... {answer} ...") render their
+// non-empty segments instead, so the cloned-voice frame is pre-recorded while the
+// answer word is spoken live by the robotic browser voice at runtime.
+const TOKEN = "{answer}";
+const segments = new Set();
+for (const line of new Set(collectLines(edition.companion.lines))) {
+  const idx = line.indexOf(TOKEN);
+  if (!line.includes("{")) { segments.add(line); continue; }
+  if (idx === -1) continue; // an unknown token we can't pre-render — skip
+  const pre = line.slice(0, idx).trim();
+  const suf = line.slice(idx + TOKEN.length).trim();
+  if (pre) segments.add(pre);
+  if (suf) segments.add(suf);
+}
+const lines = [...segments];
 
 const manifest = existsSync(MANIFEST) ? JSON.parse(readFileSync(MANIFEST, "utf8")) : {};
 

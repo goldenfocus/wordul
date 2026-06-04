@@ -17,21 +17,34 @@ body.howto { overflow-y: auto; height: auto; }
 .howto-hero h1 { font-size: clamp(1.8rem, 6vw, 2.6rem); margin: 0 0 0.5rem; }
 .howto-lede { font-size: 1.05rem; color: var(--muted, #b8b8bd); max-width: 36rem; margin: 0 auto 1.5rem; }
 .howto-lede em { color: var(--green); font-style: normal; font-weight: 600; }
+.howto-lingo { max-width: 32rem; margin: 0 auto 1.25rem; }
+.howto-lingo .pos { font-style: italic; opacity: 0.7; margin: 0 0.15rem; }
 
 .howto-section { padding: 1.75rem 0; border-top: 1px solid var(--border, #2a2a2e); }
 .howto-section h2 { font-size: 1.4rem; margin: 0 0 0.75rem; }
 .howto-section h3 { font-size: 1rem; margin: 0 0 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
 
-/* Demo boards — center them and size the tiles down a touch from the live game. */
-.howto-demo { display: flex; justify-content: center; margin: 1.25rem 0 0.5rem; min-height: 60px; }
-.howto-board { --tile-size: 44px; }
+/* Demo boards — centered; tiles size responsively so a 7-letter word still fits a
+   narrow phone (4–12 length range means the board width varies). */
+.howto-demo {
+  display: flex; flex-direction: column; align-items: center;
+  margin: 1.25rem 0 0.5rem; min-height: 190px;
+}
 .howto-board .grid-row { display: flex; gap: 5px; justify-content: center; margin-bottom: 5px; }
 .howto-board .tile {
-  width: var(--tile-size); height: var(--tile-size);
+  width: clamp(30px, 9vw, 46px); height: clamp(30px, 9vw, 46px);
   display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 1.4rem; text-transform: uppercase;
+  font-weight: 700; font-size: clamp(1rem, 4.2vw, 1.5rem); text-transform: uppercase;
   border: 2px solid var(--border, #3a3a3e); border-radius: 4px;
 }
+
+/* End card — the "what happens after you solve" moment. */
+.howto-endcard { text-align: center; margin-top: 0.9rem; animation: howto-fade 0.3s ease-out; }
+.howto-endcard-word { font-weight: 800; letter-spacing: 0.18em; font-size: 1.15rem; }
+.howto-endcard-vibe { color: var(--muted, #b8b8bd); font-size: 0.95rem; margin: 0.25rem 0 0.45rem; }
+.howto-endcard-link { font-size: 0.9rem; }
+@keyframes howto-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .howto-endcard { animation: none; } }
 
 /* Legend tiles (tappable). */
 .howto-legend { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
@@ -42,6 +55,11 @@ body.howto { overflow-y: auto; height: auto; }
   font-weight: 700; border: 2px solid var(--border, #3a3a3e); border-radius: 4px;
   cursor: pointer; user-select: none;
 }
+
+/* Inline tile-state swatches, matching the live board (Hot = the precious). */
+.sw { display:inline-block; width:0.85em; height:0.85em; border-radius:3px; vertical-align:-1px; margin-right:0.15em; }
+.sw-hot { background:linear-gradient(135deg,#ffe7a3,#e9b23d 55%,#a87a1f); box-shadow:0 0 6px rgba(233,178,61,.5),0 0 5px rgba(47,209,122,.35); }
+.sw-warm { background:rgba(216,201,122,.12); border:1px solid #d8c97a; box-shadow:0 0 5px rgba(207,214,227,.5); }
 
 /* Gold earn/lose cards. */
 .howto-cards { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; }

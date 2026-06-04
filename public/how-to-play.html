@@ -4,16 +4,24 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>How to Play Wordul — rules, gold, power-ups & the live race</title>
-<meta name="description" content="How Wordul works: green/yellow/gray rules, the gold economy, ✨ power-ups, 💀 give-up, and the live race where everyone solves the same word at once. Watch it play, then jump in." />
+<meta name="description" content="How Wordul works: Hot / Warm / Cold rules, the gold economy, ✨ power-ups, 💀 give-up, and the live race where everyone solves the same word at once. Watch it play, then jump in." />
 <link rel="canonical" href="https://wordul.com/how-to-play" />
 <meta property="og:title" content="How to Play Wordul" />
-<meta property="og:description" content="Green, yellow, gray — plus gold, power-ups, and a live race on the same word. Here's the whole game in two minutes." />
+<meta property="og:description" content="Hot, Warm, Cold — plus gold, power-ups, and a live race on the same word. Here's the whole game in two minutes." />
 <meta property="og:url" content="https://wordul.com/how-to-play" />
 <meta property="og:image" content="/og.png" />
 <meta property="og:type" content="article" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="theme-color" content="#0e0e10" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23538d4e'/%3E%3Ctext x='50%25' y='52%25' text-anchor='middle' dominant-baseline='middle' fill='white' font-family='system-ui,sans-serif' font-weight='800' font-size='40'%3EW%3C/text%3E%3C/svg%3E" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<script>
+  // Match the player's chosen edition (default = Obsidian) so the demo tiles look
+  // exactly like their live board. Set before first paint to avoid a theme flash.
+  try {
+    document.documentElement.dataset.edition =
+      localStorage.getItem("wordul.edition") || "default";
+  } catch (e) {}
+</script>
 <link rel="stylesheet" href="/style.css" />
 <link rel="stylesheet" href="/howto.css" />
 <script type="application/ld+json">
@@ -23,11 +31,11 @@
     {
       "@type": "HowTo",
       "name": "How to play Wordul",
-      "description": "Wordul is a real-time multiplayer Wordle: everyone races the same secret word, earns gold for progress, and spends it on power-ups.",
+      "description": "Wordul is a real-time multiplayer word game: wordulers race the same secret word, earn gold for progress, and spend it on power-ups.",
       "step": [
-        { "@type": "HowToStep", "name": "Guess the word", "text": "You get 6 tries. After each guess, tiles turn green (right letter, right spot), yellow (right letter, wrong spot), or gray (not in the word)." },
+        { "@type": "HowToStep", "name": "Guess the word", "text": "You get 6 tries. After each guess, tiles turn Hot (right letter, right spot — it glows gold), Warm (right letter, wrong spot), or Cold (not in the word)." },
         { "@type": "HowToStep", "name": "Race your friends", "text": "Everyone in the room solves the same secret word at the same time. First to solve wins the round; everyone else finishes for their own gold." },
-        { "@type": "HowToStep", "name": "Earn gold", "text": "Every green, yellow, and solve pays gold, with combo multipliers for uncovering several letters at once." },
+        { "@type": "HowToStep", "name": "Earn gold", "text": "Every Hot and Warm letter and every solve pays gold, with combo multipliers for uncovering several letters at once." },
         { "@type": "HowToStep", "name": "Spend on power-ups", "text": "Tap ✨ to reveal a letter or count the vowels — gold is precious, so spend wisely." }
       ]
     },
@@ -36,18 +44,18 @@
       "mainEntity": [
         {
           "@type": "Question",
-          "name": "How is Wordul different from regular Wordle?",
+          "name": "How is Wordul different from other word games?",
           "acceptedAnswer": { "@type": "Answer", "text": "Wordul is multiplayer and live. Everyone in a room races the same secret word at the same time, earns gold for progress, and can spend it on power-ups. There's a running scoreboard and public profiles." }
         },
         {
           "@type": "Question",
-          "name": "What do the colors mean?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Green means the right letter in the right spot. Yellow means the right letter in the wrong spot. Gray means that letter isn't in the word (or there are no more of it — duplicates count exactly)." }
+          "name": "What do the tiles mean?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Hot (gold) means the right letter in the right spot. Warm means the right letter in the wrong spot. Cold means that letter isn't in the word (or there are no more of it — duplicates count exactly)." }
         },
         {
           "@type": "Question",
           "name": "What is gold?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Gold is the universal score. You earn it for every green, yellow, and solve, and lose a little for sloppy guesses. You spend it on power-ups like revealing a letter (4000) or counting the vowels (200)." }
+          "acceptedAnswer": { "@type": "Answer", "text": "Gold is the universal score. You earn it for every Hot and Warm letter and every solve, and lose a little for sloppy guesses. You spend it on power-ups like revealing a letter (4000) or counting the vowels (200)." }
         },
         {
           "@type": "Question",
@@ -70,17 +78,18 @@
 
   <section class="howto-hero">
     <h1>How Wordul works</h1>
-    <p class="howto-lede">It's Wordle, but everyone in the room is sweating the <em>same</em> secret word at the <em>same</em> time — and every green you uncover rains gold. Here's the whole game in two minutes. (Watch it play. Yes, it's really running.)</p>
-    <div class="howto-demo" data-demo data-answer="REACT" data-guesses="SLATE|TRACE|REACT" aria-hidden="true"></div>
+    <p class="howto-lede">It's <strong>worduling</strong>: everyone in the room sweats the <em>same</em> secret word at the <em>same</em> time — and every letter you turn gold rains gold. Here's the whole game in two minutes. (Watch it play. Yes, it's really running.)</p>
+    <p class="howto-lingo muted small"><strong>wordul</strong> <span class="pos">verb</span> — to race friends on the same word. <strong>worduler</strong> <span class="pos">noun</span> — one who worduls. You're about to become one.</p>
+    <div class="howto-demo" data-demo data-end aria-hidden="true"></div>
   </section>
 
   <section class="howto-section">
     <h2>1. The basics</h2>
     <p>Guess the hidden word in <strong>6 tries</strong>. Words run from <strong>4 to 12 letters</strong> (set per room). After each guess, every tile tells you something:</p>
     <ul class="howto-legend">
-      <li><span class="tile small" data-flip="green">A</span> <strong>Green</strong> — right letter, right spot.</li>
-      <li><span class="tile small" data-flip="yellow">B</span> <strong>Yellow</strong> — right letter, wrong spot.</li>
-      <li><span class="tile small" data-flip="gray">C</span> <strong>Gray</strong> — not in the word (tap a tile to flip it).</li>
+      <li><span class="tile small" data-flip="green">H</span> <strong>Hot</strong> — right letter, right spot. (It turns gold — that's a keeper.)</li>
+      <li><span class="tile small" data-flip="yellow">W</span> <strong>Warm</strong> — right letter, wrong spot.</li>
+      <li><span class="tile small" data-flip="gray">C</span> <strong>Cold</strong> — not in the word (tap a tile to flip it).</li>
     </ul>
     <p class="muted small">A guess has to be a real word or it bounces back — and a bounce costs you no guess.</p>
   </section>
@@ -88,7 +97,7 @@
   <section class="howto-section">
     <h2>2. It's a race 🏁</h2>
     <p>Everyone in a room solves the <strong>same secret word at the same time</strong>. You watch opponents' rows fill in live — their colors, never their letters. <strong>First to solve wins the round</strong>, but the race doesn't stop there: everyone keeps playing to finish and bank their own gold.</p>
-    <div class="howto-demo" data-demo data-answer="MONEY" data-guesses="ARISE|NOTED|MONEY" aria-hidden="true"></div>
+    <div class="howto-demo" data-demo aria-hidden="true"></div>
   </section>
 
   <section class="howto-section">
@@ -98,8 +107,8 @@
       <div class="howto-card earn">
         <h3>Earn</h3>
         <ul>
-          <li>Each new 🟩 green — <strong>+100</strong></li>
-          <li>Each new 🟨 yellow — <strong>+50</strong></li>
+          <li>Each new <span class="sw sw-hot"></span> Hot — <strong>+100</strong> <span class="muted small">(the precious)</span></li>
+          <li>Each new <span class="sw sw-warm"></span> Warm — <strong>+50</strong></li>
           <li>Solving the word — <strong>+500</strong></li>
           <li>Speed bonus — <strong>+300 × guesses left</strong></li>
         </ul>
@@ -128,7 +137,7 @@
 
   <section class="howto-section">
     <h2>5. Editions 🎨</h2>
-    <p>Reskin the whole game. <strong>Wordul</strong> (default), <strong>Editorial</strong>, <strong>Yang's Table</strong> (with a cloned-voice companion who reacts as you play), <strong>Tactile</strong>, <strong>Arcade</strong>, and <strong>Jackpot</strong>. Editions are pure vibe — the rules hold across all of them. Pick one in the lobby or in Settings.</p>
+    <p>Reskin the whole game. <strong>Wordul</strong> (default), <strong>Editorial</strong>, <strong>Yang's Table</strong> (with a cloned-voice companion who reacts as you play), <strong>Tactile</strong>, <strong>Arcade</strong>, <strong>Jackpot</strong>, and <strong>Tin Bot</strong> (a 1950s wind-up pal — the one light theme, with a companion named Sprocket). Editions are pure vibe — the rules hold across all of them. Pick one in the lobby or in Settings.</p>
   </section>
 
   <section class="howto-section howto-vision">
@@ -140,7 +149,7 @@
   <section class="howto-section howto-faq">
     <h2>FAQ</h2>
     <details>
-      <summary>How is Wordul different from regular Wordle?</summary>
+      <summary>How is Wordul different from other word games?</summary>
       <p>It's multiplayer and live. Everyone races the same secret word at once, earns gold, spends it on power-ups, and climbs a shared scoreboard.</p>
     </details>
     <details>
@@ -159,7 +168,7 @@
 
   <section class="howto-cta">
     <h2>Ready?</h2>
-    <p>Pick a username, share a link, go. First across the line wins. 🟩</p>
+    <p>Pick a username, share a link, go. First across the line wins. ✨</p>
     <a href="/" class="btn primary block">▶ Start playing</a>
   </section>
 

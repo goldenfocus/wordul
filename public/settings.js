@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS = {
   hardMode: false,
   colorBlind: false,
   reducedMotion: false,
+  communityScience: true,
   // "auto" = detect from browser/OS locale (fr-* → AZERTY) until the player picks
   // explicitly in settings; an explicit pick is persisted and always wins.
   keyboardLayout: "auto",
@@ -62,24 +63,33 @@ function wireSectionToggles(modal) {
   });
 }
 
-// openSettings({ onChange, mountLayoutPicker, renderEditionPicker, resetStats })
+// openSettings({ onChange, mountLayoutPicker, renderEditionPicker })
 //  - onChange()           re-applies the live board after a toggle/theme change (the
 //                         orchestrator wires this to `() => { if (game.snapshot) render(); }`).
 //  - mountLayoutPicker(el) lets the orchestrator (or keyboard.js) render the layout
 //                         picker into the Advanced section — avoids a settings↔keyboard cycle.
 //  - renderEditionPicker(el, onPick) the edition.js theme picker (re-imported by the caller).
-//  - resetStats()         wipes local stats (lives in app.js).
 //  - toast(text, opts)    optional feedback channel (app.js owns the toast UI).
-export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker, onEditionPick, editionLocked, resetStats, toast } = {}) {
+export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker, onEditionPick, editionLocked, toast, inRoom, mountRoomLength } = {}) {
   const modal = document.getElementById("settingsModal");
   if (!modal) return;
   const s = getSettings();
+
+  // Room section (word length) only exists inside a room — the orchestrator owns the
+  // select's options/sync/set_length via mountRoomLength; we just gate its visibility.
+  const roomSection = document.getElementById("roomSettingsSection");
+  if (roomSection) {
+    roomSection.hidden = !inRoom;
+    if (inRoom) mountRoomLength?.();
+  }
   const hm = document.getElementById("setHardMode");
   const cb = document.getElementById("setColorBlind");
   const rm = document.getElementById("setReducedMotion");
+  const cs = document.getElementById("setCommunityScience");
   if (hm) hm.checked = s.hardMode;
   if (cb) cb.checked = s.colorBlind;
   if (rm) rm.checked = s.reducedMotion;
+  if (cs) cs.checked = s.communityScience;
 
   // Wire toggles every open (idempotent — replace old listeners by cloning so a
   // re-open never stacks duplicate change handlers that double-fire).
@@ -97,6 +107,7 @@ export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker,
   wire(hm, "hardMode");
   wire(cb, "colorBlind");
   wire(rm, "reducedMotion");
+  wire(cs, "communityScience");
 
   // Theme/edition picker. The theme is bound to the room, so a pick re-applies settings
   // locally AND notifies the caller (onEditionPick → set_edition for everyone). Locked
@@ -115,15 +126,6 @@ export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker,
   // save → rebuild → re-render; we just hand it the mount element.
   const layoutPicker = document.getElementById("layoutPicker");
   if (layoutPicker && mountLayoutPicker) mountLayoutPicker(layoutPicker);
-
-  const reset = document.getElementById("resetStatsBtn");
-  if (reset) {
-    reset.onclick = () => {
-      if (!confirm("Wipe all your stats? This can't be undone.")) return;
-      resetStats?.();
-      toast?.("Stats reset", { duration: 1200 });
-    };
-  }
 
   wireSectionToggles(modal);
 

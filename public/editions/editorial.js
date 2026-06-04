@@ -47,6 +47,11 @@ export const edition = {
         "The story got away: {answer}.",
         "Out of column inches. Answer: {answer}.",
       ],
+      wipe: [
+        "Spiked the draft. Start the lede again.",
+        "Cleared the copy. Rewrite from the top.",
+        "Blank page, fresh angle. Go.",
+      ],
       idle: [
         "The page is blank. Awaiting your byline.",
         "Deadline's patient. For now.",

@@ -1,11 +1,27 @@
 import { DurableObject } from "cloudflare:workers";
 import { WORDS_BY_SIZE, isSupportedSize } from "./wordsbysize.ts";
-import { scoreGuess, countVowels, revealUngreened } from "./color.ts";
+import { scoreGuess, countVowels, revealUngreened, type Color } from "./color.ts";
 import { computeNextGuess } from "./solver.ts";
+import { noobGuess, mistakeRateFor } from "./noob.ts";
+import { projectPlayerForClient } from "./bots.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
-import { buildGameRecords, summarizeRoomGame } from "./records.ts";
+import { buildGameRecords, summarizeRoomGame, encodeSolveGrid } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
+import { pointsEarned, goldFromPoints, POINTS } from "./economy.ts";
+import { topDaily } from "./leaderboard-core.ts";
 import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
+import { activeDate } from "./daily-core.ts";
+import { countMask, maskToPattern, type ScienceBaseEvent, type ScienceEvent, type ScienceOutcome, type ScienceRoomKind } from "./science.ts";
+import {
+  outpacedLosers,
+  rematchReduce,
+  nextAlarmAt,
+  botAccepts,
+  REMATCH_TIMEOUT_MS,
+  BOT_REMATCH_MIN_MS,
+  BOT_REMATCH_MAX_MS,
+  type RematchEffect,
+} from "./room-core.ts";
 import type { RoomMode } from "./modes.ts";
 import type {
   ChatEntry,
@@ -28,6 +44,25 @@ const CHAT_THROTTLE_MS = 800;
 const ROBOT_SLUG = "robots";
 const BOT_NAME = "clanker";
 
+// ARENA → ROOM POST /seed body (canonical contract). `path` is the DO-key form
+// "arena/<personaId>-<seedCount>"; the persona is injected with a human-looking username.
+type SeedBody = {
+  path: string;
+  persona: { id: string; name: string; avatar: string };
+  profile: "noob";
+  edition: string;
+  wordLength: number;
+};
+
+// Wordul of the Day: a flat gold goody on completion, on top of the score-based mint.
+const DAILY_GOLD_BONUS = 100; // ← tune to taste (1 gold ≈ 100 points)
+
+// A room whose canonical path is daily/<YYYY-MM-DD> is the day's puzzle.
+function dailyDateOf(path: string): string | null {
+  const m = /^daily\/(\d{4}-\d{2}-\d{2})$/.exec(path ?? "");
+  return m ? m[1] : null;
+}
+
 // Normalize a client-supplied edition id to the charset edition ids use (lowercase
 // kebab). Empty/garbage collapses to "default". Not a whitelist — the client falls
 // back to the default theme for any id it doesn't recognize.
@@ -37,7 +72,7 @@ function sanitizeEdition(raw: string): string {
 }
 
 function guessesFor(length: number): number {
-  // length+1 preserves the Wordle 5/6 feel for short words (4→5, 5→6, 6→7, 7→8),
+  // length+1 preserves the classic 5/6 feel for short words (4→5, 5→6, 6→7, 7→8),
   // then plateaus at 8. Longer words convey more info per guess, so we don't
   // actually need 13 rows for a 12-letter board — it just looks intimidating.
   return Math.min(length + 1, 8);
@@ -69,6 +104,9 @@ export class Room extends DurableObject<Env> {
       scoreboard: [],
       history: [],
       edition: "default",
+      isDaily: false,
+      story: null,
+      challengeId: null,
     };
     // Async restore — DO ctor can't await, so we kick it off and gate writes via blockConcurrencyWhile.
     ctx.blockConcurrencyWhile(async () => {
@@ -81,6 +119,14 @@ export class Room extends DurableObject<Env> {
         if (!restored.maxGuesses) restored.maxGuesses = guessesFor(restored.wordLength);
         if (!restored.mode) restored.mode = DEFAULT_MODE;
         if (!restored.edition) restored.edition = "default"; // pre-theme rooms
+        if (restored.isDaily === undefined) restored.isDaily = false;
+        for (const p of restored.players) {
+          if (typeof p.points !== "number") p.points = 0;
+          if (typeof p.pointsSpent !== "number") p.pointsSpent = 0;
+          if (typeof p.revealHints !== "number") p.revealHints = 0;
+          if (typeof p.vowelHints !== "number") p.vowelHints = 0;
+          if (typeof p.scienceOptOut !== "boolean") p.scienceOptOut = false;
+        }
         this.state = restored;
       }
     });
@@ -88,8 +134,15 @@ export class Room extends DurableObject<Env> {
 
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
+    // Server-to-server seed: ARENA mints a room BEFORE any human connects. POST-only and
+    // matched before /ws so a seeded room exists, registered + waiting, on first GET /ws.
+    if (req.method === "POST" && url.pathname.endsWith("/seed")) {
+      return this.handleSeed(req);
+    }
     if (url.pathname.endsWith("/ws")) {
       const path = url.searchParams.get("room") ?? "";
+      const challengeId = url.searchParams.get("challenge");
+      if (challengeId && !this.state.challengeId) this.state.challengeId = challengeId;
       if (this.state.path === "") {
         this.state.path = path;
         const [owner, slug] = path.split("/");
@@ -102,7 +155,48 @@ export class Room extends DurableObject<Env> {
       }
       return this.handleUpgrade(req);
     }
+    // Read-only daily leaderboard: top N by gold + the caller's own rank. No socket,
+    // no mutation — just a sort over the players already persisted in state.
+    if (req.method === "GET" && url.pathname.endsWith("/leaderboard")) {
+      const username = (url.searchParams.get("username") ?? "").toLowerCase().trim();
+      const n = Number(url.searchParams.get("n") ?? "3");
+      const players = this.state.players.map((p) => ({
+        username: p.username,
+        guessCount: p.guesses.length,
+        won: p.status === "won",
+        isBot: p.isBot,
+        goldAwarded: p.goldAwarded,
+      }));
+      return Response.json(topDaily(players, username, n));
+    }
     return new Response("not found", { status: 404 });
+  }
+
+  // Initialize a seeded (bot-hosted) room: stamp identity exactly as the /ws block does,
+  // mark it seeded, and inject the persona as a silent waiting player. Idempotent — a
+  // re-seed of an already-seeded room just acks. The room auto-starts when a human joins.
+  private async handleSeed(req: Request): Promise<Response> {
+    const b = (await req.json().catch(() => null)) as SeedBody | null;
+    if (!b?.path || !b.persona?.id || b.profile !== "noob") {
+      return new Response("bad request", { status: 400 });
+    }
+    if (this.state.seed) return Response.json({ ok: true }); // already seeded
+    if (this.state.path === "") {
+      this.state.path = b.path;
+      const [owner, slug] = b.path.split("/");
+      this.state.owner = owner ?? "";
+      this.state.slug = slug ?? "";
+      this.state.name = `${b.persona.name}'s room`;
+    }
+    this.state.seed = { personaId: b.persona.id, profile: b.profile };
+    this.state.edition = sanitizeEdition(b.edition);
+    if (isSupportedSize(b.wordLength)) {
+      this.state.wordLength = b.wordLength;
+      this.state.maxGuesses = guessesFor(b.wordLength);
+    }
+    this.ensureBot(b.persona);
+    await this.persistAndBroadcast();
+    return Response.json({ ok: true });
   }
 
   private async handleUpgrade(req: Request): Promise<Response> {
@@ -139,6 +233,13 @@ export class Room extends DurableObject<Env> {
         p.connected = false;
         this.pushSystem(`${p.username} left`);
       }
+      // A pending rematch dies if either participant drops; the survivor (the
+      // proposer, if it was the recipient who left) is settled Home via cancelled{left}.
+      if (this.state.rematch && this.state.phase === "finished") {
+        const { rematch, effects } = rematchReduce(this.state.rematch, { kind: "left" });
+        this.state.rematch = rematch;
+        await this.applyRematchEffects(effects);
+      }
       await this.persistAndBroadcast();
     }
   }
@@ -162,13 +263,19 @@ export class Room extends DurableObject<Env> {
   private async handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
       case "hello":
-        return this.onHello(ws, msg.username, msg.wordLength, msg.edition, msg.mode);
+        return this.onHello(ws, msg.username, msg.wordLength, msg.edition, msg.mode, msg.scienceOptOut, msg.public);
       case "start":
         return this.onStart(ws);
       case "guess":
         return this.onGuess(ws, msg.word);
-      case "rematch":
-        return this.onRematch(ws);
+      case "typing":
+        return this.onTyping(ws, msg.len);
+      case "rematch_propose":
+        return this.onRematchPropose(ws);
+      case "rematch_accept":
+        return this.onRematchAccept(ws);
+      case "rematch_decline":
+        return this.onRematchDecline(ws);
       case "chat":
         return this.onChat(ws, msg.text);
       case "set_length":
@@ -193,7 +300,15 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  private async onHello(ws: WebSocket, usernameRaw: string, wordLength?: number, edition?: string, mode?: RoomMode): Promise<void> {
+  private async onHello(
+    ws: WebSocket,
+    usernameRaw: string,
+    wordLength?: number,
+    edition?: string,
+    mode?: RoomMode,
+    scienceOptOut = false,
+    isPublic = false,
+  ): Promise<void> {
     // Trust model is intentional: identity is passwordless by product decision (a casual
     // word game — "kindness model", see spec 2026-05-31-username-identity). The client-
     // supplied username is taken at face value; control is shared, owner is bookkeeping only.
@@ -203,19 +318,42 @@ export class Room extends DurableObject<Env> {
       this.send(ws, { type: "error", message: "bad username" });
       return;
     }
+    // Seeded room: a human must not claim the persona's username (it === seed.personaId),
+    // else the `existing` lookup below would treat them as the bot reconnecting. Reject
+    // before that lookup. (Review fix, defect 19.)
+    if (this.state.seed && this.state.seed.personaId === username) {
+      this.send(ws, { type: "error", message: "room full" });
+      return;
+    }
     ws.serializeAttachment({ username });
 
     const existing = this.state.players.find((p) => p.username === username);
     if (existing) {
       const wasOffline = !existing.connected;
       existing.connected = true;
+      existing.scienceOptOut = !!scienceOptOut;
       if (wasOffline) this.pushSystem(`${username} reconnected`);
     } else {
-      if (this.state.players.length >= MAX_PLAYERS) {
+      // Seeded room = exactly 1 persona (bot) + 1 human. Reject a 2nd distinct human.
+      if (this.state.seed && this.state.players.some((p) => !p.isBot)) {
         this.send(ws, { type: "error", message: "room full" });
         return;
       }
-      this.state.players.push({ username, connected: true, guesses: [], status: "playing" });
+      if (!this.state.isDaily && this.state.players.length >= MAX_PLAYERS) {
+        this.send(ws, { type: "error", message: "room full" });
+        return;
+      }
+      this.state.players.push({
+        username,
+        connected: true,
+        guesses: [],
+        status: "playing",
+        scienceOptOut: !!scienceOptOut,
+        revealHints: 0,
+        vowelHints: 0,
+        points: 0,
+        pointsSpent: 0,
+      });
       // The room's default word length follows its owner's preference, and only in a
       // pristine lobby. Anyone can still change it mid-lobby via set_length (shared control).
       if (
@@ -248,6 +386,15 @@ export class Room extends DurableObject<Env> {
       ) {
         this.state.mode = mode;
       }
+      // A public Arena room opts into the open-games index at creation (owner, fresh lobby).
+      if (
+        isPublic &&
+        username === this.state.owner &&
+        this.state.phase === "lobby" &&
+        this.state.round === 0
+      ) {
+        this.state.publicArena = true;
+      }
       this.pushSystem(`${username} joined`);
     }
 
@@ -262,11 +409,84 @@ export class Room extends DurableObject<Env> {
     if (username === this.state.owner) {
       void this.registerRoom();
     }
+    await this.seedDailyIfNeeded();
+    // Daily gold is mint-confirmed: if a player finished but a prior mint failed (scored
+    // still false), retry now that they're back. Idempotent — scorePlayer only marks
+    // scored on a confirmed ledger write.
+    if (this.state.isDaily) {
+      const p = this.state.players.find((x) => x.username === username);
+      if (p && p.status !== "playing" && !p.scored) await this.afterPlayerStatus(p);
+    }
     this.ensureBot();
+    // Seeded Arena room: auto-start the instant the first human is connected (no host
+    // "start" click). runStart closes the room out of the open index (a human committed;
+    // the 2-cap already rejects a 2nd human).
+    if (
+      this.state.seed &&
+      this.state.phase === "lobby" &&
+      this.state.players.some((p) => !p.isBot && p.connected)
+    ) {
+      const persona = this.state.players.find((p) => p.isBot);
+      await this.runStart(persona?.username ?? "arena");
+    }
+    // Public human Arena room: list it in the open index while it waits in the lobby.
+    // runStart/finishGame close it. Best-effort; a refresh just re-asserts the listing.
+    if (this.state.publicArena && this.state.phase === "lobby") {
+      this.publishArena();
+    }
     await this.persistAndBroadcast();
   }
 
+  // A daily room (path daily/<date>) pulls its World from the DAILY DO on first
+  // contact and locks to it: the word never changes, the board goes straight to
+  // "playing" (no host start), and the theme/story come from the World. Server→server
+  // so the word never reaches a still-playing client. Idempotent — seeds once.
+  private async seedDailyIfNeeded(): Promise<void> {
+    const date = dailyDateOf(this.state.path);
+    if (!date) return;                 // not a daily room
+    if (date > activeDate(Date.now())) return; // future day → unplayable, never seed (anti gold-farm)
+    if (this.state.isDaily && this.state.word) return; // already seeded
+    try {
+      const res = await this.env.DAILY.get(this.env.DAILY.idFromName("daily"))
+        .fetch(`https://do/resolve?date=${date}`);
+      if (!res.ok) {
+        console.error("seedDaily resolve non-ok", this.state.path, res.status);
+        this.pushSystem("Today's Wordul is warming up — refresh in a sec.");
+        return;
+      }
+      const world = (await res.json()) as {
+        word: string; edition: string; voice: string;
+        story: { title: string; body: string; tip?: string };
+        colorScheme?: { a1: string; a2: string; a3: string };
+        vibeTitle?: string;
+      };
+      const word = (world.word ?? "").toUpperCase();
+      if (!/^[A-Z]+$/.test(word)) {
+        console.error("seedDaily empty/invalid word", this.state.path, JSON.stringify(world.word));
+        this.pushSystem("Today's Wordul is warming up — refresh in a sec.");
+        return;
+      }
+      this.state.isDaily = true;
+      this.state.word = word;
+      this.state.wordLength = word.length;
+      this.state.maxGuesses = guessesFor(word.length);
+      this.state.edition = world.edition || "default";
+      this.state.voice = world.voice || "yang";
+      this.state.story = world.story ?? null;
+      this.state.colorScheme = world.colorScheme ?? null;
+      this.state.vibeTitle = world.vibeTitle;
+      this.state.phase = "playing";    // async one-shot: always live, no lobby
+      this.state.round = 1;
+      this.state.startedAt = this.state.startedAt ?? Date.now();
+      this.emitRoundStarted();
+    } catch (e) {
+      console.error("seedDaily failed", this.state.path, (e as Error).message);
+      this.pushSystem("Today's Wordul is warming up — refresh in a sec.");
+    }
+  }
+
   private async registerRoom(): Promise<void> {
+    if (this.state.isDaily) return; // daily rooms are NOT directory-discoverable
     const [owner, slug] = this.state.path.split("/");
     if (!owner || !slug) return;
     try {
@@ -314,6 +534,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private async onSetLength(ws: WebSocket, length: number): Promise<void> {
+    if (this.state.isDaily) return; // daily word/theme are locked by the World
     if (this.state.phase !== "lobby") {
       this.send(ws, { type: "error", message: "can't change length mid-game" });
       return;
@@ -335,6 +556,7 @@ export class Room extends DurableObject<Env> {
   // The id is only sanitized, not whitelisted — an unknown id renders the default theme
   // client-side (getEdition falls back), matching the game's passwordless "kindness model".
   private async onSetEdition(ws: WebSocket, editionRaw: string): Promise<void> {
+    if (this.state.isDaily) return; // daily word/theme are locked by the World
     if (this.state.phase === "playing") {
       this.send(ws, { type: "error", message: "can't change theme mid-game" });
       return;
@@ -348,6 +570,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private async onSetMode(ws: WebSocket, mode: RoomMode): Promise<void> {
+    if (this.state.isDaily) return; // daily word/theme are locked by the World
     if (this.state.phase !== "lobby") {
       this.send(ws, { type: "error", message: "can't change mode mid-game" });
       return;
@@ -364,16 +587,43 @@ export class Room extends DurableObject<Env> {
   }
 
   private async onStart(ws: WebSocket): Promise<void> {
-    if (this.state.phase === "playing") return;
+    // Thin wrapper: the manual-start path keeps error feedback via the optional ws.
+    await this.runStart(this.userFor(ws) ?? "someone", ws);
+  }
+
+  // The single startable core. Owns ALL start guards so both the human "start" message and
+  // the seeded auto-start (onHello) go through exactly one path. When `ws` is present, guard
+  // failures send an error to that socket; otherwise (auto-start) they log and return false.
+  private async runStart(who: string, ws?: WebSocket): Promise<boolean> {
+    if (this.state.phase === "playing") return false;
+    if (this.state.isDaily) return false; // daily auto-starts on seed; no manual start
     this.ensureBot();
-    if (this.state.players.length < 1) return;
+    if (this.state.players.length < 1) return false;
     const pool = WORDS_BY_SIZE[this.state.wordLength];
     if (!pool || pool.answers.length === 0) {
-      this.send(ws, { type: "error", message: "no words available for that length" });
-      return;
+      if (ws) this.send(ws, { type: "error", message: "no words available for that length" });
+      else console.error("runStart: no words for length", this.state.wordLength);
+      return false;
     }
-    this.state.word = pool.answers[Math.floor(Math.random() * pool.answers.length)] ?? null;
-    if (!this.state.word) return;
+    if (this.state.challengeId) {
+      // Challenge room: ALWAYS play the pinned word (even on rematch), fetched
+      // server→server so the answer never touches the client.
+      const cs = this.env.CHALLENGE.get(this.env.CHALLENGE.idFromName(this.state.challengeId));
+      const res = await cs.fetch(new Request("https://do/word", { method: "GET" }));
+      if (res.ok) {
+        const { word, wordLength } = (await res.json()) as { word: string; wordLength: number };
+        this.state.word = word ?? null;
+        this.state.wordLength = wordLength ?? this.state.wordLength;
+        this.state.maxGuesses = guessesFor(this.state.wordLength);
+      } else {
+        if (ws) this.send(ws, { type: "error", message: "challenge unavailable" });
+        else console.error("runStart: challenge unavailable", this.state.challengeId);
+        return false;
+      }
+    } else {
+      this.state.word = pool.answers[Math.floor(Math.random() * pool.answers.length)] ?? null;
+    }
+    if (!this.state.word) return false;
     this.state.phase = "playing";
     this.state.winner = null;
     this.state.startedAt = Date.now();
@@ -382,11 +632,17 @@ export class Room extends DurableObject<Env> {
     for (const p of this.state.players) {
       p.guesses = [];
       p.status = "playing";
+      p.points = 0;
+      p.pointsSpent = 0;
+      p.revealHints = 0;
+      p.vowelHints = 0;
     }
-    const who = this.userFor(ws) ?? "someone";
     this.pushSystem(`${who} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
+    this.emitRoundStarted();
     if (this.state.players.some((p) => p.isBot && p.status === "playing")) this.scheduleBotTick();
+    this.closeArena(); // once it starts, it's no longer an open game (no-op for normal rooms)
     await this.persistAndBroadcast();
+    return true;
   }
 
   private async onGuess(ws: WebSocket, wordRaw: string): Promise<void> {
@@ -416,11 +672,39 @@ export class Room extends DurableObject<Env> {
     await this.persistAndBroadcast();
   }
 
+  // Live-typing pulse: relay a player's current row LENGTH to everyone else so opponents
+  // see ghost cells fill/clear in real time. Deliberately ephemeral — NO storage write and
+  // NO snapshot (keystrokes must not hammer DO storage), and it carries a count only, never
+  // letters, preserving the same hidden-word rule as the spectator boards. Clients clear a
+  // ghost on their own when a guess commits / a player goes out, so there's no reset to send.
+  private onTyping(ws: WebSocket, lenRaw: number): void {
+    if (this.state.phase !== "playing" || this.state.isDaily) return; // no opponents to show in daily
+    const username = this.userFor(ws);
+    if (!username) return;
+    const player = this.state.players.find((p) => p.username === username);
+    if (!player || player.status !== "playing") return;
+    const n = Number.isFinite(lenRaw) ? Math.floor(lenRaw) : 0;
+    const len = Math.max(0, Math.min(this.state.wordLength, n));
+    const payload = JSON.stringify({ type: "typing", username, len } satisfies ServerMessage);
+    for (const other of this.ctx.getWebSockets()) {
+      if (other === ws) continue; // never echo a player their own typing
+      try {
+        other.send(payload);
+      } catch {
+        // socket may be closing; ignore
+      }
+    }
+  }
+
   // Shared guess core — both human onGuess (after validation) and the bot alarm call this,
   // so there is exactly ONE scoring/win path. Assumes `word` is a validated uppercase guess.
   private async applyGuess(player: PlayerState, word: string): Promise<void> {
+    const now = Date.now();
+    const priorStatus = player.status;
+    const hadWinner = this.state.winner !== null;
     const mask = scoreGuess(word, this.state.word!);
     player.guesses.push({ word, mask });
+    player.points = pointsEarned(player.guesses, this.state.maxGuesses) - player.pointsSpent;
     const allGreen = mask.every((c) => c === "green");
     if (allGreen) {
       player.status = "won";
@@ -432,7 +716,34 @@ export class Room extends DurableObject<Env> {
     } else if (player.guesses.length >= this.state.maxGuesses) {
       player.status = "lost";
     }
-    await this.maybeFinish();
+    this.emitAcceptedGuess(player, mask, now);
+    if (priorStatus === "playing" && player.status !== "playing") {
+      this.emitPlayerFinished(player, player.status === "won" ? "won" : "lost", now);
+    }
+    // First solve ends the race for everyone (live, non-daily rooms — Arena AND
+    // Friends). Flip the still-playing others to `lost` so they carry a real status
+    // into the snapshot and emitPlayerFinished fires for science/records/H2H. The
+    // existing afterPlayerStatus → maybeFinish then finds isGameOver() and finishes.
+    if (!hadWinner && this.state.winner && !this.state.isDaily) {
+      for (const username of outpacedLosers(this.state.players, this.state.winner)) {
+        const other = this.state.players.find((p) => p.username === username);
+        if (other) {
+          other.status = "lost";
+          this.emitPlayerFinished(other, "lost", now);
+        }
+      }
+    }
+    if (this.state.challengeId && (player.status === "won" || player.status === "lost") && !player.isBot) {
+      const solved = player.status === "won";
+      const score = solved ? `${player.guesses.length}/${this.state.maxGuesses}` : `X/${this.state.maxGuesses}`;
+      const cs = this.env.CHALLENGE.get(this.env.CHALLENGE.idFromName(this.state.challengeId));
+      this.ctx.waitUntil(cs.fetch(new Request("https://do/attempt", {
+        method: "POST",
+        body: JSON.stringify({ username: player.username, score, solved, guesses: player.guesses.length }),
+        headers: { "content-type": "application/json" },
+      })));
+    }
+    await this.afterPlayerStatus(player);
   }
 
   // --- Slice 0: the robot room ------------------------------------------------------
@@ -443,12 +754,30 @@ export class Room extends DurableObject<Env> {
     return this.state.slug === ROBOT_SLUG;
   }
 
-  private ensureBot(): void {
-    if (!this.isRobotRoom()) return;
+  private ensureBot(persona?: { id: string; name: string; avatar: string }): void {
+    if (this.state.isDaily) return; // no worduler in the daily room
+    // Fires for the labeled /robots room OR a seeded Arena room. A seeded room injects its
+    // persona (human-looking username); the /robots room uses BOT_NAME (clanker).
+    if (!this.isRobotRoom() && !this.state.seed) return;
     if (this.state.players.some((p) => p.isBot)) return;
     if (this.state.players.length >= MAX_PLAYERS) return;
-    this.state.players.push({ username: BOT_NAME, connected: true, guesses: [], status: "playing", isBot: true });
-    this.pushSystem(`🤖 ${BOT_NAME} powered on — knows the basics, holds no grudges.`);
+    this.state.players.push({
+      username: persona ? persona.id : BOT_NAME,
+      connected: true,
+      guesses: [],
+      status: "playing",
+      isBot: true,
+      scienceOptOut: true,
+      revealHints: 0,
+      vowelHints: 0,
+      points: 0,
+      pointsSpent: 0,
+    });
+    // Only the labeled /robots room announces the worduler. Seeded Arena rooms (Slice D)
+    // inject their persona silently — no system line, no disguise tell.
+    if (this.isRobotRoom()) {
+      this.pushSystem(`🤖 ${BOT_NAME} powered on — knows the basics, holds no grudges.`);
+    }
   }
 
   private scheduleBotTick(): void {
@@ -457,29 +786,75 @@ export class Room extends DurableObject<Env> {
     // person playing a word game, and people are slow.
     const bot = this.state.players.find((p) => p.isBot);
     const opening = !bot || bot.guesses.length === 0;
-    const base = opening ? 6000 : 4000;
-    const delay = base + Math.floor(Math.random() * 6000); // opener 6–12s, then 4–10s
+    // Seeded (Arena bot) rooms pace slower so the persona reads beatable; labeled /robots
+    // rooms keep the original snappier cadence. `state.seed` is falsy until Slice D seeds.
+    const seeded = !!this.state.seed;
+    const base = seeded ? (opening ? 10000 : 7000) : (opening ? 6000 : 4000);
+    const spread = seeded ? 10000 : 6000; // seeded: 10–20s opener, 7–17s subsequent
+    const delay = base + Math.floor(Math.random() * spread);
     void this.ctx.storage.setAlarm(Date.now() + delay);
   }
 
-  // DO alarm: the robot's heartbeat. Wakes, plays ONE guess through the same path a human
-  // guess takes, then reschedules until it has won or run out of rows. Hibernation-safe.
+  // DO alarm: the room's single heartbeat. In the PLAYING phase it paces the bot's
+  // guesses (unchanged). In the FINISHED phase it drives the rematch handshake's
+  // delayed wakes (bot decision + proposal timeout). The two phases are mutually
+  // exclusive, so they never contend for the one alarm.
   async alarm(): Promise<void> {
+    if (this.state.phase === "finished") {
+      await this.handleRematchAlarm(Date.now());
+      return;
+    }
     if (this.state.phase !== "playing" || !this.state.word) return;
     const bot = this.state.players.find((p) => p.isBot && p.status === "playing");
     if (!bot) return;
     // Dad's brain drives our body: the solver sees ONLY a BotView (length + its own
     // earned masks) — never this.state.word. The cheat-isolation wall stays intact.
-    const word = computeNextGuess({ wordLength: this.state.wordLength, ownGuesses: bot.guesses });
+    // Seeded rooms play through the fallible noob; labeled /robots rooms stay sharp.
+    // `state.seed` is falsy until Slice D, so every existing room keeps the sharp path.
+    const view = { wordLength: this.state.wordLength, ownGuesses: bot.guesses };
+    const word = this.state.seed
+      ? noobGuess(view, { mistakeRate: mistakeRateFor(this.state.wordLength) }, Math.random())
+      : computeNextGuess(view);
     if (word) await this.applyGuess(bot, word);
     await this.persistAndBroadcast();
     const stillGoing = this.state.players.some((p) => p.isBot && p.status === "playing");
     if (stillGoing && this.state.phase === "playing") this.scheduleBotTick();
   }
 
+  // Process whichever rematch deadlines are due, then re-arm for any that remain.
+  // Order matters: a fired timeout cancels the proposal, after which the bot
+  // decision finds no pending state and safely no-ops (no double resolution).
+  private async handleRematchAlarm(now: number): Promise<void> {
+    let changed = false;
+    if (this.state.rematchTimeoutAt && now >= this.state.rematchTimeoutAt) {
+      this.state.rematchTimeoutAt = null;
+      const { rematch, effects } = rematchReduce(this.state.rematch ?? null, { kind: "timeout" });
+      this.state.rematch = rematch;
+      await this.applyRematchEffects(effects);
+      changed = true;
+    }
+    if (this.state.phase === "finished" && this.state.botRematchAt && now >= this.state.botRematchAt) {
+      this.state.botRematchAt = null;
+      changed = true;
+      const bot = this.state.players.find((p) => p.isBot);
+      if (bot) {
+        const { rematch, effects } = rematchReduce(this.state.rematch ?? null, {
+          kind: "bot_decision", accept: botAccepts(Math.random()), bot: bot.username,
+        });
+        this.state.rematch = rematch;
+        await this.applyRematchEffects(effects);
+      }
+    }
+    // If accept→start fired, phase is now "playing" and runStart armed the bot tick;
+    // don't re-arm rematch. Otherwise re-arm any still-future rematch deadline.
+    if (this.state.phase === "finished") this.armRematchAlarm();
+    if (changed) await this.persistAndBroadcast();
+  }
+
   // Finish the round once every connected player is done — NOT the instant someone wins.
   // The winner was already announced; here we just reveal the word to everyone and record.
   private async maybeFinish(): Promise<void> {
+    if (this.state.phase === "finished") return;
     if (!this.isGameOver()) return;
     this.state.phase = "finished";
     this.state.finishedAt = Date.now();
@@ -501,29 +876,139 @@ export class Room extends DurableObject<Env> {
     if (!player || player.status !== "playing") return;
     player.status = "lost";
     if (!this.isGameOver()) this.pushSystem(`${username} gave up`);
-    await this.maybeFinish();
+    this.emitPlayerFinished(player, "resigned", Date.now());
+    await this.afterPlayerStatus(player);
     await this.persistAndBroadcast();
   }
 
   // EZ-mode power-up: reveal one letter the player hasn't greened yet. Only the DO
   // holds the answer, so this must happen server-side. No state change, no broadcast —
   // the hint goes only to the requester.
-  private onRevealLetter(ws: WebSocket, known?: number[]): void {
+  private async onRevealLetter(ws: WebSocket, known?: number[]): Promise<void> {
     if (this.state.phase !== "playing" || !this.state.word) return;
     const username = this.userFor(ws);
     const player = this.state.players.find((p) => p.username === username);
     if (!player || player.status !== "playing") return;
+    if (player.points < POINTS.revealCost) { this.send(ws, { type: "error", message: "not enough points" }); return; }
     const hit = revealUngreened(this.state.word, player.guesses, known ?? []);
-    if (hit) this.send(ws, { type: "revealed_letter", index: hit.index, letter: hit.letter });
+    if (!hit) { this.send(ws, { type: "error", message: "nothing left to reveal" }); return; }
+    player.pointsSpent += POINTS.revealCost;
+    player.points -= POINTS.revealCost;
+    player.revealHints = (player.revealHints ?? 0) + 1;
+    this.emitPowerupUsed(player, "reveal_letter", POINTS.revealCost);
+    this.send(ws, { type: "revealed_letter", index: hit.index, letter: hit.letter });
+    await this.persistAndBroadcast();
   }
 
   // EZ-mode power-up: how many vowels are in the answer. Requester-only.
-  private onVowelCount(ws: WebSocket): void {
+  private async onVowelCount(ws: WebSocket): Promise<void> {
     if (this.state.phase !== "playing" || !this.state.word) return;
     const username = this.userFor(ws);
     const player = this.state.players.find((p) => p.username === username);
     if (!player || player.status !== "playing") return;
+    if (player.points < POINTS.vowelCost) { this.send(ws, { type: "error", message: "not enough points" }); return; }
+    player.pointsSpent += POINTS.vowelCost;
+    player.points -= POINTS.vowelCost;
+    player.vowelHints = (player.vowelHints ?? 0) + 1;
+    this.emitPowerupUsed(player, "vowel_count", POINTS.vowelCost);
     this.send(ws, { type: "vowels", count: countVowels(this.state.word) });
+    await this.persistAndBroadcast();
+  }
+
+  private emitRoundStarted(): void {
+    const now = this.state.startedAt ?? Date.now();
+    this.emitScience({
+      ...this.scienceBase(now),
+      type: "round_started",
+      participantCount: this.state.players.filter((p) => this.scienceEnabled(p)).length,
+      botCount: this.state.players.filter((p) => p.isBot).length,
+    });
+  }
+
+  private emitAcceptedGuess(player: PlayerState, mask: Color[], at: number): void {
+    if (!this.scienceEnabled(player)) return;
+    const pattern = maskToPattern(mask);
+    const counts = countMask(pattern);
+    this.emitScience({
+      ...this.scienceBase(at),
+      type: "guess_accepted",
+      guessNumber: player.guesses.length,
+      elapsedMs: this.elapsedSinceStart(at),
+      mask: pattern,
+      green: counts.green,
+      yellow: counts.yellow,
+      gray: counts.gray,
+      statusAfter: player.status,
+      points: player.points,
+    });
+  }
+
+  private emitPlayerFinished(player: PlayerState, outcome: ScienceOutcome, at: number): void {
+    if (!this.scienceEnabled(player)) return;
+    this.emitScience({
+      ...this.scienceBase(at),
+      type: "player_finished",
+      outcome,
+      guesses: player.guesses.length,
+      elapsedMs: this.elapsedSinceStart(at),
+      points: player.points,
+      answer: this.state.word ?? undefined,
+      revealHints: player.revealHints ?? 0,
+      vowelHints: player.vowelHints ?? 0,
+    });
+  }
+
+  private emitPowerupUsed(player: PlayerState, powerup: "reveal_letter" | "vowel_count", pointsSpent: number): void {
+    if (!this.scienceEnabled(player)) return;
+    const at = Date.now();
+    this.emitScience({
+      ...this.scienceBase(at),
+      type: "powerup_used",
+      powerup,
+      guessNumber: player.guesses.length + 1,
+      pointsSpent,
+    });
+  }
+
+  private scienceBase(at: number): ScienceBaseEvent {
+    return {
+      at,
+      date: activeDate(at),
+      roomKind: this.scienceRoomKind(),
+      wordLength: this.state.wordLength,
+      maxGuesses: this.state.maxGuesses,
+      mode: this.state.mode,
+      edition: this.state.edition || "default",
+    };
+  }
+
+  private scienceRoomKind(): ScienceRoomKind {
+    if (this.state.isDaily) return "daily";
+    if (this.state.challengeId) return "challenge";
+    return "room";
+  }
+
+  private scienceEnabled(player: PlayerState): boolean {
+    return !player.isBot && !player.scienceOptOut;
+  }
+
+  private elapsedSinceStart(now: number): number | null {
+    return this.state.startedAt ? Math.max(0, now - this.state.startedAt) : null;
+  }
+
+  private emitScience(event: ScienceEvent): void {
+    const stub = this.env.SCIENCE.get(this.env.SCIENCE.idFromName(event.date));
+    this.ctx.waitUntil(
+      stub.fetch(new Request("https://do/event", {
+        method: "POST",
+        body: JSON.stringify(event),
+        headers: { "content-type": "application/json" },
+      })).then((res) => {
+        if (!res.ok) console.error("science event non-ok", event.type, event.date, res.status);
+      }).catch((e) => {
+        console.error("science event failed", event.type, event.date, (e as Error).message);
+      }),
+    );
   }
 
   /** On the finish transition: bump the room scoreboard, then report a personalized
@@ -560,41 +1045,226 @@ export class Room extends DurableObject<Env> {
     // Report to every player's User DO in parallel — caps the wait at one round-trip
     // instead of N. Best-effort: a failed/slow write can't block or break the finish.
     await Promise.allSettled(
-      Object.entries(records).map(([username, record]) =>
-        this.env.USER.get(this.env.USER.idFromName(username))
-          .fetch(`https://do/append?username=${encodeURIComponent(username)}`, { method: "POST", body: JSON.stringify(record) })
-          .catch((e) => console.error("report failed", username, (e as Error).message)),
-      ),
+      Object.entries(records).flatMap(([username, record]) => {
+        const player = this.state.players.find((p) => p.username === username);
+        const gold = goldFromPoints(player ? player.points : 0);
+        const stub = this.env.USER.get(this.env.USER.idFromName(username));
+        const calls = [
+          stub.fetch(`https://do/append?username=${encodeURIComponent(username)}`, { method: "POST", body: JSON.stringify(record) })
+            .catch((e) => console.error("report failed", username, (e as Error).message)),
+        ];
+        if (gold > 0 && !player?.isBot) {
+          calls.push(
+            stub.fetch(`https://do/ledger/append?username=${encodeURIComponent(username)}`, {
+              method: "POST",
+              body: JSON.stringify({ token: "gold", delta: gold, reason: "mint:cashout", ref: `${this.state.path}#${this.state.round}` }),
+            }).catch((e) => console.error("mint failed", username, (e as Error).message)),
+          );
+        }
+        return calls;
+      }),
     );
-    // Also accumulate public, per-word solve stats (one DO per word, sharded by name).
-    // Skip bots — only real players move a word's public stats. All of this round's
-    // human results go in ONE batched bump so the DO applies them as a single atomic
-    // read-modify-write. Best-effort: a failed/slow write can't block or break the finish.
-    const word = (this.state.word ?? "").toUpperCase();
-    const humans = this.state.players.filter((p) => !p.isBot);
-    if (word && humans.length) {
-      const games = humans.map((p) => ({
+
+    // Public, per-word solve stats: one DO per word (sharded by name). Skip bots — only
+    // real players move a word's public stats. All of this round's human results go in ONE
+    // batched bump (atomic read-modify-write). Best-effort; never blocks or breaks finish.
+    const statsWord = (this.state.word ?? "").toUpperCase();
+    const statHumans = this.state.players.filter((p) => !p.isBot);
+    if (statsWord && statHumans.length) {
+      const statGames = statHumans.map((p) => ({
         result: p.status === "won" ? "won" : "lost",
         guesses: p.guesses.length,
       }));
-      await this.env.WORDSTATS.get(this.env.WORDSTATS.idFromName(word))
-        .fetch("https://do/bump", { method: "POST", body: JSON.stringify({ games }) })
-        .catch((e) => console.error("wordstats bump failed", word, (e as Error).message));
+      await this.env.WORDSTATS.get(this.env.WORDSTATS.idFromName(statsWord))
+        .fetch("https://do/bump", { method: "POST", body: JSON.stringify({ games: statGames }) })
+        .catch((e) => console.error("wordstats bump failed", statsWord, (e as Error).message));
+    }
+
+    // Seeded room: record the head-to-head for each human against the persona. Reads
+    // this.state.players (internal, un-stripped) — the !isBot guard keeps the persona out
+    // of any USER DO (defect 21). Win = the human is the winner, else loss (defect 20).
+    if (this.state.seed) {
+      const personaId = this.state.seed.personaId;
+      for (const p of this.state.players) {
+        if (p.isBot) continue;
+        this.writeH2H(p.username, personaId, this.state.winner === p.username ? "w" : "l");
+      }
+    }
+    // Backstop: ensure a finished seeded room is gone from the open index (close-on-join
+    // already removed it; close is idempotent in arena-core).
+    this.closeArena();
+  }
+
+  // Best-effort H2H write to the human's USER DO (ctx.waitUntil — can't block the finish).
+  private writeH2H(humanUsername: string, personaId: string, result: "w" | "l"): void {
+    const stub = this.env.USER.get(this.env.USER.idFromName(humanUsername));
+    this.ctx.waitUntil(
+      stub
+        .fetch(`https://do/h2h?username=${encodeURIComponent(humanUsername)}`, {
+          method: "POST",
+          body: JSON.stringify({ personaId, result }),
+          headers: { "content-type": "application/json" },
+        })
+        .catch((e) => console.error("h2h write failed", humanUsername, (e as Error).message)),
+    );
+  }
+
+  // Best-effort: list this human-hosted public room in ARENA's open index (humans alongside
+  // bots). No-op unless the room opted into public Arena.
+  private publishArena(): void {
+    if (!this.state.publicArena) return;
+    const arena = this.env.ARENA.get(this.env.ARENA.idFromName("arena"));
+    const rec = {
+      path: this.state.path,
+      routePath: `/@${this.state.path}`,
+      name: this.state.name,
+      host: this.state.owner,
+      personaId: "",            // not a bot
+      personaIcon: "👤",         // humans have no emoji persona; neutral marker
+      edition: this.state.edition,
+      wordLength: this.state.wordLength,
+      seats: "1/2",
+      mintedAt: Date.now(),
+      status: "registered" as const,
+    };
+    this.ctx.waitUntil(
+      arena
+        .fetch(new Request("https://do/publish", {
+          method: "POST",
+          body: JSON.stringify(rec),
+          headers: { "content-type": "application/json" },
+        }))
+        .catch((e) => console.error("arena publish failed", this.state.path, (e as Error).message)),
+    );
+  }
+
+  // Best-effort close of a seeded OR public room in ARENA's open index. No-op otherwise.
+  private closeArena(): void {
+    if (!this.state.seed && !this.state.publicArena) return;
+    const arena = this.env.ARENA.get(this.env.ARENA.idFromName("arena"));
+    this.ctx.waitUntil(
+      arena
+        .fetch(new Request("https://do/close", {
+          method: "POST",
+          body: JSON.stringify({ path: this.state.path }),
+          headers: { "content-type": "application/json" },
+        }))
+        .catch((e) => console.error("arena close failed", this.state.path, (e as Error).message)),
+    );
+  }
+
+  // Completion router. Race rooms finish all-at-once (maybeFinish); daily rooms score
+  // each player the moment THEY finish (won/lost), exactly once, with no global finish.
+  private async afterPlayerStatus(player: PlayerState): Promise<void> {
+    if (!this.state.isDaily) {
+      await this.maybeFinish();
+      return;
+    }
+    if (player.status !== "playing" && !player.scored) {
+      if (this.state.winner === null && player.status === "won") this.state.winner = player.username;
+      await this.scorePlayer(player);
     }
   }
 
-  private async onRematch(ws: WebSocket): Promise<void> {
-    if (this.state.phase !== "finished") return;
-    this.state.phase = "lobby";
-    this.state.word = null;
-    this.state.winner = null;
-    this.state.startedAt = null;
-    this.state.finishedAt = null;
-    for (const p of this.state.players) {
-      p.guesses = [];
-      p.status = "playing";
+  // Daily: record ONE player's result — scoreboard bump + game record + gold (score
+  // mint + flat daily goody). Best-effort; never blocks the player's board flipping.
+  private async scorePlayer(player: PlayerState): Promise<void> {
+    this.state.scoreboard = bumpScoreboard(this.state.scoreboard, {
+      winner: player.status === "won" ? player.username : null,
+      participants: [player.username],
+    });
+    // Daily is async one-shot: each record is intentionally SOLO (empty opponents) —
+    // hundreds play the same word across 24h, so a per-player rival list is meaningless.
+    // summarizeRoomGame + the profile UI already handle solo records gracefully.
+    const records = buildGameRecords({
+      roomPath: this.state.path,
+      word: this.state.word ?? "",
+      wordLength: this.state.wordLength,
+      finishedAt: Date.now(),
+      players: [{ username: player.username, status: player.status, guesses: player.guesses.length }],
+    });
+    const record = records[player.username];
+    // Stamp the daily record with the player's color grid (the home's crystallized
+    // solve stamp reads this back; letters stay server-side).
+    if (record) record.solveGrid = encodeSolveGrid(player.guesses);
+    const gold = goldFromPoints(player.points) + DAILY_GOLD_BONUS; // score mint + goody
+    const stub = this.env.USER.get(this.env.USER.idFromName(player.username));
+    // Record append is best-effort but observable (FIX 10): log a non-2xx, never throw.
+    try {
+      const recRes = await stub.fetch(`https://do/append?username=${encodeURIComponent(player.username)}`, {
+        method: "POST", body: JSON.stringify(record),
+      });
+      if (!recRes.ok) console.error("daily report non-ok", player.username, recRes.status);
+    } catch (e) {
+      console.error("daily report failed", player.username, (e as Error).message);
     }
-    await this.persistAndBroadcast();
+    // Bots never mint; mark them scored so they don't retry forever.
+    if (player.isBot) {
+      player.scored = true;
+      return;
+    }
+    // Gold goody must be HONEST: only mark scored + record goldAwarded once the ledger
+    // write is confirmed (res.ok). A failed/thrown mint leaves scored=false so a later
+    // reconnect retries — the player never sees "here's your gold" on a 0-gold mint.
+    try {
+      const res = await stub.fetch(`https://do/ledger/append?username=${encodeURIComponent(player.username)}`, {
+        method: "POST",
+        body: JSON.stringify({ token: "gold", delta: gold, reason: "mint:daily", ref: `${this.state.path}#${player.username}` }),
+      });
+      if (res.ok) {
+        player.scored = true;
+        player.goldAwarded = gold;
+      } else {
+        console.error("daily mint non-ok", player.username, res.status);
+      }
+    } catch (e) {
+      console.error("daily mint failed", player.username, (e as Error).message);
+    }
+  }
+
+  private async onRematchPropose(ws: WebSocket): Promise<void> {
+    if (this.state.isDaily || this.state.phase !== "finished") return;
+    const username = this.userFor(ws);
+    if (!username) return;
+    const me = this.state.players.find((p) => p.username === username);
+    if (!me) return;
+    const opponent = this.state.players.find((p) => p.username !== username);
+    // A plain solo room (no opponent, not a pinned-word challenge, not a seeded Arena)
+    // has nobody to handshake with — "Play again" should just start a fresh game,
+    // smoothly, in place. Mirrors a mutual accept (accepted + start).
+    const soloRestart = !opponent && !this.state.challengeId && !this.state.seed;
+    if (!opponent && !soloRestart) {
+      // Challenge / seeded Arena with the opponent already gone (e.g. a bot that
+      // declined a prior proposal) ⇒ settle Home.
+      this.broadcastAll({ type: "rematch_cancelled", reason: "left" });
+      return;
+    }
+    const { rematch, effects } = rematchReduce(this.state.rematch ?? null, {
+      kind: "propose", from: username, opponentIsBot: !!opponent?.isBot, solo: soloRestart, now: Date.now(),
+    });
+    this.state.rematch = rematch;
+    const started = await this.applyRematchEffects(effects);
+    if (!started) await this.persistAndBroadcast();
+  }
+
+  private async onRematchAccept(ws: WebSocket): Promise<void> {
+    if (this.state.isDaily || this.state.phase !== "finished") return;
+    const username = this.userFor(ws);
+    if (!username) return;
+    const { rematch, effects } = rematchReduce(this.state.rematch ?? null, { kind: "accept", from: username });
+    this.state.rematch = rematch;
+    const started = await this.applyRematchEffects(effects);
+    if (!started) await this.persistAndBroadcast();
+  }
+
+  private async onRematchDecline(ws: WebSocket): Promise<void> {
+    if (this.state.isDaily || this.state.phase !== "finished") return;
+    const username = this.userFor(ws);
+    if (!username) return;
+    const { rematch, effects } = rematchReduce(this.state.rematch ?? null, { kind: "decline" });
+    this.state.rematch = rematch;
+    const started = await this.applyRematchEffects(effects);
+    if (!started) await this.persistAndBroadcast();
   }
 
   private async onChat(ws: WebSocket, textRaw: string): Promise<void> {
@@ -632,6 +1302,70 @@ export class Room extends DurableObject<Env> {
     }
   }
 
+  // Push a non-snapshot server message to every connected socket (handshake events).
+  private broadcastAll(msg: ServerMessage): void {
+    for (const ws of this.ctx.getWebSockets()) {
+      try { ws.send(JSON.stringify(msg)); } catch { /* socket closing; ignore */ }
+    }
+  }
+
+  private clearRematchAlarms(): void {
+    this.state.botRematchAt = null;
+    this.state.rematchTimeoutAt = null;
+  }
+
+  // One alarm to rule them all: set it to the earliest armed rematch deadline, or
+  // clear it. Only called in the finished phase (bot-GUESS alarms own the playing
+  // phase), so the two never fight over the single DO alarm.
+  private armRematchAlarm(): void {
+    const at = nextAlarmAt([this.state.botRematchAt, this.state.rematchTimeoutAt]);
+    if (at != null) void this.ctx.storage.setAlarm(at);
+    else void this.ctx.storage.deleteAlarm();
+  }
+
+  // Perform the side effects a rematchReduce() returned. `runStart` is the existing
+  // round-restart (increment, word pick, GO!, bot tick) — the handshake's accept path.
+  private async applyRematchEffects(effects: RematchEffect[]): Promise<boolean> {
+    let starter = "someone";
+    let started = false;
+    for (const e of effects) {
+      switch (e.kind) {
+        case "proposed":
+          this.broadcastAll({ type: "rematch_proposed", proposer: e.proposer });
+          break;
+        case "accepted":
+          starter = e.by;
+          this.broadcastAll({ type: "rematch_accepted", by: e.by });
+          break;
+        case "cancelled":
+          this.clearRematchAlarms();
+          this.armRematchAlarm();
+          this.broadcastAll({ type: "rematch_cancelled", reason: e.reason });
+          break;
+        case "schedule_timeout":
+          this.state.rematchTimeoutAt = Date.now() + REMATCH_TIMEOUT_MS;
+          this.armRematchAlarm();
+          break;
+        case "schedule_bot":
+          this.state.botRematchAt = Date.now() + BOT_REMATCH_MIN_MS
+            + Math.floor(Math.random() * (BOT_REMATCH_MAX_MS - BOT_REMATCH_MIN_MS));
+          this.armRematchAlarm();
+          break;
+        case "bot_leaves": {
+          const i = this.state.players.findIndex((p) => p.isBot);
+          if (i >= 0) this.state.players.splice(i, 1);
+          break;
+        }
+        case "start":
+          this.clearRematchAlarms();
+          await this.runStart(starter); // resets everyone, picks word, GO!, schedules bot tick
+          started = true;
+          break;
+      }
+    }
+    return started;
+  }
+
   private isGameOver(): boolean {
     // The race no longer ends the instant someone wins — remaining players keep going
     // for their own gold/score. It's over once every connected player is done (won/lost).
@@ -657,7 +1391,21 @@ export class Room extends DurableObject<Env> {
     return {
       ...this.state,
       word: reveal ? this.state.word : null,
-      players: this.state.players.map((p) => ({ ...p, guesses: [...p.guesses] })),
+      // The daily story names the answer ("Why EMBER?") — gate it exactly like `word`,
+      // else a still-playing viewer reads today's word straight off the WS payload.
+      story: reveal ? this.state.story : null,
+      // Disguise (the single enforcement point): strip isBot per-player AND the server-only
+      // seed marker. `seed: undefined` MUST come after ...this.state to shadow the internal
+      // key (Slice D sets state.seed). TS doesn't enforce the shadow (seed isn't on the
+      // declared outbound shape via this path), so this comment documents the dependency.
+      seed: undefined,
+      publicArena: undefined, // internal-only; not part of the client contract
+      rematch: undefined,
+      botRematchAt: undefined,
+      rematchTimeoutAt: undefined,
+      players: this.state.isDaily
+        ? (me ? [projectPlayerForClient({ ...me, guesses: [...me.guesses] })] : [])
+        : this.state.players.map((p) => projectPlayerForClient({ ...p, guesses: [...p.guesses] })),
     };
   }
 

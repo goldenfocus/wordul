@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vibe Studio • Wordul</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f0f11; color: #f1e9d9; }
+    .workshop-card { background: #1a1917; border: 1px solid #3a3834; }
+    .blocky { border-radius: 8px; }
+    .playful-btn { transition: transform .05s ease; }
+    .playful-btn:active { transform: scale(0.96); }
+    
+    .wordle-board { display: grid; grid-template-columns: repeat(5, 44px); gap: 7px; justify-content: center; }
+    .wordle-tile { width: 44px; height: 44px; border: 3px solid #3a3834; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; text-transform: uppercase; background: #1a1917; color: #f1e9d9; transition: all .15s ease; }
+    .wordle-tile.green { background: #5ee27a; color: #0f0f11; border-color: #5ee27a; }
+    .wordle-tile.yellow { background: #f2c94c; color: #0f0f11; border-color: #f2c94c; }
+    .wordle-tile.gray { background: #3a3834; color: #8a877f; border-color: #3a3834; }
+    
+    .companion { background: #1a1917; border: 2px solid #5ee27a; font-size: 13.5px; }
+    
+    .color-swatch { width: 42px; height: 42px; border-radius: 9999px; cursor: pointer; border: 3px solid #3a3834; transition: all .1s; }
+    .color-swatch.active { border-color: #f1e9d9; box-shadow: 0 0 0 2px #5ee27a; }
+    
+    .gear { cursor: pointer; }
+    .fine-tune { display: none; }
+    .fine-tune.open { display: block; }
+  </style>
+</head>
+<body>
+  <div class="max-w-[1180px] mx-auto p-5">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-3">
+        <div class="text-3xl">✦</div>
+        <div>
+          <div class="text-2xl font-bold tracking-tighter">Vibe Studio</div>
+          <div class="text-xs -mt-1 text-[#8a877f]">WORDUL — CREATE A ROOM VIBE OR DAILY THEME</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 text-sm">
+        <button onclick="scheduleDay()" class="playful-btn px-5 py-2 bg-[#5ee27a] text-black font-semibold rounded blocky">SCHEDULE THIS VIBE AS TOMORROW'S DAY</button>
+      </div>
+    </div>
+
+    <div class="flex gap-5">
+      <!-- LEFT: CONTROLS -->
+      <div class="w-[400px] flex-shrink-0 space-y-4">
+        
+        <!-- TITLE + WORD (first manifestation) -->
+        <div class="workshop-card p-4 rounded-2xl">
+          <div class="text-xs uppercase tracking-widest text-[#8a877f] mb-1">TITLE OF THE VIBE / ROOM</div>
+          <input id="vibe-title" value="Foundations of Play" class="bg-[#24231f] border border-[#3a3834] w-full text-2xl font-semibold px-3 py-2 rounded blocky mb-3" oninput="onTitleChange()">
+          
+          <div class="text-xs uppercase tracking-widest text-[#8a877f] mb-1">THE WORD</div>
+          <div class="flex gap-2">
+            <input id="word-input" value="BASIS" maxlength="5" class="bg-[#24231f] border border-[#3a3834] flex-1 text-3xl font-bold tracking-[4px] px-3 py-2 rounded blocky text-center uppercase" oninput="updateManifest()">
+            <button onclick="lockWord()" class="playful-btn px-4 bg-white text-black font-semibold text-xs rounded blocky">LOCK WORD</button>
+          </div>
+          <div id="manifest-status" class="text-emerald-400 text-xs mt-1">First manifestation ready. Color + vibe will sync.</div>
+        </div>
+
+        <!-- QUICK COLOR SCHEME -->
+        <div class="workshop-card p-4 rounded-2xl">
+          <div class="flex justify-between items-center mb-2">
+            <div class="text-xs uppercase tracking-widest text-[#8a877f]">QUICK COLOR SCHEME (3 colors)</div>
+            <div class="flex gap-1">
+              <button onclick="randomColors()" class="text-xs px-2 py-0.5 bg-[#24231f] rounded">🎲 RANDOM</button>
+              <button onclick="sparkleFromTitle()" class="text-xs px-2 py-0.5 bg-[#24231f] rounded">✨ SPARKLE FROM TITLE</button>
+              <button onclick="eyedropperColor()" class="text-xs px-2 py-0.5 bg-[#24231f] rounded">💧 PICK FROM SCREEN</button>
+            </div>
+          </div>
+          
+          <div class="flex gap-3 mb-2">
+            <div>
+              <div class="text-[10px] text-[#8a877f] mb-1">Accent 1 (main)</div>
+              <div id="swatch1" onclick="pickSwatch(1)" class="color-swatch" style="background:#5ee27a"></div>
+            </div>
+            <div>
+              <div class="text-[10px] text-[#8a877f] mb-1">Accent 2</div>
+              <div id="swatch2" onclick="pickSwatch(2)" class="color-swatch" style="background:#f2c94c"></div>
+            </div>
+            <div>
+              <div class="text-[10px] text-[#8a877f] mb-1">Accent 3</div>
+              <div id="swatch3" onclick="pickSwatch(3)" class="color-swatch" style="background:#ff8a5c"></div>
+            </div>
+          </div>
+          <input type="color" id="color-main" value="#5ee27a" class="hidden" onchange="syncSwatches()">
+        </div>
+
+        <!-- SPIN AI VIBE (quick craft) -->
+        <div class="workshop-card p-4 rounded-2xl">
+          <div class="text-xs uppercase tracking-widest text-[#8a877f] mb-1">QUICK AI VIBE</div>
+          <button onclick="spinAIVibe()" class="playful-btn w-full py-3 bg-[#5ee27a] text-black font-bold text-sm rounded blocky flex items-center justify-center gap-2">
+            <span>SPIN AI VIBE</span>
+          </button>
+          <div id="agent-prompt-used" class="mt-2 text-[10px] text-[#8a877f] hidden"></div>
+          <div id="agent-results" class="grid grid-cols-3 gap-2 mt-2"></div>
+        </div>
+
+        <!-- FINE TUNE (hidden behind gear) -->
+        <div>
+          <button onclick="toggleFineTune()" class="flex items-center gap-2 text-sm px-3 py-1.5 bg-[#24231f] rounded blocky">
+            <span>⚙</span> 
+            <span>Fine-tune voice, frequency & lines</span>
+          </button>
+          <div id="fine-tune-panel" class="fine-tune workshop-card p-4 rounded-2xl mt-2">
+            <div class="text-xs uppercase text-[#8a877f] mb-2">VOICE LINES (edit freely)</div>
+            
+            <div class="space-y-3 text-xs">
+              <div>
+                <div class="text-[#f2c94c]">On Greens (2+)</div>
+                <div id="g-lines"></div>
+                <button onclick="addLine('greens')" class="text-emerald-400 text-[10px]">+ add line</button>
+              </div>
+              <div>
+                <div class="text-red-400">On Repeat Mistakes (escalates)</div>
+                <div class="pl-1">
+                  <div class="text-[10px]">1st</div><div id="m1-lines"></div>
+                  <div class="text-[10px]">2nd</div><div id="m2-lines"></div>
+                  <div class="text-[10px]">3rd+</div><div id="m3-lines"></div>
+                </div>
+              </div>
+              <div>
+                <div class="text-amber-400">On Progress</div>
+                <div id="p-lines"></div>
+              </div>
+            </div>
+
+            <div class="mt-3 text-xs">
+              Frequency (how often the companion speaks) 
+              <input type="range" id="freq" min="0.2" max="1" step="0.1" value="0.85" oninput="updateFreq()"> 
+              <span id="freq-val">85%</span>
+            </div>
+            <div class="text-[10px] text-[#8a877f] mt-1">Lower = less noise, more deliberate voice.</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: PREVIEWS + STORY -->
+      <div class="flex-1 space-y-4">
+        <!-- Live Board -->
+        <div class="workshop-card p-4 rounded-2xl">
+          <div class="flex justify-between items-center mb-2">
+            <div class="text-xs uppercase text-[#8a877f]">LIVE PREVIEW — PLAY THE BOARD</div>
+            <button onclick="submitGuess()" class="text-xs px-3 py-1 bg-[#24231f] rounded">SUBMIT GUESS</button>
+          </div>
+          <div class="flex gap-6">
+            <div>
+              <div id="preview-board" class="wordle-board"></div>
+              <input id="guess-input" maxlength="5" placeholder="GUESS HERE" class="mt-2 w-full bg-black text-center py-1 font-mono tracking-[4px] text-xl rounded" onkeydown="if(event.key==='Enter') submitGuess()">
+            </div>
+            <div class="flex-1">
+              <div id="companion" class="companion p-3 rounded-2xl text-sm min-h-[68px]">Let's make something great.</div>
+              <div class="text-[10px] mt-1 flex gap-1">
+                <span onclick="testReaction('green')" class="cursor-pointer px-2 py-0.5 bg-[#5ee27a] text-black rounded text-[10px]">+2 GREENS</span>
+                <span onclick="testReaction('mistake')" class="cursor-pointer px-2 py-0.5 bg-red-700 rounded text-[10px]">REPEAT MISTAKE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Story -->
+        <div class="workshop-card p-4 rounded-2xl">
+          <div class="text-xs uppercase text-[#8a877f] mb-1">STORY STARTER</div>
+          <div class="flex gap-2 mb-2">
+            <button onclick="autoSuggestStarter()" class="text-xs px-3 py-1 bg-[#24231f] rounded">AUTO SUGGEST</button>
+            <div class="flex gap-1 text-xs">
+              <button onclick="setVibePurpose('empower')" class="px-2 py-1 bg-[#24231f] rounded">Empower builders</button>
+              <button onclick="setVibePurpose('creativity')" class="px-2 py-1 bg-[#24231f] rounded">Ignite creativity</button>
+              <button onclick="setVibePurpose('magic')" class="px-2 py-1 bg-[#24231f] rounded">Unlock magic</button>
+            </div>
+          </div>
+          <textarea id="story-starter" class="w-full bg-[#24231f] border border-[#3a3834] p-3 rounded blocky text-sm h-14" placeholder="I chose this word because..."></textarea>
+          
+          <div class="mt-2 flex gap-2">
+            <button onclick="expandStory()" class="playful-btn flex-1 py-2 bg-[#5ee27a] text-black font-semibold text-sm rounded blocky">EXPAND TO FULL SEO ARTIFACT + IMAGES + VIDEO</button>
+            <button onclick="showDailyArtifact()" class="playful-btn px-4 border border-[#5ee27a] text-[#5ee27a] text-sm rounded blocky">VIEW AS DAILY PAGE</button>
+          </div>
+          
+          <div id="artifact-preview" class="mt-3 hidden p-3 bg-black/30 rounded text-xs"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentTheme = {
+      accent1: '#5ee27a',
+      accent2: '#f2c94c',
+      accent3: '#ff8a5c',
+      lines: {
+        greens: ["DOUBLE LOCK. NICE.", "TWO GREENS. SYSTEM STABLE."],
+        progress: ["SIGNAL STRENGTH INCREASING.", "WARM. DATA FLOW GOOD."],
+        mistake1: ["INVALID. THAT SIGNAL IS DEAD."],
+        mistake2: ["REPEAT ERROR. RECALIBRATE."],
+        mistake3: ["CRITICAL. MULTIPLE FAILURES."]
+      },
+      talk: 0.85
+    };
+    let secret = 'BASIS';
+    let guesses = [];
+    let deadLetters = new Set();
+    let currentVibeTitle = 'Foundations of Play';
+
+    function onTitleChange() {
+      currentVibeTitle = document.getElementById('vibe-title').value || 'Foundations of Play';
+      updateManifest();
+    }
+
+    function updateManifest() {
+      const word = document.getElementById('word-input').value.toUpperCase();
+      // live update preview title hint if needed
+    }
+
+    function lockWord() {
+      secret = document.getElementById('word-input').value.toUpperCase() || 'BASIS';
+      document.getElementById('manifest-status').innerHTML = `Word locked: ${secret}. First manifestation complete.`;
+      guesses = [];
+      deadLetters = new Set();
+      initBoard();
+      // auto suggest starter if empty
+      if (!document.getElementById('story-starter').value) {
+        autoSuggestStarter();
+      }
+    }
+
+    function syncSwatches() {
+      const main = document.getElementById('color-main').value;
+      currentTheme.accent1 = main;
+      document.getElementById('swatch1').style.background = main;
+      // simple harmony for 2 and 3
+      updateTheme();
+    }
+
+    function pickSwatch(n) {
+      const sw = document.getElementById('swatch' + n);
+      const picker = document.createElement('input');
+      picker.type = 'color';
+      picker.value = sw.style.background;
+      picker.onchange = () => {
+        sw.style.background = picker.value;
+        if (n === 1) currentTheme.accent1 = picker.value;
+        else if (n === 2) currentTheme.accent2 = picker.value;
+        else currentTheme.accent3 = picker.value;
+        updateTheme();
+      };
+      picker.click();
+    }
+
+    function randomColors() {
+      const h1 = Math.floor(Math.random()*360);
+      currentTheme.accent1 = `hsl(${h1}, 75%, 65%)`;
+      currentTheme.accent2 = `hsl(${(h1+40)%360}, 70%, 60%)`;
+      currentTheme.accent3 = `hsl(${(h1+80)%360}, 65%, 70%)`;
+      syncSwatchDOM();
+      updateTheme();
+    }
+
+    function sparkleFromTitle() {
+      const title = currentVibeTitle || document.getElementById('vibe-title').value;
+      let hash = 0;
+      for (let i=0; i<title.length; i++) hash = title.charCodeAt(i) + ((hash << 5) - hash);
+      const h1 = Math.abs(hash) % 360;
+      currentTheme.accent1 = `hsl(${h1}, 72%, 62%)`;
+      currentTheme.accent2 = `hsl(${(h1 + 35) % 360}, 68%, 58%)`;
+      currentTheme.accent3 = `hsl(${(h1 + 75) % 360}, 65%, 68%)`;
+      syncSwatchDOM();
+      updateTheme();
+    }
+
+    async function eyedropperColor() {
+      try {
+        const eye = new (window.EyeDropper)();
+        const res = await eye.open();
+        currentTheme.accent1 = res.sRGBHex;
+        document.getElementById('swatch1').style.background = res.sRGBHex;
+        updateTheme();
+      } catch(e) {
+        alert('Eyedropper not supported in this browser. Use the color inputs or sparkle.');
+      }
+    }
+
+    function syncSwatchDOM() {
+      document.getElementById('swatch1').style.background = currentTheme.accent1;
+      document.getElementById('swatch2').style.background = currentTheme.accent2;
+      document.getElementById('swatch3').style.background = currentTheme.accent3;
+    }
+
+    function updateTheme() {
+      // update board greens etc
+      document.querySelectorAll('.wordle-tile.green').forEach(t => {
+        t.style.background = currentTheme.accent1;
+      });
+    }
+
+    function initBoard() {
+      const b = document.getElementById('preview-board');
+      b.innerHTML = '';
+      for (let r = 0; r < 6; r++) {
+        for (let c = 0; c < 5; c++) {
+          const t = document.createElement('div');
+          t.className = 'wordle-tile blocky';
+          b.appendChild(t);
+        }
+      }
+    }
+
+    function submitGuess() {
+      const inp = document.getElementById('guess-input').value.toUpperCase();
+      if (inp.length !== 5) return;
+      
+      const board = document.getElementById('preview-board');
+      const row = Math.min(guesses.length, 5);
+      const tiles = [];
+      for (let i = 0; i < 5; i++) tiles.push(board.children[row * 5 + i]);
+      
+      const s = secret.split('');
+      const g = inp.split('');
+      const res = [];
+      const used = new Set();
+      
+      for (let i=0; i<5; i++) if (g[i] === s[i]) { res[i] = 'green'; used.add(i); }
+      for (let i=0; i<5; i++) {
+        if (res[i]) continue;
+        let found = false;
+        for (let j=0; j<5; j++) if (!used.has(j) && g[i] === s[j]) { res[i] = 'yellow'; used.add(j); found=true; break; }
+        if (!found) res[i] = 'gray';
+      }
+      
+      let repeatMistake = false;
+      res.forEach((r, i) => {
+        tiles[i].textContent = g[i];
+        tiles[i].classList.add(res[i]);
+        if (res[i] === 'green') tiles[i].style.background = currentTheme.accent1;
+        if (res[i] === 'gray' && deadLetters.has(g[i])) repeatMistake = true;
+        if (res[i] === 'gray') deadLetters.add(g[i]);
+      });
+      
+      guesses.push(inp);
+      
+      let line = currentTheme.lines.progress[0] || "Good step.";
+      const greens = res.filter(r => r==='green').length;
+      if (greens >= 2) line = currentTheme.lines.greens[0];
+      else if (repeatMistake) {
+        const tier = Math.min(3, guesses.filter(x => x === inp).length);
+        line = currentTheme.lines['mistake' + tier] ? currentTheme.lines['mistake' + tier][0] : "Repeating the same mistake.";
+      }
+      document.getElementById('companion').textContent = line;
+      document.getElementById('guess-input').value = '';
+      
+      if (greens === 5) setTimeout(() => document.getElementById('companion').textContent = "Beautiful build. The vibe is complete.", 600);
+    }
+
+    function testReaction(type) {
+      let l = currentTheme.lines.progress[0];
+      if (type === 'green') l = currentTheme.lines.greens[0];
+      if (type === 'mistake') l = currentTheme.lines.mistake1[0];
+      document.getElementById('companion').textContent = l;
+    }
+
+    function spinAIVibe() {
+      const results = document.getElementById('agent-results');
+      results.innerHTML = '';
+      const title = currentVibeTitle;
+      const word = secret;
+      
+      // Show the prompt used (teaches the user)
+      const promptUsed = `Create a consistent, delightful room vibe called "${title}" for the daily Wordul word "${word}". Make the design, voice lines, and overall feeling match perfectly. Focus on play, creativity, and positive empowerment.`;
+      document.getElementById('agent-prompt-used').innerHTML = `<span class="text-[#8a877f]">Prompt used:</span> <span class="italic">"${promptUsed}"</span>`;
+      document.getElementById('agent-prompt-used').classList.remove('hidden');
+      
+      const vibes = [
+        { name: 'Builder Joy', accent: '#5ee27a', desc: 'Stacking fun' },
+        { name: 'Creative Spark', accent: '#f2c94c', desc: 'Bright ideas' },
+        { name: 'Hidden Magic', accent: '#ff8a5c', desc: 'Surprise gifts' }
+      ];
+      
+      vibes.forEach(v => {
+        const c = document.createElement('div');
+        c.className = 'p-2 text-center text-xs border border-[#3a3834] rounded-xl cursor-pointer hover:border-[#5ee27a]';
+        c.innerHTML = `<div class="font-semibold">${v.name}</div><div style="background:${v.accent}" class="h-1.5 w-5 mx-auto my-1 rounded"></div><div class="text-[9px] text-[#8a877f]">${v.desc}</div>`;
+        c.onclick = () => {
+          currentTheme.accent1 = v.accent;
+          document.getElementById('swatch1').style.background = v.accent;
+          updateTheme();
+          document.getElementById('companion').textContent = `Vibe "${v.name}" applied to ${word}.`;
+        };
+        results.appendChild(c);
+      });
+    }
+
+    function addLine(cat) {
+      if (!currentTheme.lines[cat]) currentTheme.lines[cat] = [];
+      currentTheme.lines[cat].push("New line — edit me");
+      renderFineTuneLines();
+    }
+
+    function renderFineTuneLines() {
+      const map = { greens: 'g-lines', progress: 'p-lines', mistake1: 'm1-lines', mistake2: 'm2-lines', mistake3: 'm3-lines' };
+      Object.keys(map).forEach(k => {
+        const el = document.getElementById(map[k]);
+        if (!el) return;
+        const arr = currentTheme.lines[k] || [];
+        el.innerHTML = arr.map((l, i) => `<div class="flex mb-0.5"><input value="${l}" class="flex-1 bg-[#0f0f11] border border-[#3a3834] px-1 py-0.5 text-xs" onchange="currentTheme.lines['${k}'][${i}]=this.value"></div>`).join('');
+      });
+    }
+
+    function updateFreq() {
+      currentTheme.talk = parseFloat(document.getElementById('freq').value);
+      document.getElementById('freq-val').innerText = Math.round(currentTheme.talk * 100) + '%';
+    }
+
+    function toggleFineTune() {
+      const panel = document.getElementById('fine-tune-panel');
+      panel.classList.toggle('open');
+      if (panel.classList.contains('open') && !panel.dataset.rendered) {
+        renderFineTuneLines();
+        panel.dataset.rendered = 'true';
+      }
+    }
+
+    function autoSuggestStarter() {
+      const title = currentVibeTitle;
+      const word = secret;
+      const suggestions = [
+        `I chose ${word} because it captures the spirit of ${title.toLowerCase()} — building something meaningful one letter at a time.`,
+        `This word ${word} felt right for ${title} because it reminds us that small daily acts of creation can empower entire communities.`,
+        `${word} is perfect for a vibe about ${title.toLowerCase()}. It unlocks hidden layers of play and meaning in Wordul.`
+      ];
+      document.getElementById('story-starter').value = suggestions[Math.floor(Math.random() * suggestions.length)];
+    }
+
+    function setVibePurpose(type) {
+      const word = secret;
+      const title = currentVibeTitle;
+      let starter = '';
+      if (type === 'empower') starter = `I chose ${word} because it helps us empower builders and creators in the ${title} spirit.`;
+      if (type === 'creativity') starter = `The word ${word} sparks pure creativity — exactly the feeling of ${title}.`;
+      if (type === 'magic') starter = `${word} reveals the hidden magic inside everyday ${title.toLowerCase()}.`;
+      document.getElementById('story-starter').value = starter;
+    }
+
+    function expandStory() {
+      const starter = document.getElementById('story-starter').value || `I chose ${secret} because...`;
+      const preview = document.getElementById('artifact-preview');
+      preview.classList.remove('hidden');
+      preview.innerHTML = `
+        <div class="font-semibold mb-1">Expanded SEO Artifact Preview</div>
+        <div class="leading-relaxed text-xs">${starter}<br><br>
+        In Wordul, the daily word becomes a living room. When players engage with ${secret} they are not just solving — they are participating in a shared act of creation. The companion voice, the colors, the hidden gift when the super word is discovered... it all turns a simple puzzle into a small act of empowerment and joy.<br><br>
+        [Full blog post would continue with SEO keywords, links to past days, Wordul lore, and calls to play.]
+        </div>
+        <div class="mt-2 text-[10px]">3 AI images + video would appear here in the real version.</div>
+      `;
+    }
+
+    function showDailyArtifact() {
+      const m = document.createElement('div');
+      m.className = 'fixed inset-0 bg-black/80 z-[999] flex items-center justify-center p-4';
+      m.innerHTML = `
+        <div class="max-w-3xl w-full bg-[#1a1917] border border-[#3a3834] rounded-3xl overflow-hidden">
+          <div class="p-6">
+            <div class="text-3xl font-bold tracking-tighter">${secret}</div>
+            <div class="text-xs text-[#8a877f]">JUNE 3 2026 — ${currentVibeTitle.toUpperCase()}</div>
+            
+            <div class="my-4 text-sm leading-relaxed">${document.getElementById('story-starter').value || 'The story would live here as a beautiful long post.'}</div>
+            
+            <div class="grid grid-cols-3 gap-2 my-4">
+              <div class="h-20 bg-gradient-to-br from-[#5ee27a] to-[#24231f] rounded flex items-center justify-center text-xs">Image 1: The build moment</div>
+              <div class="h-20 bg-gradient-to-br from-[#f2c94c] to-[#24231f] rounded flex items-center justify-center text-xs">Image 2: Creative spark</div>
+              <div class="h-20 bg-gradient-to-br from-[#ff8a5c] to-[#24231f] rounded flex items-center justify-center text-xs">Image 3: Hidden magic</div>
+            </div>
+            
+            <button onclick="alert('In production: agent-generated video plays here');" class="text-xs px-3 py-1 border border-[#5ee27a] rounded">PLAY GENERATED VIDEO</button>
+            
+            <div class="mt-6 grid grid-cols-2 gap-4 text-xs">
+              <div>LEADERBOARD + CHAT would be beautifully integrated below, themed to the vibe.</div>
+              <div class="text-right">Celebration: winner avatar, "warded by" credit, B.E.O. link.</div>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(m);
+      m.onclick = (e) => { if (e.target === m) m.remove(); };
+    }
+
+    function scheduleDay() {
+      alert('This would call the admin schedule endpoint with word + full vibe config (roomConfig) + rich story + media references.');
+    }
+
+    function init() {
+      initBoard();
+      
+      // seed title
+      document.getElementById('vibe-title').value = currentVibeTitle;
+      
+      // seed colors
+      document.getElementById('swatch1').style.background = currentTheme.accent1;
+      document.getElementById('swatch2').style.background = currentTheme.accent2;
+      document.getElementById('swatch3').style.background = currentTheme.accent3;
+      
+      // seed story
+      document.getElementById('story-starter').value = `I chose ${secret} because it captures the spirit of building something meaningful together.`;
+      
+      // initial board demo
+      setTimeout(() => {
+        const b = document.getElementById('preview-board');
+        const demo = ['B','A','S','I','S'];
+        for (let i=0; i<5; i++) {
+          b.children[i].textContent = demo[i];
+          b.children[i].classList.add('green');
+          b.children[i].style.background = currentTheme.accent1;
+        }
+        document.getElementById('companion').textContent = currentTheme.lines.greens[0];
+      }, 300);
+      
+      // freq
+      document.getElementById('freq').value = currentTheme.talk;
+      document.getElementById('freq-val').innerText = Math.round(currentTheme.talk * 100) + '%';
+      
+      // make swatches active on first
+      document.getElementById('swatch1').classList.add('active');
+    }
+    
+    window.onload = init;
+  </script>
+</body>
+</html>
