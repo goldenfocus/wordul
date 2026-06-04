@@ -7,6 +7,7 @@ import { buildGameRecords, summarizeRoomGame } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
 import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
 import type { RoomMode } from "./modes.ts";
+import { everyoneReady, COUNTDOWN_MS } from "./duel.ts";
 import type {
   ChatEntry,
   ClientMessage,
@@ -60,6 +61,7 @@ export class Room extends DurableObject<Env> {
       word: null,
       winner: null,
       startedAt: null,
+      goAt: null,
       finishedAt: null,
       round: 0,
       chat: [],
@@ -81,6 +83,10 @@ export class Room extends DurableObject<Env> {
         if (!restored.maxGuesses) restored.maxGuesses = guessesFor(restored.wordLength);
         if (!restored.mode) restored.mode = DEFAULT_MODE;
         if (!restored.edition) restored.edition = "default"; // pre-theme rooms
+        if (restored.goAt === undefined) restored.goAt = null; // pre-countdown rooms
+        for (const p of restored.players) {
+          if (p.ready === undefined) p.ready = false; // pre-ready-gate players
+        }
         this.state = restored;
       }
     });
@@ -139,6 +145,7 @@ export class Room extends DurableObject<Env> {
         p.connected = false;
         this.pushSystem(`${p.username} left`);
       }
+      if (this.state.phase === "countdown") await this.cancelCountdown();
       await this.persistAndBroadcast();
     }
   }
@@ -164,7 +171,9 @@ export class Room extends DurableObject<Env> {
       case "hello":
         return this.onHello(ws, msg.username, msg.wordLength, msg.edition, msg.mode);
       case "start":
-        return this.onStart(ws);
+        return this.onReady(ws, true);
+      case "ready":
+        return this.onReady(ws, msg.ready);
       case "guess":
         return this.onGuess(ws, msg.word);
       case "rematch":
@@ -215,7 +224,7 @@ export class Room extends DurableObject<Env> {
         this.send(ws, { type: "error", message: "room full" });
         return;
       }
-      this.state.players.push({ username, connected: true, guesses: [], status: "playing" });
+      this.state.players.push({ username, connected: true, guesses: [], status: "playing", ready: false });
       // The room's default word length follows its owner's preference, and only in a
       // pristine lobby. Anyone can still change it mid-lobby via set_length (shared control).
       if (
@@ -363,30 +372,64 @@ export class Room extends DurableObject<Env> {
     await this.persistAndBroadcast();
   }
 
-  private async onStart(ws: WebSocket): Promise<void> {
-    if (this.state.phase === "playing") return;
-    this.ensureBot();
-    if (this.state.players.length < 1) return;
-    const pool = WORDS_BY_SIZE[this.state.wordLength];
-    if (!pool || pool.answers.length === 0) {
-      this.send(ws, { type: "error", message: "no words available for that length" });
+  // A player toggles their ready state in the lobby. When every connected player is
+  // ready, the synchronized countdown begins automatically — no manual "start".
+  private async onReady(ws: WebSocket, ready: boolean): Promise<void> {
+    if (this.state.phase !== "lobby") return;
+    const username = this.userFor(ws);
+    const player = username ? this.state.players.find((p) => p.username === username) : null;
+    if (!player) return;
+    player.ready = !!ready;
+    this.ensureBot(); // robot room: the worduler joins (already ready) so it counts toward the gate
+    if (everyoneReady(this.state.players)) {
+      await this.beginCountdown();
       return;
     }
-    this.state.word = pool.answers[Math.floor(Math.random() * pool.answers.length)] ?? null;
-    if (!this.state.word) return;
-    this.state.phase = "playing";
+    await this.persistAndBroadcast();
+  }
+
+  // Pick the word, reset boards, and enter the countdown phase with a server-stamped
+  // goAt so every client renders 3-2-1 against the same clock. A DO alarm flips us live.
+  private async beginCountdown(): Promise<void> {
+    const pool = WORDS_BY_SIZE[this.state.wordLength];
+    if (!pool || pool.answers.length === 0) return;
+    const word = pool.answers[Math.floor(Math.random() * pool.answers.length)] ?? null;
+    if (!word) return;
+    this.state.word = word;
     this.state.winner = null;
-    this.state.startedAt = Date.now();
+    this.state.startedAt = null;
     this.state.finishedAt = null;
     this.state.round += 1;
     for (const p of this.state.players) {
       p.guesses = [];
       p.status = "playing";
     }
-    const who = this.userFor(ws) ?? "someone";
-    this.pushSystem(`${who} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
+    this.state.phase = "countdown";
+    this.state.goAt = Date.now() + COUNTDOWN_MS;
+    this.pushSystem(`Get ready… round ${this.state.round}`);
+    await this.ctx.storage.setAlarm(this.state.goAt);
+    await this.persistAndBroadcast();
+  }
+
+  // The countdown alarm fired: go live. Word + boards were prepared in beginCountdown.
+  private async goLive(): Promise<void> {
+    this.state.phase = "playing";
+    this.state.startedAt = this.state.goAt ?? Date.now();
+    this.state.goAt = null;
+    for (const p of this.state.players) p.ready = false; // clean slate for the next lobby
     if (this.state.players.some((p) => p.isBot && p.status === "playing")) this.scheduleBotTick();
     await this.persistAndBroadcast();
+  }
+
+  // A player dropped during the countdown — abort back to the lobby and make everyone
+  // ready up again, cancelling the pending go-live alarm.
+  private async cancelCountdown(): Promise<void> {
+    this.state.phase = "lobby";
+    this.state.goAt = null;
+    this.state.word = null;
+    for (const p of this.state.players) p.ready = false;
+    try { await this.ctx.storage.deleteAlarm(); } catch { /* no alarm pending */ }
+    this.pushSystem("Countdown cancelled — ready up again");
   }
 
   private async onGuess(ws: WebSocket, wordRaw: string): Promise<void> {
@@ -447,7 +490,7 @@ export class Room extends DurableObject<Env> {
     if (!this.isRobotRoom()) return;
     if (this.state.players.some((p) => p.isBot)) return;
     if (this.state.players.length >= MAX_PLAYERS) return;
-    this.state.players.push({ username: BOT_NAME, connected: true, guesses: [], status: "playing", isBot: true });
+    this.state.players.push({ username: BOT_NAME, connected: true, guesses: [], status: "playing", isBot: true, ready: true });
     this.pushSystem(`🤖 ${BOT_NAME} powered on — knows the basics, holds no grudges.`);
   }
 
@@ -465,6 +508,11 @@ export class Room extends DurableObject<Env> {
   // DO alarm: the robot's heartbeat. Wakes, plays ONE guess through the same path a human
   // guess takes, then reschedules until it has won or run out of rows. Hibernation-safe.
   async alarm(): Promise<void> {
+    // Countdown go-live takes priority over the bot heartbeat (they share one alarm).
+    if (this.state.phase === "countdown") {
+      await this.goLive();
+      return;
+    }
     if (this.state.phase !== "playing" || !this.state.word) return;
     const bot = this.state.players.find((p) => p.isBot && p.status === "playing");
     if (!bot) return;
@@ -574,10 +622,12 @@ export class Room extends DurableObject<Env> {
     this.state.word = null;
     this.state.winner = null;
     this.state.startedAt = null;
+    this.state.goAt = null;
     this.state.finishedAt = null;
     for (const p of this.state.players) {
       p.guesses = [];
       p.status = "playing";
+      p.ready = false;
     }
     await this.persistAndBroadcast();
   }
