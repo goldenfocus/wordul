@@ -140,7 +140,10 @@ export class User extends DurableObject<Env> {
       catch { return Response.json({ error: "bad_request" }, { status: 400 }); }
       const profile = await this.load(username);
       const phrase = (loginBody.passphrase ?? "").trim().toLowerCase();
-      // Generic failure for every reject path (no oracle: unclaimed vs wrong phrase look identical).
+      // Same status + body for every reject path (no response-content oracle). NOTE: the
+      // unclaimed/bad-shape paths skip PBKDF2 and return ~100ms faster than a valid-shape
+      // wrong-phrase attempt — a timing difference that is non-exploitable because `claimed`
+      // is already public via GET /api/user/:username.
       if (!profile.claimed || !profile.auth || !validatePassphraseShape(phrase)) {
         return Response.json({ error: "invalid_credentials" }, { status: 401 });
       }
@@ -171,7 +174,7 @@ export class User extends DurableObject<Env> {
       const callerHash = await hashToken(sessionToken);
       if (!profile.auth.sessions[callerHash]) return Response.json({ error: "unauthorized" }, { status: 401 });
       const killed = revokeSession(profile.auth.sessions, target || callerHash);
-      await this.ctx.storage.put("profile", profile);
+      if (killed) await this.ctx.storage.put("profile", profile);
       return Response.json({ ok: killed });
     }
 
@@ -184,6 +187,8 @@ export class User extends DurableObject<Env> {
       if (!profile.auth || !token) return Response.json({ error: "unauthorized" }, { status: 401 });
       const callerHash = await hashToken(token);
       if (!profile.auth.sessions[callerHash]) return Response.json({ error: "unauthorized" }, { status: 401 });
+      // Touch lastSeen on every authenticated /me call — a write on every GET by design;
+      // threshold-gate this if /me ever becomes a polling endpoint.
       touchSession(profile.auth.sessions, callerHash, Date.now());
       await this.ctx.storage.put("profile", profile);
       const sessions = Object.entries(profile.auth.sessions).map(([id, m]) => ({
