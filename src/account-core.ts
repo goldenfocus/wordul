@@ -10,7 +10,7 @@ export type SessionMeta = { createdAt: number; lastSeen: number; label?: string 
 export type AuthRecord = {
   v: 1;
   salt: string;                       // hex, per-account
-  phraseHash: string;                 // hex PBKDF2-SHA256 of the 6-word passphrase
+  phraseHash: string;                 // hex PBKDF2-SHA256 of the full 6-token passphrase (anchor + 5 words)
   methods?: AuthMethods;              // RESERVED upgrade layers — not implemented in P0
   sessions: Record<string, SessionMeta>; // key = sha256(token) hex
   claimedAt: number;
@@ -40,10 +40,12 @@ export const PHRASE_WORDS: readonly string[] = [
   "quill", "spruce", "thorn", "umber", "vale", "wave", "yarrow", "aspen", "beacon", "canyon",
   "dawn", "forest", "garnet", "hazel", "indigo", "juniper", "lagoon", "lotus", "marsh", "nimbus",
   "orchard", "prairie", "quiver", "ridge", "saffron", "tundra", "valley", "walnut", "cypress", "dahlia",
-  "willows", "drifts", "wanders", "settles", "rises", "gathers", "lingers", "whispers", "scatters", "blooms",
-  "autumn", "crystal", "feather", "glacier", "harvest", "island", "lullaby", "meadows", "orchid", "pebbles",
-  "rainbow", "shadow", "snowfall", "summit", "thunder", "violet", "willowy", "woodland", "zenith", "breeze",
+  "anchor", "ribbon", "wanders", "settles", "rises", "gathers", "lingers", "whispers", "scatters", "blooms",
+  "autumn", "crystal", "feather", "glacier", "harvest", "island", "lullaby", "bridge", "orchid", "candle",
+  "rainbow", "shadow", "snowfall", "summit", "thunder", "violet", "garden", "woodland", "zenith", "breeze",
 ];
+// Hoisted membership set — validatePassphraseShape runs on every login; don't rebuild it.
+const PHRASE_WORD_SET: ReadonlySet<string> = new Set(PHRASE_WORDS);
 
 /** Generate a passphrase: [anchor, w1..wN] with N random distinct words from PHRASE_WORDS.
  *  Takes ONLY an rng — there is intentionally no username parameter, so the phrase can
@@ -52,7 +54,7 @@ export function makePassphrase(rng: () => number = Math.random): string[] {
   const pick: string[] = [];
   const used = new Set<number>();
   while (pick.length < PHRASE_WORD_COUNT) {
-    const i = Math.floor(rng() * PHRASE_WORDS.length) % PHRASE_WORDS.length;
+    const i = Math.floor(rng() * PHRASE_WORDS.length);
     if (used.has(i)) continue;        // distinct words read better and add entropy
     used.add(i);
     pick.push(PHRASE_WORDS[i]);
@@ -66,13 +68,13 @@ export function validatePassphraseShape(phrase: string): boolean {
   const words = phrase.trim().toLowerCase().split(/\s+/);
   if (words.length !== PHRASE_WORD_COUNT + 1) return false;
   if (words[0] !== PHRASE_ANCHOR) return false;
-  const list = new Set(PHRASE_WORDS);
-  return words.slice(1).every((w) => list.has(w));
+  return words.slice(1).every((w) => PHRASE_WORD_SET.has(w));
 }
 
 // ---- Claim state machine ----
 export type ClaimDecision = { ok: true } | { ok: false; reason: "already_claimed" | "reserved" | "invalid_username" };
 
+// `username` is the DESIRED handle to claim (the caller, i.e. the DO, validates it is this profile's own handle).
 export function canClaim(profile: Pick<UserProfile, "claimed">, username: string): ClaimDecision {
   if (!isValidUsername(username)) return { ok: false, reason: "invalid_username" };
   if (isReserved(username)) return { ok: false, reason: "reserved" };
@@ -81,6 +83,7 @@ export function canClaim(profile: Pick<UserProfile, "claimed">, username: string
 }
 
 // ---- Sessions (mutate the passed map in place; DO persists) ----
+// NOTE: no cap here — the DO caller must enforce a per-account session limit before calling.
 export function addSession(sessions: Record<string, SessionMeta>, tokenHash: string, meta: SessionMeta): void {
   sessions[tokenHash] = meta;
 }

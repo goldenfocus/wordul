@@ -133,5 +133,7 @@ describe("publicProfile (secret stripper — load-bearing security guarantee)", 
     expect((pub as Record<string, unknown>).pendingClaim).toBeUndefined();
     expect(pub.claimed).toBe(true);
     expect(pub.verified).toBe(false);
+    expect(pub.username).toBe("zang");      // non-secret fields must survive the strip
+    expect(pub.createdAt).toBe(1000);
   });
 });
