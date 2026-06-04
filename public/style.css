@@ -1675,3 +1675,24 @@ body.playing .room-tabs { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .countdown-overlay.pulse { animation: none; }
 }
+
+/* --- Duel queue strip + throne badge --- */
+.queue-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem 1rem;
+  margin: 0.25rem auto 0.75rem;
+  text-align: center;
+}
+.queue-king {
+  font-weight: 700;
+  color: var(--accent, #c9b458);
+}
+.queue-next { opacity: 0.85; }
+.badge.throne {
+  background: var(--accent, #c9b458);
+  color: #1a1a1a;
+  font-weight: 700;
+}
