@@ -41,6 +41,30 @@ export function pickPersona(seedCount: number, openPersonaIds: ReadonlySet<strin
 }
 
 /**
+ * Deterministic multi-pick: walk the roster from `seedCount`, skipping any persona already
+ * open (across all live rooms), and return up to `n` DISTINCT personas. Returns fewer when
+ * the roster is exhausted (graceful — the caller shrinks the room), [] when n <= 0 or every
+ * persona is open. `pickPersona` is the n=1 case.
+ */
+export function pickPersonas(
+  seedCount: number,
+  n: number,
+  openPersonaIds: ReadonlySet<string>,
+): BotPersona[] {
+  if (n <= 0) return [];
+  const out: BotPersona[] = [];
+  const taken = new Set<string>(openPersonaIds);
+  const len = PERSONAS.length;
+  for (let i = 0; i < len && out.length < n; i++) {
+    const p = PERSONAS[(seedCount + i) % len];
+    if (taken.has(p.id)) continue;
+    taken.add(p.id);
+    out.push(p);
+  }
+  return out;
+}
+
+/**
  * The disguise. Total omit (NOT an allowlist) so future PlayerState fields pass through
  * automatically — only `isBot` is stripped. Both snapshotFor branches route through this.
  */

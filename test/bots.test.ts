@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { PERSONAS, pickPersona, projectPlayerForClient } from "../src/bots.ts";
+import { PERSONAS, pickPersona, pickPersonas, projectPlayerForClient } from "../src/bots.ts";
 import type { PlayerState } from "../src/types.ts";
 
 const KNOWN_EDITIONS = ["default", "yang", "jackpot", "arcade", "editorial", "tactile", "robot"];
@@ -74,6 +74,51 @@ describe("projectPlayerForClient (disguise)", () => {
     const out = projectPlayerForClient(me);
     expect("isBot" in out).toBe(false);
     expect(out.username).toBe("yan");
+  });
+});
+
+describe("pickPersonas", () => {
+  it("returns n distinct personas", () => {
+    const picked = pickPersonas(0, 3, new Set());
+    expect(picked.length).toBe(3);
+    expect(new Set(picked.map((p) => p.id)).size).toBe(3);
+  });
+
+  it("skips open persona ids", () => {
+    const open = new Set([PERSONAS[0].id, PERSONAS[1].id]);
+    const picked = pickPersonas(0, 3, open);
+    for (const p of picked) expect(open.has(p.id)).toBe(false);
+    expect(new Set(picked.map((p) => p.id)).size).toBe(picked.length);
+  });
+
+  it("degrades to fewer when the roster is exhausted (never duplicates)", () => {
+    const picked = pickPersonas(0, PERSONAS.length + 5, new Set());
+    expect(picked.length).toBe(PERSONAS.length);
+    expect(new Set(picked.map((p) => p.id)).size).toBe(PERSONAS.length);
+  });
+
+  it("returns [] when n <= 0 or all personas are open", () => {
+    expect(pickPersonas(0, 0, new Set())).toEqual([]);
+    expect(pickPersonas(0, 3, new Set(PERSONAS.map((p) => p.id)))).toEqual([]);
+  });
+
+  it("pickPersona is the n=1 case", () => {
+    const open = new Set<string>();
+    expect(pickPersonas(2, 1, open)[0]?.id).toBe(pickPersona(2, open)?.id);
+  });
+});
+
+describe("multi-bot disguise", () => {
+  it("strips isBot from every bot in an N-bot room", () => {
+    const bots: PlayerState[] = PERSONAS.slice(0, 4).map((p) => ({
+      username: p.id, connected: true, guesses: [], status: "playing",
+      isBot: true, scienceOptOut: true, points: 0, pointsSpent: 0,
+    }));
+    for (const b of bots) {
+      const out = projectPlayerForClient(b);
+      expect("isBot" in out).toBe(false);
+      expect(JSON.stringify(out)).not.toContain("isBot");
+    }
   });
 });
 
