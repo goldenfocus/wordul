@@ -34,3 +34,19 @@ export function computeDailyStatsView(summary) {
 
   return { played, wins, losses, finished, winRate, avgGuesses, avgScore, distRows, maxCount };
 }
+
+// Shape the full-roster API response ({ players:[{rank,username,gold,guesses,won,resigned,durationMs}], youRank, total })
+// into rows ready to render, marking the viewer's own row. Pure — no DOM.
+export function computeRosterView(full, me) {
+  const players = (full && Array.isArray(full.players)) ? full.players : [];
+  const rows = players.map((e) => ({
+    rank: e.rank,
+    username: e.username,
+    gold: e.gold,
+    guesses: e.guesses,
+    won: !!e.won,
+    durationMs: e.durationMs,
+    isYou: e.username === me,
+  }));
+  return { rows, total: (full && typeof full.total === "number") ? full.total : rows.length };
+}

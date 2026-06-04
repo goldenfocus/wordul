@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeDailyStatsView } from "../public/daily-stats.js";
+import { computeDailyStatsView, computeRosterView } from "../public/daily-stats.js";
 
 describe("computeDailyStatsView", () => {
   const summary = {
@@ -45,5 +45,22 @@ describe("computeDailyStatsView", () => {
       expect(v.avgScore).toBeNull();
       expect(v.maxCount).toBe(0);
     }
+  });
+});
+
+describe("computeRosterView", () => {
+  it("marks the viewer row and preserves order", () => {
+    const full = { players: [
+      { rank: 1, username: "ava", gold: 1240, guesses: 2, won: true, durationMs: 95000 },
+      { rank: 2, username: "me", gold: 540, guesses: 4, won: true, durationMs: 200000 },
+    ], total: 2 };
+    const v = computeRosterView(full, "me");
+    expect(v.rows.map((r) => r.username)).toEqual(["ava", "me"]);
+    expect(v.rows[1].isYou).toBe(true);
+    expect(v.total).toBe(2);
+  });
+
+  it("handles an empty/absent roster", () => {
+    expect(computeRosterView(null, "me")).toEqual({ rows: [], total: 0 });
   });
 });
