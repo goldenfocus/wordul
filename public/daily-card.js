@@ -139,8 +139,8 @@ export function renderDailyCard({ themeId, result }) {
         <span class="daily-next-label">Next Wordul in</span>
         <span class="daily-countdown" id="dailyCountdown">—</span>
       </div>
-      <button id="dailySeeAll" class="daily-seeall" type="button" aria-label="See all players">
-        See everyone<span class="daily-chev" aria-hidden="true">›</span>
+      <button id="dailySeeAll" class="daily-seeall" type="button" aria-label="See today's stats and everyone who played">
+        Today's stats<span class="daily-chev" aria-hidden="true">›</span>
       </button>
     </article>`;
   }

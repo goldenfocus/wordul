@@ -89,7 +89,7 @@ describe("hub home (redesign)", () => {
     expect(document.getElementById("dailyStatsLabel").textContent).toBe("1,248 played");
   });
 
-  it("after you've played today, shows the post-play recap — result + countdown + 'see everyone', no play card or Share", () => {
+  it("after you've played today, shows the post-play recap — result + countdown + 'Today's stats', no play card or Share", () => {
     const cb = makeCallbacks({ dailyResult: { won: true, guesses: 4 } });
     renderHub({}, cb);
     expect(document.getElementById("dailyCard")).toBeNull();           // no replay surface
