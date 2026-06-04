@@ -44,14 +44,15 @@ describe("hub home (redesign)", () => {
     expect(html).not.toMatch(/[⚡\u{1F465}\u{1F4CA}▶]/u); // ⚡ 👥 📊 ▶
   });
 
-  it("mode tiles are icon-only (no text labels) and each routes to its mode", () => {
+  it("mode tiles show an icon + a small word label and each routes to its mode", () => {
     const cb = makeCallbacks();
     renderHub({}, cb);
-    // Icon-only: tiles carry an accessible label but render no visible word.
-    for (const id of ["modeSolo", "modePvP", "modeArena"]) {
+    // Icon + catchy micro-label: Solo · Duel · Arena.
+    const labels = { modeSolo: "Solo", modePvP: "Duel", modeArena: "Arena" };
+    for (const [id, word] of Object.entries(labels)) {
       const tile = document.getElementById(id);
       expect(tile.getAttribute("aria-label")).toBeTruthy();
-      expect(tile.textContent.trim()).toBe(""); // glyph only, no label text
+      expect(tile.querySelector(".mode-name").textContent.trim()).toBe(word);
     }
     document.getElementById("modeSolo").click();
     document.getElementById("modePvP").click();

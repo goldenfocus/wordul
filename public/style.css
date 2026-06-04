@@ -2339,8 +2339,8 @@ body.hub-home .topbar-stats { display: flex; }
 .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
 .mode-grid-3 { grid-template-columns: repeat(3, 1fr); }
 .mode-tile {
-  display: flex; align-items: center; justify-content: center;
-  padding: 24px 12px; min-height: 92px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px;
+  padding: 20px 12px; min-height: 92px; cursor: pointer;
   border: 0; border-radius: 24px;
   background: rgba(30,21,56,0.40);
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
@@ -2352,8 +2352,14 @@ body.hub-home .topbar-stats { display: flex; }
 .mode-tile:hover { transform: translateY(-2px); background: rgba(46,33,82,0.5); }
 .mode-tile:active { transform: translateY(0); }
 .mode-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 24px; }
-.mode-ico { color: var(--accent); opacity: .9; display: grid; place-items: center; }   /* bare glyph — no chip, no pill, no label */
+.mode-ico { color: var(--accent); opacity: .9; display: grid; place-items: center; }   /* bare glyph — no chip, no pill */
 .mode-ico .glyph { width: 30px; height: 30px; }
+/* Small, catchy word under the bare icon — uppercase micro-label, not a heading. */
+.mode-name {
+  font-family: var(--font-body); font-size: 12px; font-weight: 600;
+  letter-spacing: .09em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--fg) 72%, transparent);
+}
 @media (prefers-reduced-motion: reduce) {
   .daily-card, .daily-tile.is-cursor { animation: none !important; }
   .daily-card, .mode-tile { transition: none !important; }

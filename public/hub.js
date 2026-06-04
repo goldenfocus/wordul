@@ -61,12 +61,15 @@ function renderDaily() {
       <div class="mode-grid mode-grid-3">
         <button id="modeSolo" class="mode-tile" type="button" aria-label="Solo" title="Solo">
           <span class="mode-ico">${GLYPH.solo}</span>
+          <span class="mode-name">Solo</span>
         </button>
-        <button id="modePvP" class="mode-tile" type="button" aria-label="Head-to-head" title="Head-to-head">
+        <button id="modePvP" class="mode-tile" type="button" aria-label="Duel — invite a friend" title="Duel">
           <span class="mode-ico">${GLYPH.duo}</span>
+          <span class="mode-name">Duel</span>
         </button>
         <button id="modeArena" class="mode-tile" type="button" aria-label="Arena" title="Arena">
           <span class="mode-ico">${GLYPH.crowd}</span>
+          <span class="mode-name">Arena</span>
         </button>
       </div>
     </section>

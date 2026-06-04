@@ -149,13 +149,19 @@ function seedDailyOnce(letter) {
 // client-side nav in a View Transition so the home card morphs/grows into the board
 // (showDaily tags #tabPlay with the same view-transition-name as .daily-card).
 // Progressive + reduced-motion safe: no API or reduce-motion → plain instant nav.
-function bloomIntoDaily() {
+function bloomIntoDaily(voiceId) {
   const target = "/daily/" + todayUTC();
   const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Apply the daily's voice INSIDE the transition's DOM-swap so the captured "old"
+  // frame is still the elegant default home and the "new" frame is the themed board.
+  // That difference is what the View Transition morphs through (square→rounded,
+  // ultraviolet→the day's accent). Applying it earlier made old==new — a hard cut.
+  // The daily room re-applies its voice from the server snapshot, so a reload is fine.
+  const swap = () => { if (voiceId) applyEdition(voiceId); navigate(target); };
   if (typeof document.startViewTransition === "function" && !reduce) {
-    document.startViewTransition(() => navigate(target));
+    document.startViewTransition(swap);
   } else {
-    navigate(target);
+    swap();
   }
 }
 
@@ -199,6 +205,11 @@ function showHome() {
 // Toggle greeting vs. intro based on whether we know who the player is.
 // For returning users, render the Hub (hides the legacy greeting/rooms sections).
 function renderHomeIdentity() {
+  // The home wears the app's signature look, never a daily's voice. Reset to the
+  // default edition here so today's voice (Tactile, etc.) doesn't bleed onto the
+  // hub — it only takes over when you START the WOTD, as a morph (see bloomIntoDaily).
+  // This also re-persists "default", so a leftover voice can't leak into a Solo game.
+  applyEdition("default");
   const u = getUsername();
   const greeting = $("#homeGreeting");
   const intro = $("#homeIntro");
@@ -220,7 +231,7 @@ function renderHomeIdentity() {
       editionName: (id) => getEdition(id).name,
       // Tap or type-to-play: drop into today's board (client-side, no reload). A
       // typed letter is carried as a seed so "start playing right here" feels real.
-      onPlay: (editionId, seed) => { applyEdition(editionId); pendingDailySeed = seed || null; bloomIntoDaily(); },
+      onPlay: (editionId, seed) => { pendingDailySeed = seed || null; bloomIntoDaily(editionId); },
       onSolo: () => enterNewRoom({ autoStart: true }),
       onPvP: () => enterNewRoom({ autoStart: false }),
       onArena: () => showArena(),
