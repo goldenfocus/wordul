@@ -589,10 +589,13 @@ const game = {
   unreadChat: 0,
   chatCollapsed: false,
   exploding: false,
-  reconnectToastTimer: null,
+  reconnectNoticeTimer: null, // arms the gentle glass pill once an outage is sustained
   reconnectTimer: null, // pending openSocket() after an unintended close
+  reconnectAttempts: 0, // backoff counter; reset to 0 on a successful open
+  pendingReconnect: null, // { url, session } so online/focus can pull the retry forward
   socketSession: null,  // { ws, reconnect } — stale close handlers bail when !== this
   heartbeatTimer: null,
+  pongTimer: null, // heartbeat watchdog — unanswered ping ⇒ recycle a zombie socket
   autoStart: false,  // one-shot: "Start playing" auto-begins the solo game on first lobby snapshot
   shareImage: null,  // { file, url, text, canvas } — pre-rendered result card for sharing
   // EZ-mode power-ups (reset each round): revealed letters + known vowel count.
@@ -1366,9 +1369,16 @@ function closeChatSheet() {
   $("#chatInput")?.blur();
 }
 
-const RECONNECT_DELAY_MS = 600;
-const RECONNECT_TOAST_AFTER_MS = 1500; // suppress toast if reconnect succeeds within this window
-const HEARTBEAT_MS = 25_000;
+// Reconnect tuning. The philosophy is "premium silent recovery": the first retry is
+// near-instant, backoff is gentle-but-capped so a flapping/restarting server is never
+// hammered, and we NEVER surface a stark error toast — most drops (dev hot-reload, a
+// backgrounded mobile tab, a signal blip) resolve in well under a second and the player
+// sees nothing at all. A calm glass pill only appears for a genuinely sustained outage.
+const RECONNECT_FIRST_MS = 250;      // first retry — fast enough to feel instant
+const RECONNECT_MAX_MS = 6_000;      // backoff ceiling; we keep trying forever, but politely
+const RECONNECT_NOTICE_AFTER_MS = 2_600; // only show the (gentle) pill past this much downtime
+const HEARTBEAT_MS = 20_000;         // keep the DO path warm
+const PONG_TIMEOUT_MS = 8_000;       // no pong in this window ⇒ socket is a zombie, recycle it
 
 function connect() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -1387,9 +1397,10 @@ function openSocket(url) {
 
   ws.addEventListener("open", () => {
     if (game.socketSession !== session) return; // superseded by leaveRoom() / a newer socket
-    // Clear any "reconnecting" UI state once we're back.
-    clearTimeout(game.reconnectToastTimer);
-    game.reconnectToastTimer = null;
+    // We're back — drop any reconnecting UI and reset backoff so the next blip is fast again.
+    game.reconnectAttempts = 0;
+    game.pendingReconnect = null;
+    clearReconnectNotice();
     setConnectionStatus("ok");
     send({
       type: "hello",
@@ -1409,9 +1420,16 @@ function openSocket(url) {
     if (game.socketSession !== session) return;
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
-    if (msg.type === "pong") return; // heartbeat reply — no-op
+    if (msg.type === "pong") {
+      clearTimeout(game.pongTimer); // heartbeat acked — connection is alive
+      game.pongTimer = null;
+      return;
+    }
     onServerMessage(msg);
   });
+
+  // A socket error always precedes/forces a close; close() makes the reconnect path fire.
+  ws.addEventListener("error", () => { try { ws.close(); } catch {} });
 
   ws.addEventListener("close", () => {
     // Stale or intentional close — leaveRoom() cleared socketSession/reconnect, or a
@@ -1419,28 +1437,59 @@ function openSocket(url) {
     // streams snapshots into home/hub/profile where the room scaffold is gone.
     if (game.socketSession !== session || !session.reconnect) return;
     stopHeartbeat();
-    setConnectionStatus("reconnecting");
-    // Only show the toast if the reconnect actually takes a while. Most close
-    // events on mobile are fleeting (background tab, signal blip) and resolve
-    // before the user notices.
-    game.reconnectToastTimer = setTimeout(
-      () => toast("Reconnecting…", { duration: 4000 }),
-      RECONNECT_TOAST_AFTER_MS,
-    );
-    game.reconnectTimer = setTimeout(() => {
-      game.reconnectTimer = null;
-      if (game.socketSession !== session || !session.reconnect) return;
-      openSocket(url);
-    }, RECONNECT_DELAY_MS);
+    scheduleReconnect(url, session);
   });
+}
+
+// Backoff scheduler. Captures the (url, session) so a later leaveRoom()/supersede can
+// cancel us, and stashes a `pendingReconnect` handle so an online/focus event can pull
+// the retry forward instead of waiting out the backoff.
+function scheduleReconnect(url, session) {
+  setConnectionStatus("reconnecting");
+  game.pendingReconnect = { url, session };
+  // Arm the gentle notice once. It only paints if we're still down after the grace window.
+  if (!game.reconnectNoticeTimer && !document.querySelector(".net-pill")) {
+    game.reconnectNoticeTimer = setTimeout(showReconnectNotice, RECONNECT_NOTICE_AFTER_MS);
+  }
+  const attempt = game.reconnectAttempts++;
+  // Exponential backoff with ±30% jitter; first attempt is near-instant.
+  const capped = Math.min(RECONNECT_FIRST_MS * 2 ** attempt, RECONNECT_MAX_MS);
+  const delay = attempt === 0 ? RECONNECT_FIRST_MS : capped * (0.7 + Math.random() * 0.6);
+  clearTimeout(game.reconnectTimer);
+  game.reconnectTimer = setTimeout(() => {
+    game.reconnectTimer = null;
+    if (game.socketSession !== session || !session.reconnect) return;
+    openSocket(url);
+  }, delay);
+}
+
+// Pull a pending reconnect forward — fired when the network returns or the tab regains
+// focus. Network's back, so reset backoff and retry immediately instead of idling.
+function reconnectNow() {
+  const pending = game.pendingReconnect;
+  if (!pending) return;
+  const { url, session } = pending;
+  if (game.socketSession !== session || !session.reconnect) return;
+  if (game.ws && (game.ws.readyState === WebSocket.OPEN || game.ws.readyState === WebSocket.CONNECTING)) return;
+  clearTimeout(game.reconnectTimer);
+  game.reconnectTimer = null;
+  game.reconnectAttempts = 0;
+  openSocket(url);
 }
 
 function startHeartbeat() {
   stopHeartbeat();
   game.heartbeatTimer = setInterval(() => {
-    if (game.ws?.readyState === WebSocket.OPEN) {
-      try { game.ws.send(JSON.stringify({ type: "ping" })); } catch {}
-    }
+    const ws = game.ws;
+    if (ws?.readyState !== WebSocket.OPEN) return;
+    try { ws.send(JSON.stringify({ type: "ping" })); } catch { return; }
+    // Watchdog: a socket can read OPEN while the underlying path is dead (half-open TCP,
+    // sleeping radio). If the pong doesn't land, close it so the reconnect loop kicks in.
+    clearTimeout(game.pongTimer);
+    game.pongTimer = setTimeout(() => {
+      game.pongTimer = null;
+      try { ws.close(); } catch {}
+    }, PONG_TIMEOUT_MS);
   }, HEARTBEAT_MS);
 }
 function stopHeartbeat() {
@@ -1448,20 +1497,51 @@ function stopHeartbeat() {
     clearInterval(game.heartbeatTimer);
     game.heartbeatTimer = null;
   }
+  if (game.pongTimer) {
+    clearTimeout(game.pongTimer);
+    game.pongTimer = null;
+  }
 }
 
 function setConnectionStatus(state) {
-  // Subtle topbar indicator: pulse on the brand dot when reconnecting.
+  // Ambient cue only: the brand dot breathes in the accent color while reconnecting —
+  // calm, on-brand, never alarming. The explicit signal (for sustained outages) is the pill.
   const dot = document.querySelector(".brand-dot");
   if (!dot) return;
   if (state === "ok") {
     dot.style.color = "";
     dot.style.animation = "";
   } else {
-    dot.style.color = "var(--error)";
-    dot.style.animation = "pulse 0.9s ease-in-out infinite";
+    dot.style.color = "var(--accent)";
+    dot.style.animation = "pulse 1.6s ease-in-out infinite";
   }
 }
+
+// The gentle reconnect notice — a frosted glass pill, not the stark error toast. Only ever
+// shown when an outage outlasts RECONNECT_NOTICE_AFTER_MS; removed the instant we're back.
+function showReconnectNotice() {
+  game.reconnectNoticeTimer = null;
+  if (document.querySelector(".net-pill")) return;
+  const pill = document.createElement("div");
+  pill.className = "net-pill";
+  pill.innerHTML = '<span class="net-pill-dot"></span><span>Reconnecting…</span>';
+  document.body.appendChild(pill);
+}
+function clearReconnectNotice() {
+  clearTimeout(game.reconnectNoticeTimer);
+  game.reconnectNoticeTimer = null;
+  const pill = document.querySelector(".net-pill");
+  if (pill) {
+    pill.classList.add("net-pill-out");
+    setTimeout(() => pill.remove(), 240);
+  }
+}
+
+// Register once: the OS/browser tells us exactly when recovery is possible. Reacting to
+// these beats waiting out a backoff timer — flip back to the tab and you're already in.
+addEventListener("online", reconnectNow);
+addEventListener("focus", reconnectNow);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) reconnectNow(); });
 
 function send(msg) {
   if (game.ws && game.ws.readyState === WebSocket.OPEN) {
@@ -3547,10 +3627,11 @@ function leaveRoom() {
   game.challengeId = null;
   game.challengeMeta = null;
   clearPayoutTimers(); // cancel any pending payout/drain so it can't fire off-screen + mutate gold
-  clearTimeout(game.reconnectToastTimer);
-  game.reconnectToastTimer = null;
+  clearReconnectNotice();
   clearTimeout(game.reconnectTimer);
   game.reconnectTimer = null;
+  game.reconnectAttempts = 0;
+  game.pendingReconnect = null;
   if (game.socketSession) {
     game.socketSession.reconnect = false;
     const ws = game.socketSession.ws;

@@ -295,6 +295,58 @@ body.reduced-motion .tile.ghost-cursor {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
+
+/* Reconnect notice — a frosted-glass pill that only appears for a sustained outage.
+   Calm and on-brand (accent-tinted, soft glow) rather than the stark error toast, so a
+   blip never reads as a failure. Auto-removed the instant the socket is back. */
+.net-pill {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 15px 7px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  backdrop-filter: blur(12px) saturate(1.3);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  color: var(--fg);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.32);
+  z-index: 45;
+  pointer-events: none;
+  animation: net-pill-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.net-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: net-pill-glow 1.5s ease-in-out infinite;
+}
+@keyframes net-pill-glow {
+  0%, 100% { opacity: 0.45; box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  50% { opacity: 1; box-shadow: 0 0 0 5px transparent; }
+}
+@keyframes net-pill-in {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+.net-pill-out { animation: net-pill-out 0.22s ease forwards; }
+@keyframes net-pill-out {
+  from { opacity: 1; transform: translate(-50%, 0); }
+  to { opacity: 0; transform: translate(-50%, -10px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .net-pill, .net-pill-dot { animation: none; }
+  .net-pill-dot { opacity: 0.8; }
+}
 .icon-btn {
   background: transparent;
   border: 0;
