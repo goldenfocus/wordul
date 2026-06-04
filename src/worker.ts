@@ -25,6 +25,28 @@ const WORLD_RE = /^\/w\/([a-z0-9-]{1,40})$/;
 const SCIENCE_DAILY_RE = /^\/api\/science\/daily\/(\d{4}-\d{2}-\d{2})(?:\.json)?$/;
 const FEED_DATE_RE = /^\/feed\/(\d{4}-\d{2}-\d{2})(?:\.json)?$/;
 
+// Pure rate-limit decision: given the current window count + limit, allow or block and
+// return the count to persist. Unit-tested; the KV plumbing around it is integration.
+export function rateLimitDecision(count: number, limit: number): { allow: boolean; next: number } {
+  if (count >= limit) return { allow: false, next: count };
+  return { allow: true, next: count + 1 };
+}
+
+// KV-counter rate limit on the DIRECTORY namespace. Best-effort: a KV hiccup ALLOWS
+// (fail-open) so a transient KV outage can't lock everyone out of claiming. `key` should
+// already encode the scope (e.g. `rl:claim:<ip>`); `windowSec` is the bucket lifetime.
+async function rateLimit(env: Env, key: string, limit: number, windowSec: number): Promise<boolean> {
+  try {
+    const raw = await env.DIRECTORY.get(key);
+    const count = raw ? parseInt(raw, 10) || 0 : 0;
+    const { allow, next } = rateLimitDecision(count, limit);
+    if (allow) await env.DIRECTORY.put(key, String(next), { expirationTtl: windowSec });
+    return allow;
+  } catch {
+    return true; // fail-open
+  }
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
@@ -64,6 +86,44 @@ export default {
     if (url.pathname === "/api/arena/open" && req.method === "GET") {
       const stub = env.ARENA.get(env.ARENA.idFromName("arena"));
       return stub.fetch(new Request("https://do/open", { method: "GET" }));
+    }
+
+    // Accounts P0 — proxy /api/account/* to the per-username User DO, with KV rate limiting.
+    if (url.pathname.startsWith("/api/account/")) {
+      const sub = url.pathname.slice("/api/account/".length); // "preview" | "claim" | "login" | "sessions/revoke" | "me" | "verify-session"
+      const ip = req.headers.get("CF-Connecting-IP") ?? "unknown";
+
+      const userDo = (name: string, doPath: string, init: RequestInit) =>
+        env.USER.get(env.USER.idFromName(name)).fetch(`https://do/${doPath}?username=${encodeURIComponent(name)}`, init);
+
+      // GET /api/account/me?username=<u> with Bearer token.
+      if (sub === "me" && req.method === "GET") {
+        const name = normalizeUsername(url.searchParams.get("username") ?? "");
+        if (!isValidUsername(name)) return new Response("bad username", { status: 400 });
+        return userDo(name, "account/me", { method: "GET", headers: { Authorization: req.headers.get("Authorization") ?? "" } });
+      }
+
+      if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
+      let body: Record<string, unknown>;
+      try { body = (await req.json()) as Record<string, unknown>; } catch { return new Response("bad json", { status: 400 }); }
+      const name = normalizeUsername(typeof body.username === "string" ? body.username : "");
+      if (!isValidUsername(name)) return new Response("bad username", { status: 400 });
+
+      // Rate-limit the abusable surfaces (preview/claim/login) per-IP and per-username.
+      if (sub === "preview" || sub === "claim" || sub === "login") {
+        const okIp = await rateLimit(env, `rl:acct:${sub}:ip:${ip}`, 10, 60);
+        const okName = await rateLimit(env, `rl:acct:${sub}:u:${name}`, 5, 60);
+        if (!okIp || !okName) return new Response(JSON.stringify({ error: "rate_limited" }), { status: 429, headers: { "content-type": "application/json" } });
+      }
+
+      const doPath =
+        sub === "preview" ? "account/preview" :
+        sub === "claim" ? "account/claim" :
+        sub === "login" ? "account/login" :
+        sub === "sessions/revoke" ? "account/sessions/revoke" :
+        sub === "verify-session" ? "account/verify-session" : null;
+      if (!doPath) return new Response("not found", { status: 404 });
+      return userDo(name, doPath, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
     }
 
     // Profile JSON API: /api/user/<name>

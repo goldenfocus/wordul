@@ -1,6 +1,19 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { publicProfile } from "../src/account-core.ts";
 import type { UserProfile } from "../src/types.ts";
+
+// worker.ts imports DO classes (Room, User, …) that extend DurableObject from
+// "cloudflare:workers". Stub the runtime class so the module resolves under the
+// plain-node vitest environment — identical pattern to room-finish-broadcast.test.ts.
+vi.mock("cloudflare:workers", () => ({
+  DurableObject: class DurableObject {
+    ctx: unknown;
+    env: unknown;
+    constructor(ctx: unknown, env: unknown) { this.ctx = ctx; this.env = env; }
+  },
+}));
+
+import { rateLimitDecision } from "../src/worker.ts";
 
 describe("public GET shape (user.ts GET → publicProfile)", () => {
   it("a serialized public profile carries no secret keys", () => {
@@ -16,6 +29,15 @@ describe("public GET shape (user.ts GET → publicProfile)", () => {
     expect(body).not.toContain("HASH");
     expect(body).toContain("\"claimed\":true");
     expect(body).toContain("\"gold\":3");
+  });
+});
+
+describe("rateLimitDecision (pure)", () => {
+  it("allows up to the limit then blocks", () => {
+    expect(rateLimitDecision(0, 5)).toEqual({ allow: true, next: 1 });
+    expect(rateLimitDecision(4, 5)).toEqual({ allow: true, next: 5 });
+    expect(rateLimitDecision(5, 5)).toEqual({ allow: false, next: 5 });
+    expect(rateLimitDecision(99, 5)).toEqual({ allow: false, next: 99 });
   });
 });
 
