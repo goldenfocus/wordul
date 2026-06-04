@@ -89,7 +89,7 @@ describe("hub home (redesign)", () => {
     expect(document.getElementById("dailyStatsLabel").textContent).toBe("1,248 played");
   });
 
-  it("after you've played today, shows the post-play recap — result + countdown + share, no play card", () => {
+  it("after you've played today, shows the post-play recap — result + countdown + 'see everyone', no play card or Share", () => {
     const cb = makeCallbacks({ dailyResult: { won: true, guesses: 4 } });
     renderHub({}, cb);
     expect(document.getElementById("dailyCard")).toBeNull();           // no replay surface
@@ -97,10 +97,13 @@ describe("hub home (redesign)", () => {
     expect(document.querySelector(".daily-result-text").textContent).toMatch(/Solved in 4/);
     expect(document.getElementById("dailyCountdown")).toBeTruthy();
 
-    document.getElementById("dailyStats").click();
+    // Share is gone (no one-tap way to broadcast the answer).
+    expect(document.getElementById("dailyShare")).toBeNull();
+    expect(document.getElementById("dailyStats")).toBeNull();
+
+    // The "see everyone" chevron replaces Stats — it routes through onStats.
+    document.getElementById("dailySeeAll").click();
     expect(cb.onStats).toHaveBeenCalledTimes(1);
-    document.getElementById("dailyShare").click();
-    expect(cb.onShareDaily).toHaveBeenCalledTimes(1);
 
     // Typing must NOT start a game once today's done.
     homeTypeLetter("G");

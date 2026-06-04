@@ -33,7 +33,26 @@ const LS = {
   preferredLength: "wr.length",
   replay: "wr.replay", // structured per-guess payout log, keyed per game (slug:round)
   clearHint: "wr.clearHint", // one-time "press Esc / hold ⌫ to clear the row" nudge
+  dailySolve: "wr.dailySolve", // your own daily solve (letters + colors), per date — CLIENT-ONLY
+                               // so the home stamp shows real letters without the public
+                               // profile ever leaking today's answer.
 };
+
+const SOLVE_CELL = { green: "g", yellow: "y", gray: "x" };
+// Stash this browser's own finished daily (letters + color grid) so the home recap can
+// draw a crystallized stamp with real letters. Never sent to the server.
+function captureDailySolve(date, me) {
+  if (!date || !me || !Array.isArray(me.guesses)) return;
+  try {
+    const solve = {
+      won: me.status === "won",
+      guesses: me.guesses.length,
+      words: me.guesses.map((g) => String(g.word || "").toUpperCase()),
+      grid: me.guesses.map((g) => (g.mask || []).map((c) => SOLVE_CELL[c] || "x").join("")),
+    };
+    localStorage.setItem(`${LS.dailySolve}:${date}`, JSON.stringify(solve));
+  } catch { /* storage full / disabled — stamp falls back to the server color grid */ }
+}
 
 const SUPPORTED_LENGTHS = [4, 5, 6, 7, 8, 9, 10, 11, 12];
 const DEFAULT_LENGTH = 5;
@@ -275,8 +294,22 @@ function renderHomeIdentity() {
 // Today's daily result from the profile (no extra request): the finished game whose
 // roomPath is daily/<today>. Drives the home's post-play recap. null = not played yet.
 function dailyResultFor(profile) {
-  const g = (profile?.games || []).find((x) => x.roomPath === "daily/" + todayUTC());
-  return g ? { won: g.result === "won", guesses: g.guesses, solveGrid: g.solveGrid ?? null } : null;
+  const date = todayUTC();
+  const g = (profile?.games || []).find((x) => x.roomPath === "daily/" + date);
+  if (!g) return null;
+  // Colors come from the server record (cross-device, no spoiler); the real LETTERS come
+  // only from THIS browser's own solve (never the public profile). Local wins when present.
+  let grid = g.solveGrid ?? null;
+  let words = null;
+  try {
+    const raw = localStorage.getItem(`${LS.dailySolve}:${date}`);
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (Array.isArray(s.grid) && s.grid.length) grid = s.grid;
+      if (Array.isArray(s.words) && s.words.length) words = s.words;
+    }
+  } catch { /* ignore */ }
+  return { won: g.result === "won", guesses: g.guesses, solveGrid: grid, solveWords: words };
 }
 
 // Share today's result from the home — a spoiler-free line + the day's link (no board
@@ -1645,7 +1678,10 @@ function onServerMessage(msg) {
     // Daily rooms never globally "finish" (per-player async scoring) — so reconcile the
     // gold HUD the moment YOU personally complete, the same way the race path does on
     // finish, so the daily goody mint actually shows up in the HUD.
-    if (game.isDaily && (personallyWon || personallyLost)) refreshGold();
+    if (game.isDaily && (personallyWon || personallyLost)) {
+      refreshGold();
+      captureDailySolve(game.dailyDate, me); // client-only — powers the home's letter stamp
+    }
     render();
   } else if (msg.type === "invalid_guess") {
     // Letters are still in game.pending — we never cleared them. Shake the row and

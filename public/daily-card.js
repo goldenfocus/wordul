@@ -41,14 +41,20 @@ function goldValue(n) { return `${Number(n).toLocaleString()}${COIN}`; }
 
 // A crystallized stamp of a solved board: one tiny glass tile per cell, mirroring the
 // real board's precious-gold / champagne / obsidian treatment. grid is an array of row
-// strings ("g"=correct, "y"=present, "x"=absent). Empty → nothing.
+// strings ("g"=correct, "y"=present, "x"=absent). words (optional) are the actual
+// guessed words — shown ONLY when present (they come from this browser's own play, never
+// the public profile, so today's answer can't leak). Empty → nothing.
 const STAMP_CLS = { g: "is-correct", y: "is-present", x: "is-absent" };
-function renderStamp(grid) {
+function escLetter(c) { return String(c || "").replace(/[^a-zA-Z]/g, ""); }
+function renderStamp(grid, words) {
   if (!Array.isArray(grid) || grid.length === 0) return "";
-  const rows = grid.map((r) =>
-    `<div class="stamp-row">${[...String(r)].map((ch) =>
-      `<span class="stamp-cell ${STAMP_CLS[ch] || "is-absent"}"></span>`).join("")}</div>`).join("");
-  return `<div class="daily-stamp" aria-hidden="true">${rows}</div>`;
+  const hasLetters = Array.isArray(words) && words.length > 0;
+  const rows = grid.map((r, ri) => {
+    const w = hasLetters ? String(words[ri] || "") : "";
+    return `<div class="stamp-row">${[...String(r)].map((ch, ci) =>
+      `<span class="stamp-cell ${STAMP_CLS[ch] || "is-absent"}">${w[ci] ? `<span class="stamp-ch">${escLetter(w[ci])}</span>` : ""}</span>`).join("")}</div>`;
+  }).join("");
+  return `<div class="daily-stamp${hasLetters ? " has-letters" : ""}">${rows}</div>`;
 }
 
 // Build the leaderboard HTML from a LeaderboardView ({ top, you, total }) and the
@@ -70,7 +76,12 @@ function renderLeaderboard(view, me) {
   };
   const medals = view.top.map((e, i) => row(e, i + 1)).join("");
   const pinned = view.you ? `<li class="daily-top-sep" aria-hidden="true"></li>${row(view.you, view.you.rank, { pinned: true })}` : "";
-  return `<span class="section-label">Today's Top</span><ul class="daily-top-list">${medals}${pinned}</ul>`;
+  // Header carries the day's stats: how many played, and your own standing surfaced up
+  // top — even at #99, you're on the board. #dailyPlayed is filled async (real count).
+  const youStat = view.you ? ` · <span class="daily-top-you">you #${view.you.rank}</span>` : "";
+  return `<div class="daily-top-head"><span class="section-label">Today's Top</span>` +
+    `<span class="daily-top-stat"><span id="dailyPlayed"></span>${youStat}</span></div>` +
+    `<ul class="daily-top-list">${medals}${pinned}</ul>`;
 }
 
 // Deterministic featured edition for a date: rotates the non-default editions so
@@ -122,16 +133,15 @@ export function renderDailyCard({ themeId, result }) {
         <span class="daily-result-text">${won ? `Solved in ${result.guesses}` : "Missed today"}</span>
         <span class="daily-result-gold" id="dailyResultGold" hidden></span>
       </div>
-      ${renderStamp(result.solveGrid)}
+      ${renderStamp(result.solveGrid, result.solveWords)}
       <section class="daily-top" id="dailyTop" hidden aria-label="Today's top players"></section>
       <div class="daily-next">
         <span class="daily-next-label">Next Wordul in</span>
         <span class="daily-countdown" id="dailyCountdown">—</span>
       </div>
-      <div class="daily-done-actions">
-        <button id="dailyShare" class="daily-done-btn" type="button">${GLYPH.share}<span>Share</span></button>
-        <button id="dailyStats" class="daily-done-btn" type="button">${GLYPH.bars}<span>Stats</span></button>
-      </div>
+      <button id="dailySeeAll" class="daily-seeall" type="button" aria-label="See all players">
+        See everyone<span class="daily-chev" aria-hidden="true">›</span>
+      </button>
     </article>`;
   }
   const tiles = Array.from({ length: 5 }, (_, i) =>
@@ -154,10 +164,11 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
   const stats = document.getElementById("dailyStats");
   if (stats && onStats) stats.addEventListener("click", (e) => { e.stopPropagation(); onStats(); });
 
-  // Post-play: result + gold + Today's Top + countdown + share. No play surface.
+  // Post-play: result + gold + your stamp + Today's Top + countdown + "see everyone".
+  // No Share here — we don't hand people a one-tap way to broadcast the answer.
   if (result) {
-    const share = document.getElementById("dailyShare");
-    if (share && onShareDaily) share.addEventListener("click", () => onShareDaily());
+    const seeAll = document.getElementById("dailySeeAll");
+    if (seeAll && onStats) seeAll.addEventListener("click", () => onStats());
     startCountdown();
 
     // Best-effort leaderboard: fills the gold line + the board once it resolves; a
@@ -180,6 +191,13 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
             board.querySelectorAll("a[data-profile]").forEach((a) => {
               a.addEventListener("click", (e) => { e.preventDefault(); onProfile(a.getAttribute("data-profile")); });
             });
+          }
+          // Fill the real "N played" count now that the header exists (best-effort).
+          if (fetchPlayed) {
+            fetchPlayed().then((n) => {
+              const el = document.getElementById("dailyPlayed");
+              if (el && typeof n === "number" && n > 0) el.textContent = `${n.toLocaleString()} played`;
+            }).catch(() => {});
           }
         }
       }).catch(() => {});
