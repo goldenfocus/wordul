@@ -1048,9 +1048,15 @@ export class Room extends DurableObject<Env> {
       })),
     });
     // Report to every player's User DO in parallel — caps the wait at one round-trip
-    // instead of N. Best-effort: a failed/slow write can't block or break the finish.
-    await Promise.allSettled(
-      Object.entries(records).flatMap(([username, record]) => {
+    // instead of N. Best-effort AND off the critical path: scheduled via waitUntil so a
+    // cold/slow USER DO can't gate the finish. onGuess broadcasts the win snapshot the
+    // instant finishGame returns; without this, the board froze for seconds after a solve
+    // (and a re-press surfaced "game not in progress" once phase had flipped to finished).
+    // waitUntil keeps the DO alive until the writes settle. maybeFinish guards re-entry
+    // (returns early once phase==="finished"), so this can never double-mint.
+    this.ctx.waitUntil(
+      Promise.allSettled(
+        Object.entries(records).flatMap(([username, record]) => {
         const player = this.state.players.find((p) => p.username === username);
         const gold = goldFromPoints(player ? player.points : 0);
         const stub = this.env.USER.get(this.env.USER.idFromName(username));
@@ -1067,12 +1073,16 @@ export class Room extends DurableObject<Env> {
           );
         }
         return calls;
-      }),
+        }),
+      ),
     );
 
     // Public, per-word solve stats: one DO per word (sharded by name). Skip bots — only
     // real players move a word's public stats. All of this round's human results go in ONE
-    // batched bump (atomic read-modify-write). Best-effort; never blocks or breaks finish.
+    // batched bump (atomic read-modify-write). Best-effort AND off the critical path
+    // (waitUntil): like the USER-DO writes above, awaiting this stats bump would freeze the
+    // win reveal on a cold WORDSTATS DO. finishGame runs once per finish (maybeFinish guards
+    // re-entry), so backgrounding it can't double-bump.
     const statsWord = (this.state.word ?? "").toUpperCase();
     const statHumans = this.state.players.filter((p) => !p.isBot);
     if (statsWord && statHumans.length) {
@@ -1080,9 +1090,11 @@ export class Room extends DurableObject<Env> {
         result: p.status === "won" ? "won" : "lost",
         guesses: p.guesses.length,
       }));
-      await this.env.WORDSTATS.get(this.env.WORDSTATS.idFromName(statsWord))
-        .fetch("https://do/bump", { method: "POST", body: JSON.stringify({ games: statGames }) })
-        .catch((e) => console.error("wordstats bump failed", statsWord, (e as Error).message));
+      this.ctx.waitUntil(
+        this.env.WORDSTATS.get(this.env.WORDSTATS.idFromName(statsWord))
+          .fetch("https://do/bump", { method: "POST", body: JSON.stringify({ games: statGames }) })
+          .catch((e) => console.error("wordstats bump failed", statsWord, (e as Error).message)),
+      );
     }
 
     // Seeded room: record the head-to-head for each human against the persona. Reads
@@ -1178,6 +1190,13 @@ export class Room extends DurableObject<Env> {
       winner: player.status === "won" ? player.username : null,
       participants: [player.username],
     });
+    // Reveal the finished board NOW, before the best-effort writes below. The record
+    // append + gold mint can stall on a cold USER DO; without this early broadcast the
+    // daily win froze for seconds (the snapshot in onGuess only fires after this method
+    // returns). We still AWAIT the mint below — the gold ledger is not idempotent, so the
+    // `scored` flag must be persisted atomically in this turn to prevent a reconnect
+    // double-mint — but the player already sees the win the moment they solve.
+    await this.persistAndBroadcast();
     // Daily is async one-shot: each record is intentionally SOLO (empty opponents) —
     // hundreds play the same word across 24h, so a per-player rival list is meaningless.
     // summarizeRoomGame + the profile UI already handle solo records gracefully.
