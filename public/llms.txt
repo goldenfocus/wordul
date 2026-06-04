@@ -25,3 +25,8 @@
 ## Site
 - Home: https://wordul.com
 - Sitemap: https://wordul.com/sitemap.xml
+
+## Word wiki
+Every Wordul answer word has a permanent page: https://wordul.com/word/<word> (e.g. /word/ocean).
+Browse them all at https://wordul.com/words. Each page has a definition, a surprising fact, a
+quote, word origin, related words, and live solve stats.

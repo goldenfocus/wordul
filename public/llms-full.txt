@@ -29,5 +29,11 @@ Wordul is a real-time multiplayer word game. Players guess the same hidden word 
 3. Everyone guesses the same word; green = right letter and spot, yellow = right letter wrong spot, gray = not in the word.
 4. First to all-green wins; the room scoreboard and each player's profile update automatically.
 
+## Word wiki
+- Every answer word has a permanent, indexable page at `/word/<word>` (e.g. `/word/ocean`) with a
+  definition, a surprising fact, a quote, word origin, related words (anagrams, one-letter
+  neighbors, same-start), and live per-word solve stats.
+- Browse the full A–Z index at `/words`; `/today` redirects to the featured word of the day.
+
 ## Site
 - Home: https://wordul.com
