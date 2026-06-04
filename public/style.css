@@ -1688,11 +1688,11 @@ body.playing .room-tabs { display: none; }
 }
 .queue-king {
   font-weight: 700;
-  color: var(--accent, #c9b458);
+  color: var(--accent, #c8a96a);
 }
 .queue-next { opacity: 0.85; }
 .badge.throne {
-  background: var(--accent, #c9b458);
+  background: var(--accent, #c8a96a);
   color: #1a1a1a;
   font-weight: 700;
 }
