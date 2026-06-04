@@ -39,3 +39,4 @@ yarn-error.log*
 # stray local artifacts (not part of the app)
 .claire/
 wrangler.v2.jsonc
+.gstack/
