@@ -19,7 +19,7 @@ export type SeedRec = {
   status: SeedStatus;
 };
 
-export type ArenaState = { seeded: Record<string, SeedRec>; seedCount: number };
+export type ArenaState = { seeded: Record<string, SeedRec>; seedCount: number; desiredOpen?: number };
 
 export type ArenaEvent =
   | { type: "mint"; rec: SeedRec }

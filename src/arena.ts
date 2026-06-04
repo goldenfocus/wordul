@@ -7,6 +7,9 @@ import {
   openGames,
   liveCount,
   seedPaths,
+  driftTarget,
+  rollWordLength,
+  rollLifetime,
   TARGET_OPEN,
   MAX_SEEDED,
   type ArenaState,
@@ -66,57 +69,75 @@ export class Arena extends DurableObject<Env> {
   // re-read each iteration so a restock can't overshoot. Wrapped so a throw can't break
   // GET /open; always reschedules.
   async alarm(): Promise<void> {
+    let s = emptyArenaState();
     try {
-      let s = prune(await this.load(), Date.now());
+      s = prune(await this.load(), Date.now());
+      // Drift the desired open-room count one step (a slow tide, not the old constant 3).
+      s = { ...s, desiredOpen: driftTarget(s.desiredOpen ?? TARGET_OPEN, Math.random()) };
       await this.save(s);
-      while (liveCount(s) < TARGET_OPEN && Object.keys(s.seeded).length < MAX_SEEDED) {
+      // Mint AT MOST ONE room per tick so rooms appear one-at-a-time over seconds instead
+      // of snapping in as a batch. The jittered reschedule below paces the trickle.
+      const target = s.desiredOpen ?? TARGET_OPEN;
+      if (liveCount(s) < target && Object.keys(s.seeded).length < MAX_SEEDED) {
         const openIds = new Set(
           Object.values(s.seeded).filter((r) => r.status !== "closed").map((r) => r.personaId),
         );
         const persona = pickPersona(s.seedCount, openIds);
-        if (!persona) break; // roster exhausted this round
-        const { path, routePath } = seedPaths(persona.id, s.seedCount);
-        const rec: SeedRec = {
-          path,
-          routePath,
-          name: `${persona.name}'s room`,
-          host: persona.name,
-          personaId: persona.id,
-          personaIcon: persona.avatar,
-          edition: persona.edition,
-          wordLength: 5,
-          seats: "1/2",
-          mintedAt: Date.now(),
-          status: "minted",
-        };
-        s = apply(s, { type: "mint", rec });
-        await this.save(s);
-        // Seed the ROOM DO (byte-identical key to what /ws?room=<path> resolves).
-        let ok = false;
-        try {
-          const room = this.env.ROOM.get(this.env.ROOM.idFromName(path));
-          const res = await room.fetch(new Request("https://do/seed", {
-            method: "POST",
-            body: JSON.stringify({
-              path,
-              persona: { id: persona.id, name: persona.name, avatar: persona.avatar },
-              profile: "noob",
-              edition: persona.edition,
-              wordLength: 5,
-            }),
-            headers: { "content-type": "application/json" },
-          }));
-          ok = res.ok;
-        } catch (e) {
-          console.error("arena seed room failed", path, (e as Error).message);
+        if (persona) {
+          const wordLength = rollWordLength(Math.random());
+          const lifetimeMs = rollLifetime(Math.random());
+          const { path, routePath } = seedPaths(persona.id, s.seedCount);
+          const rec: SeedRec = {
+            path,
+            routePath,
+            name: `${persona.name}'s room`,
+            host: persona.name,
+            personaId: persona.id,
+            personaIcon: persona.avatar,
+            edition: persona.edition,
+            wordLength,
+            seats: "1/2",
+            mintedAt: Date.now(),
+            lifetimeMs,
+            status: "minted",
+          };
+          s = apply(s, { type: "mint", rec });
+          await this.save(s);
+          // Seed the ROOM DO (byte-identical key to what /ws?room=<path> resolves).
+          let ok = false;
+          try {
+            const room = this.env.ROOM.get(this.env.ROOM.idFromName(path));
+            const res = await room.fetch(new Request("https://do/seed", {
+              method: "POST",
+              body: JSON.stringify({
+                path,
+                persona: { id: persona.id, name: persona.name, avatar: persona.avatar },
+                profile: "noob",
+                edition: persona.edition,
+                wordLength,
+              }),
+              headers: { "content-type": "application/json" },
+            }));
+            ok = res.ok;
+          } catch (e) {
+            console.error("arena seed room failed", path, (e as Error).message);
+          }
+          s = apply(s, ok ? { type: "register", path } : { type: "close", path });
+          await this.save(s);
         }
-        s = apply(s, ok ? { type: "register", path } : { type: "close", path });
-        await this.save(s);
       }
     } catch (e) {
       console.error("arena alarm", (e as Error).message);
     } finally {
-      void this.ctx.storage.setAlarm(Date.now() + 60_000);
+      // Below target → short jittered gap (3–12s) so the next room trickles in soon.
+      // At/over target → long idle drift (30–90s). Produces the "land alone, wait, a room
+      // appears" cadence instead of an instant full set.
+      const target = s.desiredOpen ?? TARGET_OPEN;
+      const below = liveCount(s) < target && Object.keys(s.seeded).length < MAX_SEEDED;
+      const delay = below
+        ? 3_000 + Math.floor(Math.random() * 9_000)
+        : 30_000 + Math.floor(Math.random() * 60_000);
+      void this.ctx.storage.setAlarm(Date.now() + delay);
     }
   }
 }
