@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { noobGuess, NOOB } from "../src/noob.ts";
+import { noobGuess, NOOB, mistakeRateFor } from "../src/noob.ts";
 import { computeNextGuess, type BotView } from "../src/solver.ts";
 import { WORDS_BY_SIZE } from "../src/wordsbysize.ts";
 
@@ -46,5 +46,26 @@ describe("noobGuess", () => {
     expect(code).not.toMatch(/from\s+["']\.\/economy/);
     expect(code).not.toMatch(/scoreGuess/);
     expect(code).not.toMatch(/\.word\b/); // must destructure { word, mask }, never .word access
+  });
+});
+
+describe("mistakeRateFor", () => {
+  it("equals the base NOOB rate at length 5 and below", () => {
+    expect(mistakeRateFor(4)).toBeCloseTo(NOOB.mistakeRate);
+    expect(mistakeRateFor(5)).toBeCloseTo(NOOB.mistakeRate);
+  });
+
+  it("rises monotonically with length above 5", () => {
+    expect(mistakeRateFor(6)).toBeGreaterThan(mistakeRateFor(5));
+    expect(mistakeRateFor(7)).toBeGreaterThan(mistakeRateFor(6));
+    expect(mistakeRateFor(9)).toBeGreaterThan(mistakeRateFor(7));
+  });
+
+  it("never reaches certainty (stays a valid probability)", () => {
+    for (const len of [5, 6, 7, 8, 9, 10, 11, 12]) {
+      const r = mistakeRateFor(len);
+      expect(r).toBeGreaterThanOrEqual(0);
+      expect(r).toBeLessThan(1);
+    }
   });
 });
