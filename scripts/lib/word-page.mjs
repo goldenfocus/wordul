@@ -59,7 +59,7 @@ export function renderWordPage(word, intel, graph, origin) {
 <meta property="og:image" content="${esc(ogImg)}">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/word-page.css">
-<script type="application/ld+json">${JSON.stringify(jsonld)}</script>
+<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, "\\u003c")}</script>
 </head>
 <body class="wp">
 <header class="wp-head"><a class="wp-home" href="/">Wordul</a> · <a href="/words">all words</a></header>

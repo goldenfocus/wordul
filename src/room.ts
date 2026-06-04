@@ -567,20 +567,19 @@ export class Room extends DurableObject<Env> {
       ),
     );
     // Also accumulate public, per-word solve stats (one DO per word, sharded by name).
-    // Skip bots — only real players move a word's public stats. Best-effort.
+    // Skip bots — only real players move a word's public stats. All of this round's
+    // human results go in ONE batched bump so the DO applies them as a single atomic
+    // read-modify-write. Best-effort: a failed/slow write can't block or break the finish.
     const word = (this.state.word ?? "").toUpperCase();
-    if (word) {
-      const humans = this.state.players.filter((p) => !p.isBot);
-      await Promise.allSettled(
-        humans.map((p) =>
-          this.env.WORDSTATS.get(this.env.WORDSTATS.idFromName(word))
-            .fetch("https://do/bump", {
-              method: "POST",
-              body: JSON.stringify({ result: p.status === "won" ? "won" : "lost", guesses: p.guesses.length }),
-            })
-            .catch((e) => console.error("wordstats bump failed", word, (e as Error).message)),
-        ),
-      );
+    const humans = this.state.players.filter((p) => !p.isBot);
+    if (word && humans.length) {
+      const games = humans.map((p) => ({
+        result: p.status === "won" ? "won" : "lost",
+        guesses: p.guesses.length,
+      }));
+      await this.env.WORDSTATS.get(this.env.WORDSTATS.idFromName(word))
+        .fetch("https://do/bump", { method: "POST", body: JSON.stringify({ games }) })
+        .catch((e) => console.error("wordstats bump failed", word, (e as Error).message));
     }
   }
 

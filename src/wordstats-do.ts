@@ -16,9 +16,13 @@ export class WordStats extends DurableObject<Env> {
       return Response.json(deriveWordStats(await this.load()));
     }
     if (req.method === "POST" && url.pathname.endsWith("/bump")) {
-      const game = (await req.json()) as { result: GameOutcome; guesses: number };
-      const next = applyWordGame(await this.load(), game);
-      await this.ctx.storage.put("state", next);
+      // A whole finished round arrives as one batch (all of a room's human players), so
+      // the load→apply→put is a single atomic read-modify-write — no lost updates even
+      // when several players finish the same word at once.
+      const { games } = (await req.json()) as { games: { result: GameOutcome; guesses: number }[] };
+      let state = await this.load();
+      for (const g of games) state = applyWordGame(state, g);
+      await this.ctx.storage.put("state", state);
       return new Response("ok");
     }
     return new Response("not found", { status: 404 });

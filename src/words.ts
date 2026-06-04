@@ -23,8 +23,9 @@ export function wordFromSlug(slug: string): string {
 /** Deterministic "word of the day": days-since-epoch indexed into the answer list
  *  (sorted for stability). Independent of the multiplayer random-word picker — this is
  *  a purely editorial wiki feature. */
+const SORTED_ANSWERS = [...ANSWER_WORDS].sort();
 export function wordOfTheDay(date: Date): string {
-  const sorted = [...ANSWER_WORDS].sort();
+  const n = SORTED_ANSWERS.length;
   const day = Math.floor(date.getTime() / 86_400_000);
-  return sorted[((day % sorted.length) + sorted.length) % sorted.length];
+  return SORTED_ANSWERS[((day % n) + n) % n];
 }
