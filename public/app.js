@@ -3917,7 +3917,7 @@ function showWorld(slug) {
   const play = document.createElement("button");
   play.type = "button"; play.className = "btn block"; play.textContent = "Play solo →";
   play.addEventListener("click", () => {
-    if (!getUsername()) { navigate("/"); return; } // no identity yet — register on Home first
+    if (!getUsername()) { toast("Pick a username to play", { duration: 1800 }); navigate("/"); return; } // no identity yet — register on Home first
     enterNewRoom({ autoStart: true });
   });
 
