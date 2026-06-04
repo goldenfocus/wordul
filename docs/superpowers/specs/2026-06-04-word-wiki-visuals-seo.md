@@ -1,9 +1,14 @@
 # Word-Wiki — Visuals & SEO Completion (follow-ups to the 1–6 ship)
 
-**Date:** 2026-06-04 · **Status:** ready to execute · **Owner:** next session (context cleared)
+**Date:** 2026-06-04 · **Status:** ✅ Phase 1 SHIPPED (`prod-443`, 2026-06-04) · Phase 2+ ready · **Owner:** next session
 
 This spec captures the **gated follow-ups** after the 2026-06-04 ship that landed items 1–6
 (branch `wiki-polish`, merged to `main`). Read this top-to-bottom; it is self-contained.
+
+> **Phase 1 is DONE (2026-06-04, `prod-443`).** All 2,315 OG cards recolored to the
+> ultraviolet/gold brand and re-uploaded to `wordul-og`; richer `ImageObject` JSON-LD landed
+> on every `/word/<slug>` page. Verified live. **Start at Phase 2.** See the corrected facts
+> below (several Phase-1-era notes were stale — fixed inline).
 
 ---
 
@@ -19,13 +24,15 @@ per-word OG cards at `/word/og/<slug>.png`, live stats, sitemap. The 2026-06-04 
   gated behind `SALT_FROM = "2026-06-05"` so enabling it didn't rewrite past/today's
   already-played house words. **The secret is SET on the `wordle-race` worker.**
   ⚠️ **Do NOT remove the salt or the SALT_FROM cutoff — they are the anti-cheat.**
-- **Brand color (code LIVE, R2 NOT):** `scripts/lib/og-card.mjs` + `public/share-card.js`
+- **Brand color (LIVE everywhere ✅):** `scripts/lib/og-card.mjs` + `public/share-card.js`
   recolored from NYT green `#6aaa64`/`#538d4e` → ultraviolet `#9d8bff` / gold `#f0c14b` /
-  bg `#15101f`. The **in-app share card is live**, but the **2,315 OG cards in R2 are still
-  old green** until re-generated + re-uploaded (Phase 1).
+  bg `#15101f`. **Phase 1 re-generated + re-uploaded all 2,315 OG cards to `wordul-og`** —
+  link previews are now on-brand. (OG responses are NOT Cloudflare-edge-cached — `cf-cache=none` —
+  so an R2 overwrite flips the live card instantly; no cache purge needed.)
 - **End-card (LIVE):** post-game card shows the word's OG image inline + inward `/word/<slug>` link.
-- **ImageObject JSON-LD (template LIVE, pages NOT):** added to `scripts/lib/word-page.mjs`,
-  pointing at `/word/og/<slug>.png`. **Not in the live static pages** until they're regenerated (Phase 1).
+- **ImageObject JSON-LD (LIVE on all pages ✅):** `scripts/lib/word-page.mjs` now emits a proper
+  top-level `ImageObject` (`@id "#og"`: `contentUrl`, `caption`, 1200×630) that `DefinedTerm`
+  and `WebPage` reference by `@id`. **Phase 1 regenerated all 2,315 pages with it** — verified live.
 - **`llms.txt` / `llms-full.txt`:** live.
 - **Image pipeline (authored, NOT run):** `scripts/gen-word-images.mjs` (dry-run-safe) +
   `docs/ART-DIRECTION.md` (locked house style).
@@ -43,10 +50,19 @@ per-word OG cards at `/word/og/<slug>.png`, live stats, sitemap. The 2026-06-04 
 - **Creds:** `~/golden-cloud/secrets/wordul-prod.env` is **SOPS/age-ENCRYPTED — never `source` it**
   (it loads `ENC[...]` ciphertext and breaks calls). Decrypt with `sops -d`. `wrangler` already has
   **ambient auth** to `wordle-race` (`wrangler secret list/put`, `deployments list` work without sourcing).
-- **R2 upload creds:** `scripts/upload-og.mjs` needs `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` /
-  `R2_SECRET_ACCESS_KEY` (S3 API) — in the encrypted vault.
-- **Trap:** `@aws-sdk/client-s3` is in `package-lock.json` but **not** `package.json` deps →
-  `npm i @aws-sdk/client-s3` before any R2 upload.
+- **R2 uploads — use wrangler, NOT the S3 script (corrected):** the vault only holds
+  `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` — it does **NOT** contain the
+  `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` S3 keys that `scripts/upload-og.mjs`
+  expects, so that script can't run as-is. Phase 1 uploaded via **`wrangler r2 object put
+  wordul-og/<slug>.png --file=dist/og/<slug>.png --content-type=image/png --remote`** (ambient
+  auth; the `--remote` flag is REQUIRED or it writes to a local sim). Key = bare `<slug>.png`
+  (worker route `env.OG.get(key)`). Parallelize ~8-way; one transient failure is normal, retry it.
+  The CF API token also lacks **cache-purge** permission (purge returns `code 10000`) — fine,
+  since OG isn't edge-cached anyway.
+- **`@aws-sdk/client-s3` is now a declared devDependency** (no longer just in the lockfile). But
+  the shared `node_modules` (symlinked from the root checkout by `dev/start.sh`) may not have it
+  materialized — run `npm install` once in the worktree if `@resvg/resvg-js` / `@aws-sdk` are
+  missing (this replaces the symlink with a real, self-contained `node_modules`).
 - **Tests:** `npm test` (vitest) · `npm run typecheck`. Scripts: `npm run wiki:pages`, `npm run wiki:og`.
 
 ---
@@ -62,25 +78,28 @@ The daily game / salt / cutoff. The 12-language expansion. Auth-gated "solved wo
 
 ---
 
-## Phase 1 — Recolor link previews + land JSON-LD (cheap, no AI, DO FIRST)
+## Phase 1 — Recolor link previews + land JSON-LD ✅ DONE (`prod-443`, 2026-06-04)
 
-**Why:** makes social/link previews on-brand and gets `ImageObject` JSON-LD into live pages.
-**Cost:** ~$0 (compute only). **Time:** ~30 min.
+**Why:** made social/link previews on-brand and got the richer `ImageObject` JSON-LD into live
+pages. **What actually happened** (the spec below was partly stale — corrected):
 
-1. `npm i @aws-sdk/client-s3` (add to `package.json` deps — currently only in the lockfile).
-2. `npm run wiki:pages` — regenerates `dist/og/*.png` (new brand colors) **and**
-   `public/word/*.html` (now carrying the `ImageObject` JSON-LD).
-   - **SAFETY:** before committing 2,315 regenerated HTML files, render ONE page and diff vs
-     the committed `public/word/ocean.html` to confirm the rich content (definition/poem/etc.)
-     is preserved — i.e. the intel data source is present. Only proceed if content is intact.
-3. Decrypt R2 creds (`sops -d ~/golden-cloud/secrets/wordul-prod.env`), export
-   `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` (stream, never echo).
-4. `npm run wiki:og` — re-uploads the recolored PNGs to the `wordul-og` bucket.
-5. Commit regenerated `public/word/*.html` + `package.json`; `bash dev/ship.sh`.
-6. Purge the `sitemap.xml` edge cache (or wait the TTL) so the `<image:image>` entries appear.
+1. `@aws-sdk` was already a declared dep; only needed `npm install` to materialize the shared
+   `node_modules` (it also pulls `@resvg/resvg-js`, required by `wiki:pages`).
+2. `npm run wiki:pages` regenerated `dist/og/*.png` (new colors) + `public/word/*.html`.
+   - **Content-preservation gate PASSED:** every page changed exactly one line (the `ld+json`
+     `<script>`); 0 non-JSON-LD changes; all 2,315 JSON-LD blocks parsed and resolved `#og`.
+     (`data/word-intel-rich.js` is the intel source — present, 2,315 entries.)
+3. JSON-LD + sitemap `<image:image>` were ALREADY live before Phase 1 — the only real gap was
+   the green OG cards in R2. (The committed pages carried an *older* inline-stub JSON-LD; the
+   regen upgraded them to the linked `#og` `ImageObject`.)
+4. Uploaded all 2,315 recolored PNGs via **`wrangler r2 object put ... --remote`** (the vault has
+   no R2 S3 keys — see corrected facts above). 8-way parallel, 1 transient retry, 0 failures.
+5. Committed the regenerated `public/word/*.html` (`package.json` unchanged); `bash dev/ship.sh`.
+6. No `sitemap.xml` purge needed (`<image:image>` already live; OG route isn't edge-cached).
 
-**Verify:** share `wordul.com/word/ocean` → preview is UV/gold (not green); page source has
-`ImageObject` JSON-LD; `sitemap.xml` has `<image:image>` children.
+**Verified live:** `wordul.com/word/ocean` OG card is UV/gold; page JSON-LD has the top-level
+`ImageObject "#og"` (contentUrl + 1200×630) with `DefinedTerm`/`WebPage` linked to it; sitemap
+has 2,315 `<image:image>` children.
 
 ---
 
@@ -125,7 +144,7 @@ Don't pre-generate 8–12 (tens of thousands, obscure) — generate lazily on fi
 
 ## Phase 4 — SEO finishers
 
-- Confirm `<image:image>` `image:loc` is live after the sitemap cache purge.
+- `<image:image>` `image:loc` is already live in the sitemap (confirmed Phase 1) — no purge needed.
 - Tighten `public/llms.txt` to lead with the **wiki** value prop (it currently leads with the multiplayer framing).
 - Once hero images exist, add `ImageObject` `license` + `acquireLicensePage` for Google's licensable-image badge.
 
@@ -133,14 +152,20 @@ Don't pre-generate 8–12 (tens of thousands, obscure) — generate lazily on fi
 
 ## Recommended order
 
-Phase 1 (cheap, today) → Phase 2 prototype (lock style on 40) → Phase 2 batch → Phase 3 (4-letter) → Phase 4 polish.
+~~Phase 1~~ ✅ done → **Phase 2 prototype (lock style on 40)** → Phase 2 batch → Phase 3 (4-letter) → Phase 4 polish.
 
 ## Gotchas / traps (repeat offenders)
 
 - **Never `source` the encrypted vault** — decrypt with `sops -d`. wrangler has ambient auth anyway.
-- `@aws-sdk/client-s3` missing from `package.json` deps → install before R2 upload.
+- **R2 uploads go through `wrangler r2 object put --remote`, NOT `upload-og.mjs`** — the vault has
+  no R2 S3 keys (only `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN`). The `--remote` flag is
+  mandatory; without it wrangler writes to a local sim. The CF token can't purge cache (`code 10000`).
+- `@aws-sdk` is now a declared devDep; if the shared symlinked `node_modules` lacks it (or
+  `@resvg/resvg-js`), run `npm install` once in the worktree.
 - Page regen MUST preserve rich content — verify a single-page render before committing 2,315 files.
+  (Quick gate: `git diff --numstat public/word/` should be `1 1` per file = only the `ld+json` line.)
 - Worker = **`wordle-race`**. Don't touch the salt / `SALT_FROM` (anti-cheat).
-- Brand color won't show on link previews until the OG cards are **re-uploaded** (code change alone is not enough).
-- `sitemap.xml` is edge-cached.
+- **OG card route is NOT edge-cached** (`cf-cache=none`) — overwriting the R2 object flips the live
+  card instantly. The `cache-control: max-age=86400` only affects individual browsers + social-side
+  caches (which self-heal as platforms re-scrape). No CF purge required.
 - The image pipeline **dry-runs by default**; it only spends with `WORDUL_IMG_GEN=1`.
