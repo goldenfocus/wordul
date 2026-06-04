@@ -17,6 +17,9 @@ import {
   rematchReduce,
   nextAlarmAt,
   botAccepts,
+  botDelay,
+  dueBots,
+  nextBotAlarmAt,
   REMATCH_TIMEOUT_MS,
   BOT_REMATCH_MIN_MS,
   BOT_REMATCH_MAX_MS,
@@ -195,7 +198,7 @@ export class Room extends DurableObject<Env> {
       this.state.wordLength = b.wordLength;
       this.state.maxGuesses = guessesFor(b.wordLength);
     }
-    this.ensureBot(b.persona);
+    this.ensureBots(b.persona);
     await this.persistAndBroadcast();
     return Response.json({ ok: true });
   }
@@ -418,7 +421,7 @@ export class Room extends DurableObject<Env> {
       const p = this.state.players.find((x) => x.username === username);
       if (p && p.status !== "playing" && !p.scored) await this.afterPlayerStatus(p);
     }
-    this.ensureBot();
+    this.ensureBots();
     // Seeded Arena room: auto-start the instant the first human is connected (no host
     // "start" click). runStart closes the room out of the open index (a human committed;
     // the 2-cap already rejects a 2nd human).
@@ -598,7 +601,7 @@ export class Room extends DurableObject<Env> {
   private async runStart(who: string, ws?: WebSocket): Promise<boolean> {
     if (this.state.phase === "playing") return false;
     if (this.state.isDaily) return false; // daily auto-starts on seed; no manual start
-    this.ensureBot();
+    this.ensureBots();
     if (this.state.players.length < 1) return false;
     const pool = WORDS_BY_SIZE[this.state.wordLength];
     if (!pool || pool.answers.length === 0) {
@@ -640,7 +643,7 @@ export class Room extends DurableObject<Env> {
     }
     this.pushSystem(`${who} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
     this.emitRoundStarted();
-    if (this.state.players.some((p) => p.isBot && p.status === "playing")) this.scheduleBotTick();
+    this.armBotHeartbeat(true);
     this.closeArena(); // once it starts, it's no longer an open game (no-op for normal rooms)
     await this.persistAndBroadcast();
     return true;
@@ -755,7 +758,7 @@ export class Room extends DurableObject<Env> {
     return this.state.slug === ROBOT_SLUG;
   }
 
-  private ensureBot(persona?: { id: string; name: string; avatar: string }): void {
+  private ensureBots(persona?: { id: string; name: string; avatar: string }): void {
     if (this.state.isDaily) return; // no worduler in the daily room
     // Fires for the labeled /robots room OR a seeded Arena room. A seeded room injects its
     // persona (human-looking username); the /robots room uses BOT_NAME (clanker).
@@ -781,19 +784,22 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  private scheduleBotTick(): void {
-    // Human-paced and beatable ON PURPOSE. A slow "reading" beat before the opener,
-    // then a real think between rows. clanker is in no hurry — he thinks he's just a
-    // person playing a word game, and people are slow.
-    const bot = this.state.players.find((p) => p.isBot);
-    const opening = !bot || bot.guesses.length === 0;
-    // Seeded (Arena bot) rooms pace slower so the persona reads beatable; labeled /robots
-    // rooms keep the original snappier cadence. `state.seed` is falsy until Slice D seeds.
+  // Arm every playing bot's next guess time, then set the single DO alarm to the soonest.
+  // One alarm drives N bots (min-heap on one timer). Seeded (Arena) bots read slow/beatable;
+  // /robots keeps the snappier beat. `opening` = the round just started (slower first guess).
+  private armBotHeartbeat(opening: boolean): void {
     const seeded = !!this.state.seed;
-    const base = seeded ? (opening ? 10000 : 7000) : (opening ? 6000 : 4000);
-    const spread = seeded ? 10000 : 6000; // seeded: 10–20s opener, 7–17s subsequent
-    const delay = base + Math.floor(Math.random() * spread);
-    void this.ctx.storage.setAlarm(Date.now() + delay);
+    const now = Date.now();
+    let any = false;
+    for (const p of this.state.players) {
+      if (p.isBot && p.status === "playing") {
+        p.nextGuessAt = now + botDelay(opening, seeded, Math.random());
+        any = true;
+      }
+    }
+    if (!any) return;
+    const at = nextBotAlarmAt(this.state.players);
+    if (at != null) void this.ctx.storage.setAlarm(at);
   }
 
   // DO alarm: the room's single heartbeat. In the PLAYING phase it paces the bot's
@@ -806,20 +812,31 @@ export class Room extends DurableObject<Env> {
       return;
     }
     if (this.state.phase !== "playing" || !this.state.word) return;
-    const bot = this.state.players.find((p) => p.isBot && p.status === "playing");
-    if (!bot) return;
-    // Dad's brain drives our body: the solver sees ONLY a BotView (length + its own
-    // earned masks) — never this.state.word. The cheat-isolation wall stays intact.
-    // Seeded rooms play through the fallible noob; labeled /robots rooms stay sharp.
-    // `state.seed` is falsy until Slice D, so every existing room keeps the sharp path.
-    const view = { wordLength: this.state.wordLength, ownGuesses: bot.guesses };
-    const word = this.state.seed
-      ? noobGuess(view, { mistakeRate: mistakeRateFor(this.state.wordLength) }, Math.random())
-      : computeNextGuess(view);
-    if (word) await this.applyGuess(bot, word);
-    await this.persistAndBroadcast();
-    const stillGoing = this.state.players.some((p) => p.isBot && p.status === "playing");
-    if (stillGoing && this.state.phase === "playing") this.scheduleBotTick();
+    // Per-bot heartbeat: advance every DUE bot in this fire, then re-arm to the soonest.
+    // One broadcast after the batch (not per bot). The solver/noob see ONLY a BotView
+    // (length + own masks) — never this.state.word; the cheat-isolation wall is unchanged.
+    // Seeded rooms play the fallible noob (mistakeRate scaled by length AND field size);
+    // /robots stays sharp. `state.seed` is falsy for non-seeded rooms.
+    const now = Date.now();
+    const seeded = !!this.state.seed;
+    const opponents = this.state.players.length - 1;
+    let acted = false;
+    for (const b of dueBots(this.state.players, now)) {
+      if (this.state.phase !== "playing") break;          // a first-solve mid-batch ended it
+      if (b.status !== "playing") continue;               // outpaced→lost by an earlier bot this batch
+      const view = { wordLength: this.state.wordLength, ownGuesses: b.guesses };
+      const word = this.state.seed
+        ? noobGuess(view, { mistakeRate: mistakeRateFor(this.state.wordLength, opponents) }, Math.random())
+        : computeNextGuess(view);
+      if (word) await this.applyGuess(b, word);
+      b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random());
+      acted = true;
+    }
+    if (acted) await this.persistAndBroadcast();
+    if (this.state.phase === "playing") {
+      const at = nextBotAlarmAt(this.state.players);
+      if (at != null) void this.ctx.storage.setAlarm(at);
+    }
   }
 
   // Process whichever rematch deadlines are due, then re-arm for any that remain.
@@ -1392,7 +1409,7 @@ export class Room extends DurableObject<Env> {
         }
         case "start":
           this.clearRematchAlarms();
-          await this.runStart(starter); // resets everyone, picks word, GO!, schedules bot tick
+          await this.runStart(starter); // resets everyone, picks word, GO!, arms the bot heartbeat
           started = true;
           break;
       }
