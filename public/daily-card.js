@@ -75,12 +75,12 @@ function renderLeaderboard(view, me) {
     </li>`;
   };
   const medals = view.top.map((e, i) => row(e, i + 1)).join("");
+  // Outside the top 3, your own row is pinned below (with rank + gold + guesses) — so the
+  // header carries only the day's stat, no duplicate "you #N". In the top 3, your medal
+  // row already highlights you. #dailyPlayed is filled async (real count).
   const pinned = view.you ? `<li class="daily-top-sep" aria-hidden="true"></li>${row(view.you, view.you.rank, { pinned: true })}` : "";
-  // Header carries the day's stats: how many played, and your own standing surfaced up
-  // top — even at #99, you're on the board. #dailyPlayed is filled async (real count).
-  const youStat = view.you ? ` · <span class="daily-top-you">you #${view.you.rank}</span>` : "";
   return `<div class="daily-top-head"><span class="section-label">Today's Top</span>` +
-    `<span class="daily-top-stat"><span id="dailyPlayed"></span>${youStat}</span></div>` +
+    `<span class="daily-top-stat"><span id="dailyPlayed"></span></span></div>` +
     `<ul class="daily-top-list">${medals}${pinned}</ul>`;
 }
 
