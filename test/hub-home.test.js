@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHub, homeTypeLetter } from "../public/hub.js";
+import { fmtDuration } from "../public/daily-card.js";
 
 // Minimal DOM the hub render touches (topbar stat glyphs + the mount points).
 function setupDom() {
@@ -129,5 +130,59 @@ describe("hub home (redesign)", () => {
     // The real letters render inside the stamp tiles.
     const letters = [...document.querySelectorAll(".stamp-ch")].map((e) => e.textContent).join("");
     expect(letters).toBe("SLATEGRAPE");
+  });
+
+  it("leaderboard row swap: viewer's row is selected by default; clicking another row swaps featured card", async () => {
+    const onProfile = vi.fn();
+    renderHub({}, makeCallbacks({
+      username: "yan",
+      dailyResult: { won: true, guesses: 4, solveGrid: ["ggggg"], solveWords: ["GRAPE"] },
+      fetchLeaderboard: () => Promise.resolve({
+        top: [
+          { username: "yan", gold: 128, guesses: 4, won: true, grid: ["ggggg"], durationMs: 134000 },
+          { username: "ada", gold: 120, guesses: 5, won: true, grid: ["yxxxg", "ggggg"], durationMs: 95000 },
+        ],
+        you: null, total: 2,
+      }),
+      onProfile,
+    }));
+    // Let fetchLeaderboard promise + .then() resolve.
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Viewer's row should be selected by default.
+    const yanRow = document.querySelector('[data-user="yan"]');
+    const adaRow = document.querySelector('[data-user="ada"]');
+    expect(yanRow).toBeTruthy();
+    expect(adaRow).toBeTruthy();
+    expect(yanRow.classList.contains("is-selected")).toBe(true);
+    expect(adaRow.classList.contains("is-selected")).toBe(false);
+
+    // Clicking ada's row swaps the featured card and moves is-selected.
+    adaRow.click();
+    expect(adaRow.classList.contains("is-selected")).toBe(true);
+    expect(yanRow.classList.contains("is-selected")).toBe(false);
+    expect(document.getElementById("dailyFeatured").innerHTML).toContain("@ada");
+
+    // Clicking the @name link inside a row calls onProfile and does NOT change selection.
+    const adaLink = adaRow.querySelector("a[data-profile]");
+    expect(adaLink).toBeTruthy();
+    adaLink.click();
+    expect(onProfile).toHaveBeenCalledWith("ada");
+    // Row selection unchanged — stopPropagation prevented the row swap.
+    expect(adaRow.classList.contains("is-selected")).toBe(true);
+    expect(yanRow.classList.contains("is-selected")).toBe(false);
+  });
+});
+
+describe("fmtDuration", () => {
+  it("formats null/sub-second/seconds/minutes/hours", () => {
+    expect(fmtDuration(null)).toBe("");
+    expect(fmtDuration(undefined)).toBe("");
+    expect(fmtDuration(500)).toBe("<1s");
+    expect(fmtDuration(47000)).toBe("47s");
+    expect(fmtDuration(134000)).toBe("2m 14s");
+    expect(fmtDuration(120000)).toBe("2m");
+    expect(fmtDuration(3780000)).toBe("1h 3m");
+    expect(fmtDuration(3600000)).toBe("1h");
   });
 });

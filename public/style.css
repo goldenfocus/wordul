@@ -2706,10 +2706,6 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 
 .lab-entry { display: inline-block; margin-top: 8px; color: var(--accent); font-weight: 600; }
 
-/* Daily post-play: your solved-board image (hero) + Today's Top leaderboard */
-.daily-result-hero { display: flex; justify-content: center; padding: .35rem 0 .25rem; }
-.daily-result-hero.is-lost { opacity: .92; }
-
 /* Featured card region — swappable hero for the post-play recap. */
 .daily-featured { display: flex; flex-direction: column; align-items: center; gap: .35rem; padding: .35rem 0 .25rem; }
 .daily-stamp-hero { display: flex; justify-content: center; }

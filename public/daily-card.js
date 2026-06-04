@@ -232,15 +232,16 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
           board.hidden = false;
           // Index every visible entry by username so a row tap can re-feature it.
           const entries = new Map();
-          (view.top || []).forEach((e, i) => entries.set(e.username, { entry: e, rank: i + 1 }));
-          if (view.you) entries.set(view.you.username, { entry: view.you, rank: view.you.rank });
+          // Key by escAttr(username) to match each row's data-user (and renderLeaderboard's is-you).
+          (view.top || []).forEach((e, i) => entries.set(escAttr(e.username), { entry: e, rank: i + 1 }));
+          if (view.you) entries.set(escAttr(view.you.username), { entry: view.you, rank: view.you.rank });
           const featured = document.getElementById("dailyFeatured");
           const rows = Array.from(board.querySelectorAll(".daily-top-row"));
           const myWords = (result && result.solveWords) || undefined;
           const setFeatured = (name) => {
             const hit = entries.get(name);
             if (!hit || !featured) return;
-            const isYou = name === username;
+            const isYou = name === escAttr(username);
             featured.innerHTML = renderFeaturedCard(hit.entry, { isYou, yourWords: myWords, rank: hit.rank });
             rows.forEach((r) => r.classList.toggle("is-selected", r.getAttribute("data-user") === name));
             // A featured "other" card's @name still navigates to their profile.
@@ -260,7 +261,7 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
             });
           });
           // Default the featured card to you, and mark your row selected.
-          if (entries.has(username)) setFeatured(username);
+          if (entries.has(escAttr(username))) setFeatured(escAttr(username));
           // Fill the real "N played" count now that the header exists (best-effort).
           if (fetchPlayed) {
             fetchPlayed().then((n) => {
