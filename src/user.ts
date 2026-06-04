@@ -3,6 +3,7 @@ import { DurableObject } from "cloudflare:workers";
 import type { Env, UserProfile, OwnedRoom } from "./types.ts";
 import { applyGame, appendCapped } from "./stats.ts";
 import { healProfile, freshProfile, applyH2H } from "./user-core.ts";
+import { publicProfile } from "./account-core.ts";
 import type { GameRecord } from "./records.ts";
 
 const HISTORY_CAP = 100;
@@ -33,7 +34,9 @@ export class User extends DurableObject<Env> {
 
     if (req.method === "GET") {
       const profile = await this.load(username);
-      return Response.json({ ...profile, gold: profile.balances.gold ?? 0 });
+      // SECURITY: never spread the raw profile — publicProfile() drops auth + pendingClaim
+      // (salt/phraseHash/session hashes) and surfaces only the claimed/verified flags.
+      return Response.json({ ...publicProfile(profile), gold: profile.balances.gold ?? 0 });
     }
 
     // NOTE: must exclude "/ledger/append" — it also endsWith("/append"), so without this
