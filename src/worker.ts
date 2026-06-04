@@ -160,9 +160,10 @@ export default {
     if (dailyLb && req.method === "GET") {
       const date = dailyLb[1];
       const u = normalizeUsername(url.searchParams.get("username") ?? "");
+      const full = url.searchParams.get("full") === "1";
       const stub = env.ROOM.get(env.ROOM.idFromName(`daily/${date}`));
       return stub.fetch(new Request(
-        `https://do/leaderboard?username=${encodeURIComponent(u)}&n=3`,
+        `https://do/leaderboard?username=${encodeURIComponent(u)}&${full ? "full=1" : "n=3"}`,
         { method: "GET" },
       ));
     }

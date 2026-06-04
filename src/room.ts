@@ -11,7 +11,7 @@ import { nextSeatRole, applyKothRotation } from "./rotation.ts";
 import { buildGameRecords, summarizeRoomGame, encodeSolveGrid } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
 import { pointsEarned, goldFromPoints, POINTS } from "./economy.ts";
-import { topDaily } from "./leaderboard-core.ts";
+import { topDaily, fullDaily } from "./leaderboard-core.ts";
 import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
 import { activeDate } from "./daily-core.ts";
 import { countMask, maskToPattern, type ScienceBaseEvent, type ScienceEvent, type ScienceOutcome, type ScienceRoomKind } from "./science.ts";
@@ -196,11 +196,25 @@ export class Room extends DurableObject<Env> {
     // no mutation — just a sort over the players already persisted in state.
     if (req.method === "GET" && url.pathname.endsWith("/leaderboard")) {
       const username = (url.searchParams.get("username") ?? "").toLowerCase().trim();
-      const n = Number(url.searchParams.get("n") ?? "3");
+      const full = url.searchParams.get("full") === "1";
       const durationOf = (p: PlayerState) =>
         p.firstGuessAt != null && p.finishedAt != null
           ? Math.max(0, p.finishedAt - p.firstGuessAt)
           : undefined;
+      if (full) {
+        // Lean roster: every ranked player with duration, but NO grid (scales to hundreds).
+        const players = this.state.players.map((p) => ({
+          username: p.username,
+          guessCount: p.guesses.length,
+          won: p.status === "won",
+          resigned: p.resigned,
+          isBot: p.isBot,
+          goldAwarded: p.goldAwarded,
+          durationMs: durationOf(p),
+        }));
+        return Response.json(fullDaily(players, username));
+      }
+      const n = Number(url.searchParams.get("n") ?? "3");
       const players = this.state.players.map((p) => ({
         username: p.username,
         guessCount: p.guesses.length,
