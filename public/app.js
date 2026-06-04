@@ -13,6 +13,7 @@ import { getSettings, saveSettings, applySettings, openSettings, openHub } from 
 import { MODES, isAvailableMode } from "/modes.js";
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
+import { countdownNumber } from "/countdown.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
 
@@ -619,7 +620,10 @@ function showRoom(owner, slug) {
   const inviteLabel = $("#inviteLabel");
   if (inviteLabel) inviteLabel.textContent = hasNativeShare ? "Share" : "Copy link";
   $("#inviteBtn").addEventListener("click", () => shareRoomInvite());
-  $("#startBtn").addEventListener("click", () => send({ type: "start" }));
+  $("#startBtn").addEventListener("click", () => {
+    const me = game.snapshot?.players.find((p) => p.username === getUsername());
+    send({ type: "ready", ready: !me?.ready });
+  });
   $("#rematchBtn").addEventListener("click", () => {
     game.hasShownEndStats = false;
     closeStats();
@@ -983,6 +987,12 @@ function onServerMessage(msg) {
       resetIdle();
       armGiveUpTimer(); // 💀 give-up only unlocks 3 min into the round
     }
+    // Enter/leave the 3-2-1 overlay as the room moves through the countdown phase.
+    if (prev?.phase !== "countdown" && msg.room.phase === "countdown" && msg.room.goAt) {
+      startCountdownOverlay(msg.room.goAt);
+    } else if (prev?.phase === "countdown" && msg.room.phase !== "countdown") {
+      stopCountdownOverlay();
+    }
     const me = msg.room.players.find((p) => p.username === getUsername());
     const prevMe = prev?.players.find((p) => p.username === getUsername());
     // Server accepted our guess → clear pending letters.
@@ -1284,9 +1294,18 @@ function render() {
     syncModePicker(snap);
     syncLobbyEdition();
     startBtn.hidden = false;
-    $("#lobbyHint").textContent = snap.players.length < 2
-      ? `Waiting for friends · start solo anytime`
-      : `${snap.players.length} players in`;
+    const meReady = !!me?.ready;
+    startBtn.textContent = meReady ? "Ready ✓" : "Ready";
+    startBtn.classList.toggle("ready-on", meReady);
+    const active = snap.players.filter((p) => p.connected);
+    const readyCount = active.filter((p) => p.ready).length;
+    $("#lobbyHint").textContent = active.length < 2
+      ? (meReady ? "You're ready — invite a friend or wait" : "Ready up to start — or invite a friend")
+      : `${readyCount}/${active.length} ready`;
+  } else if (snap.phase === "countdown") {
+    lobby.hidden = true;
+    endControls.hidden = true;
+    const mc = $("#modeControl"); if (mc) mc.hidden = true;
   } else if (snap.phase === "playing") {
     lobby.hidden = true;
     endControls.hidden = true;
@@ -1835,6 +1854,39 @@ function triggerStartCelebration() {
   setTimeout(() => burst.remove(), 1100);
 
   spawnConfetti(40);
+}
+
+// --- 3-2-1 countdown overlay ---
+// Driven by the shared snapshot's goAt so both screens count against the same clock.
+// Numbers only — the GO! burst (triggerStartCelebration) fires on the playing transition.
+let countdownTimer = null;
+function startCountdownOverlay(goAt) {
+  stopCountdownOverlay();
+  if (getSettings().reducedMotion) return; // numbers skipped; alarm still flips us live
+  const el = document.createElement("div");
+  el.id = "countdownOverlay";
+  el.className = "countdown-overlay";
+  document.body.appendChild(el);
+  let lastShown = null;
+  const tick = () => {
+    const n = countdownNumber(goAt, Date.now());
+    if (n == null) { stopCountdownOverlay(); return; }
+    if (n !== lastShown) {
+      lastShown = n;
+      el.textContent = String(n);
+      el.classList.remove("pulse");
+      void el.offsetWidth; // restart the pop animation
+      el.classList.add("pulse");
+      playChime([[330 + (3 - n) * 110, 0]]); // 330 → 440 → 550 Hz as it ticks down
+    }
+  };
+  tick();
+  countdownTimer = setInterval(tick, 80);
+}
+function stopCountdownOverlay() {
+  if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+  const el = $("#countdownOverlay");
+  if (el) el.remove();
 }
 
 // Solve celebration: a big "SOLVED!" pop + confetti so winning the word lands as an
@@ -2632,6 +2684,7 @@ function toggleMute() {
 // Tear down any live room connection when leaving a room view.
 function leaveRoom() {
   stopHeartbeat();
+  stopCountdownOverlay();
   clearPayoutTimers(); // cancel any pending payout/drain so it can't fire off-screen + mutate gold
   if (game.ws) {
     try { game.ws.onclose = null; game.ws.close(); } catch {}
