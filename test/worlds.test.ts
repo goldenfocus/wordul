@@ -58,10 +58,28 @@ describe("worlds registry", () => {
   });
 });
 
-import { WORLDS as TWIN_WORLDS } from "/worlds.js";
+import {
+  WORLDS as TWIN_WORLDS,
+  listWorlds as twinListWorlds,
+  featuredWorlds as twinFeaturedWorlds,
+  getWorld as twinGetWorld,
+  isWorldSlug as twinIsWorldSlug,
+  worldSlugFromPath as twinWorldSlugFromPath,
+} from "/worlds.js";
 
 describe("worlds registry — browser twin parity", () => {
   it("public/worlds.js is byte-for-byte identical data to src/worlds.ts", () => {
     expect(TWIN_WORLDS).toEqual(WORLDS);
+  });
+
+  it("twin helpers behave identically to the server helpers", () => {
+    expect(twinListWorlds()).toEqual(listWorlds());
+    expect(twinFeaturedWorlds()).toEqual(featuredWorlds());
+    expect(twinGetWorld("jackpot")).toEqual(getWorld("jackpot"));
+    expect(twinGetWorld("nope-not-real")).toBe(getWorld("nope-not-real")); // both null
+    expect(twinIsWorldSlug("jackpot")).toBe(isWorldSlug("jackpot"));
+    expect(twinIsWorldSlug("nope-not-real")).toBe(isWorldSlug("nope-not-real"));
+    expect(twinWorldSlugFromPath("/w/tin-bot")).toBe(worldSlugFromPath("/w/tin-bot"));
+    expect(twinWorldSlugFromPath("/worlds")).toBe(worldSlugFromPath("/worlds")); // both null
   });
 });
