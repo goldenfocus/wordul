@@ -2599,6 +2599,19 @@ function syncMyInputRow(board, snap, me) {
   });
 }
 
+// Fast path for the typing hot loop: a keystroke only ever changes MY input row, so patch
+// just that row in place instead of a full render() — which would wipe + rebuild every board,
+// re-class all keyboard keys, and rebuild the scoreboard/games panels on EVERY letter (the
+// tap-lag culprit). Falls back to a full render() if my board isn't built yet (first paint).
+function patchMyInputRow() {
+  const snap = game.snapshot;
+  if (!snap || snap.phase !== "playing") { render(); return; }
+  const me = snap.players.find((p) => p.username === getUsername());
+  const myBoard = $$(".player-board").find((b) => b.dataset.player === getUsername());
+  if (!me || !myBoard || !myBoard.querySelectorAll(".grid-row")[me.guesses.length]) { render(); return; }
+  syncMyInputRow(myBoard, snap, me);
+}
+
 function scheduleReveal(tile, color, colIdx) {
   // Swap to colored class at the keyframe's halfway point so the color is revealed
   // exactly when the tile is edge-on (invisible) — that's why the snap feels seamless.
@@ -2696,7 +2709,7 @@ function typeLetter(l) {
   if (!game.snapshot || game.snapshot.phase !== "playing") return;
   if (game.pending.length >= game.snapshot.wordLength) return;
   game.pending += l.toUpperCase();
-  render();
+  patchMyInputRow(); // in-place: a keystroke only changes my input row, not the whole room
   sendTyping();
   resetIdle();
 }
@@ -2735,7 +2748,7 @@ function activeInputRow() {
 function backspace() {
   if (game.pending.length === 0) return;
   game.pending = game.pending.slice(0, -1);
-  render();
+  patchMyInputRow(); // in-place: backspace only changes my input row
   sendTyping();
   resetIdle();
   maybeShowClearHint();
@@ -2893,6 +2906,11 @@ function triggerWinCelebration() {
 
 const CONFETTI_COLORS = ["#538d4e", "#c9b458", "#6aaa64", "#ffd166", "#9d4edd", "#4cc9f0", "#ef476f"];
 function spawnConfetti(pieces) {
+  // Win/start celebration can spawn 40–130 pieces. Build them in a DocumentFragment and
+  // append ONCE (one reflow instead of `pieces` reflows), and clean up with a single timer
+  // instead of one per piece — both were a real synchronous stall at the win moment.
+  const frag = document.createDocumentFragment();
+  const nodes = [];
   for (let i = 0; i < pieces; i++) {
     const c = document.createElement("div");
     c.className = "cheer-confetti";
@@ -2902,9 +2920,11 @@ function spawnConfetti(pieces) {
     c.style.setProperty("--cf-rot", `${(Math.random() - 0.5) * 900}deg`);
     c.style.setProperty("--cf-delay", `${Math.random() * 250}ms`);
     c.style.setProperty("--cf-dur", `${1200 + Math.random() * 900}ms`);
-    document.body.appendChild(c);
-    setTimeout(() => c.remove(), 2400);
+    frag.appendChild(c);
+    nodes.push(c);
   }
+  document.body.appendChild(frag);
+  setTimeout(() => { for (const c of nodes) c.remove(); }, 2600); // one cleanup pass (max anim ≈ 2.35s)
 }
 
 // A short sparkle chime via Web Audio. Honors the global mute toggle.
@@ -3528,9 +3548,11 @@ function openStats(opts = {}) {
   const mainMenu = document.getElementById("modalMainMenu");
   if (mainMenu) { mainMenu.hidden = !arena; mainMenu.textContent = t("endscreen.mainMenu"); mainMenu.onclick = backToMenu; }
 
-  // Pre-render the share card now (modal open) so the Share click can fire
-  // navigator.share synchronously — iOS rejects share() after an async toBlob.
-  void prepareShareCard();
+  // Pre-render the share card so a later Share tap can fire navigator.share with a ready
+  // blob (iOS rejects share() after an async toBlob). The canvas draw is 2x-DPR and heavy,
+  // so run it AFTER the modal has painted (double-rAF) rather than on the open frame — it's
+  // ready in tens of ms, long before anyone reads the results and taps Share.
+  requestAnimationFrame(() => requestAnimationFrame(() => { void prepareShareCard(); }));
 
   // Challenge end screen: show how I did vs the standing record (re-fetched fresh —
   // my own run may have just set/beaten it). Cleared for non-challenge games.
