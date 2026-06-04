@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Vibe Studio — Wordul</title>
+<link rel="stylesheet" href="/style.css" />
+<style>
+  /* Studio-only chrome. Re-uses the locked --a1/--a2/--a3/--accent contract. */
+  body.studio { min-height: 100vh; margin: 0; background: #0f0f11; color: #f1e9d9;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; overflow-x: hidden; }
+  .studio-aurora { position: fixed; inset: -20vmax; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(40vmax 40vmax at 20% 15%, color-mix(in srgb, var(--a1) 38%, transparent), transparent 70%),
+      radial-gradient(38vmax 38vmax at 82% 22%, color-mix(in srgb, var(--a2) 30%, transparent), transparent 70%),
+      radial-gradient(46vmax 46vmax at 50% 92%, color-mix(in srgb, var(--a3) 26%, transparent), transparent 72%);
+    filter: blur(8px); transition: background .4s ease; }
+  .studio-wrap { position: relative; z-index: 1; max-width: 820px; margin: 0 auto;
+    padding: clamp(20px, 5vw, 48px) 20px 120px; }
+  .studio-kicker { text-transform: uppercase; letter-spacing: .28em; font-size: 11px;
+    color: color-mix(in srgb, var(--accent) 70%, #8a877f); margin-bottom: 10px; }
+  #studioTitle { width: 100%; box-sizing: border-box; background: transparent; border: 0; outline: none;
+    font-size: clamp(34px, 8vw, 64px); font-weight: 800; letter-spacing: -0.02em;
+    color: transparent; background-image: linear-gradient(120deg, var(--a1), var(--a2));
+    -webkit-background-clip: text; background-clip: text; }
+  #studioTitle::placeholder { color: color-mix(in srgb, var(--accent) 50%, #555); -webkit-text-fill-color: initial; }
+  .word-label { text-align: center; letter-spacing: .42em; font-weight: 700; font-size: 18px;
+    color: color-mix(in srgb, var(--accent) 85%, #fff); margin: 28px 0 12px; min-height: 22px; }
+  .preview-board { display: grid; gap: 6px; justify-content: center; margin: 0 auto;
+    --tile: clamp(26px, calc((100vw - 80px) / var(--cols, 5)), 52px); }
+  .preview-row { display: grid; grid-template-columns: repeat(var(--cols, 5), var(--tile)); gap: 6px; }
+  .preview-tile { width: var(--tile); height: var(--tile); border: 2px solid #2c2b28;
+    border-radius: 4px; background: #181715; display: grid; place-items: center;
+    font-weight: 800; font-size: calc(var(--tile) * 0.42); text-transform: uppercase; color: #f1e9d9; }
+  .preview-tile.green  { background: var(--a1); border-color: var(--a1); color: #0f0f11; }
+  .preview-tile.yellow { background: var(--a2); border-color: var(--a2); color: #0f0f11; }
+  .preview-tile.gray   { background: #2c2b28; border-color: #2c2b28; color: #8a877f; }
+
+  .tool-card { position: relative; z-index: 1; margin: 22px auto 0; max-width: 560px;
+    background: color-mix(in srgb, #ffffff 5%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 22%, #2c2b28);
+    border-radius: 16px; padding: 18px 18px 20px; backdrop-filter: blur(10px); }
+  .tool-card h3 { margin: 0 0 14px; font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
+    color: color-mix(in srgb, var(--accent) 70%, #8a877f); font-weight: 700; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    color: #8a877f; margin-bottom: 6px; }
+  .field input[type=text], .field input[type=number] { width: 100%; box-sizing: border-box;
+    font-size: 16px; padding: 10px 12px; background: #181715; border: 1px solid #2c2b28;
+    border-radius: 8px; color: #f1e9d9; }
+  #wordInput { letter-spacing: .3em; text-transform: uppercase; font-weight: 700; text-align: center; }
+  .row { display: flex; gap: 14px; }
+  .row .field { flex: 1; }
+  .badge { display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 600; min-height: 18px; }
+  .badge.real { color: var(--a1); }
+  .badge.invented { color: var(--a2); }
+  .badge.muted { color: #8a877f; }
+  .swatches { display: flex; gap: 16px; align-items: flex-end; }
+  .swatch-wrap { text-align: center; }
+  .swatch-wrap small { display: block; font-size: 10px; color: #8a877f; margin-bottom: 6px; }
+  .swatch { width: 46px; height: 46px; border-radius: 50%; border: 2px solid #2c2b28; cursor: pointer; padding: 0; background: none; }
+  .harmony-btn { margin-left: auto; background: transparent; border: 0; cursor: pointer;
+    color: color-mix(in srgb, var(--accent) 85%, #fff); font-size: 13px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 6px; }
+  .harmony-btn:hover { text-shadow: 0 0 12px var(--accent); }
+  .schedule-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; text-align: center;
+    padding: 16px; background: linear-gradient(to top, #0f0f11, transparent); }
+  .schedule-seam { background: transparent; border: 0; color: #8a877f; font-size: 15px; font-weight: 600;
+    cursor: not-allowed; display: inline-flex; align-items: center; gap: 8px; }
+  .schedule-seam .soon { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+</style>
+</head>
+<body class="studio">
+  <div class="studio-aurora" id="aurora"></div>
+  <div class="studio-wrap">
+    <div class="studio-kicker">Vibe Studio · draft</div>
+    <input id="studioTitle" type="text" placeholder="Name this day…" autocomplete="off" />
+
+    <div class="word-label" id="wordLabel"></div>
+    <div class="preview-board" id="previewBoard"></div>
+
+    <div class="tool-card">
+      <h3>Word &amp; size</h3>
+      <div class="field">
+        <label for="wordInput">The word</label>
+        <input id="wordInput" type="text" maxlength="12" autocomplete="off" placeholder="EMBER" />
+        <span class="badge muted" id="wordBadge"></span>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="lenInput">Length (4–12)</label>
+          <input id="lenInput" type="number" min="4" max="12" />
+        </div>
+        <div class="field">
+          <label for="rowsInput">Guesses (3–10)</label>
+          <input id="rowsInput" type="number" min="3" max="10" />
+        </div>
+      </div>
+    </div>
+
+    <div class="tool-card">
+      <h3 style="display:flex;align-items:center;">Palette
+        <button class="harmony-btn" id="harmonyBtn" type="button">🎲 Random harmony</button>
+      </h3>
+      <div class="swatches">
+        <div class="swatch-wrap"><small>Accent 1</small><input class="swatch" id="sw1" type="color" /></div>
+        <div class="swatch-wrap"><small>Accent 2</small><input class="swatch" id="sw2" type="color" /></div>
+        <div class="swatch-wrap"><small>Accent 3</small><input class="swatch" id="sw3" type="color" /></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="schedule-bar">
+    <button class="schedule-seam" type="button" disabled title="Scheduling arrives in a later increment">
+      Submit my day → <span class="soon">coming soon</span>
+    </button>
+  </div>
+
+  <script type="module" src="/vibe-studio.js"></script>
+</body>
+</html>
