@@ -60,11 +60,14 @@ async function intelFor(word) {
     max_tokens: 400,
     system:
       "You write tiny, accurate, delightful 'word intel' cards for a word game. " +
-      "Return ONLY JSON: {\"def\":\"\",\"fact\":\"\",\"quote\":\"\",\"author\":\"\"}. " +
+      "Return ONLY JSON: {\"def\":\"\",\"fact\":\"\",\"quote\":\"\",\"author\":\"\"," +
+      "\"etymology\":\"\",\"pos\":\"\",\"syllables\":0}. " +
       "def: one crisp sentence. fact: one surprising, TRUE philosophical or scientific " +
       "fact connected to the word. quote: a short, REAL, correctly-attributed quote from " +
       "a great mind that resonates with the word — if you are not certain it is genuine, " +
-      "set quote and author to empty strings. No markdown.",
+      "set quote and author to empty strings. etymology: one short sentence on the word's " +
+      "origin (empty string if unsure). pos: the primary part of speech (e.g. 'noun'). " +
+      "syllables: integer syllable count. No markdown.",
     messages: [{ role: "user", content: `Word: ${word}` }],
   });
   const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
@@ -79,6 +82,9 @@ function writeIntel(map) {
   const body = keys.map((k) => {
     const e = map[k];
     const lines = [`  ${k}: {`, `    def: "${esc(e.def)}",`, `    fact: "${esc(e.fact)}",`];
+    if (e.etymology) lines.push(`    etymology: "${esc(e.etymology)}",`);
+    if (e.pos) lines.push(`    pos: "${esc(e.pos)}",`);
+    if (e.syllables) lines.push(`    syllables: ${Number(e.syllables) || 0},`);
     if (e.quote) { lines.push(`    quote: "${esc(e.quote)}",`); lines.push(`    author: "${esc(e.author)}",`); }
     lines.push("  },");
     return lines.join("\n");
