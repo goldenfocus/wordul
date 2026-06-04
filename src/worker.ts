@@ -35,6 +35,8 @@ export function rateLimitDecision(count: number, limit: number): { allow: boolea
 // KV-counter rate limit on the DIRECTORY namespace. Best-effort: a KV hiccup ALLOWS
 // (fail-open) so a transient KV outage can't lock everyone out of claiming. `key` should
 // already encode the scope (e.g. `rl:claim:<ip>`); `windowSec` is the bucket lifetime.
+// Counter is get-then-put (not atomic): a concurrent burst can undercount — fine for a
+// best-effort deterrent (the DO is the real auth boundary), not an exact quota.
 async function rateLimit(env: Env, key: string, limit: number, windowSec: number): Promise<boolean> {
   try {
     const raw = await env.DIRECTORY.get(key);
@@ -100,7 +102,8 @@ export default {
       if (sub === "me" && req.method === "GET") {
         const name = normalizeUsername(url.searchParams.get("username") ?? "");
         if (!isValidUsername(name)) return new Response("bad username", { status: 400 });
-        return userDo(name, "account/me", { method: "GET", headers: { Authorization: req.headers.get("Authorization") ?? "" } });
+        const authVal = req.headers.get("Authorization");
+        return userDo(name, "account/me", { method: "GET", headers: authVal ? { Authorization: authVal } : {} });
       }
 
       if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
@@ -109,11 +112,15 @@ export default {
       const name = normalizeUsername(typeof body.username === "string" ? body.username : "");
       if (!isValidUsername(name)) return new Response("bad username", { status: 400 });
 
-      // Rate-limit the abusable surfaces (preview/claim/login) per-IP and per-username.
+      // Rate-limit the abusable surfaces. preview is cheap (just generates+hashes a phrase,
+      // hit on every 🎲 re-roll) → generous. claim/login are the sensitive ones → strict
+      // (5/min per username deters spraying). Checks short-circuit so a blocked request
+      // doesn't also burn the other bucket's quota or pay a second serial KV round-trip.
       if (sub === "preview" || sub === "claim" || sub === "login") {
-        const okIp = await rateLimit(env, `rl:acct:${sub}:ip:${ip}`, 10, 60);
-        const okName = await rateLimit(env, `rl:acct:${sub}:u:${name}`, 5, 60);
-        if (!okIp || !okName) return new Response(JSON.stringify({ error: "rate_limited" }), { status: 429, headers: { "content-type": "application/json" } });
+        const [ipLimit, nameLimit] = sub === "preview" ? [20, 15] : [10, 5];
+        const limited = () => new Response(JSON.stringify({ error: "rate_limited" }), { status: 429, headers: { "content-type": "application/json" } });
+        if (!(await rateLimit(env, `rl:acct:${sub}:u:${name}`, nameLimit, 60))) return limited();
+        if (!(await rateLimit(env, `rl:acct:${sub}:ip:${ip}`, ipLimit, 60))) return limited();
       }
 
       const doPath =
