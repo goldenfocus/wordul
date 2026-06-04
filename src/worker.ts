@@ -40,6 +40,19 @@ export default {
       return stub.fetch(new Request(`https://do/?username=${name}`, { method: "GET" }));
     }
 
+    // Per-word public solve stats (powers the live panel on each word page).
+    if (url.pathname.startsWith("/api/word/") && url.pathname.endsWith("/stats")) {
+      const word = decodeURIComponent(
+        url.pathname.slice("/api/word/".length, -"/stats".length),
+      ).toUpperCase();
+      if (!isWordPage(word)) return new Response("not found", { status: 404 });
+      const res = await env.WORDSTATS.get(env.WORDSTATS.idFromName(word)).fetch("https://do/");
+      return new Response(res.body, {
+        status: res.status,
+        headers: { "content-type": "application/json", "cache-control": "public, max-age=300" },
+      });
+    }
+
     // Sitemap from the directory.
     if (url.pathname === "/sitemap.xml") {
       return sitemap(env, url.origin);
