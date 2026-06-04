@@ -901,6 +901,8 @@ async function showDailyStats(date) {
       <p class="daily-stats-glow">${glow}</p>
     </header>
     <div class="daily-stats-body" id="dailyStatsBody"><p class="muted small">Loading today's numbers…</p></div>
+    <h2 class="daily-stats-sub">Players</h2>
+    <div class="daily-roster" id="dailyRoster"><p class="muted small">Loading players…</p></div>
     <a href="/feed" class="link lab-entry" id="dailyLabLink">🧠 See what the lab learned →</a>`;
   app.appendChild(screen);
   $("#dailyStatsBack").addEventListener("click", (e) => { e.preventDefault(); navigate("/"); });
@@ -940,7 +942,7 @@ async function renderDailyRoster(date) {
       <a class="daily-roster-name" href="/@${u}" data-profile="${u}">${r.isYou ? `you (@${u})` : `@${u}`}</a>
       <span class="daily-roster-gold">${goldValue(r.gold)}</span>
       <span class="daily-roster-guesses">${r.won ? `in ${r.guesses}` : "missed"}</span>
-      ${dur ? `<span class="daily-roster-time">${dur}</span>` : `<span class="daily-roster-time"></span>`}
+      ${dur ? `<span class="daily-roster-time">${dur}</span>` : ""}
     </li>`;
   }).join("")}</ul>`;
   host.querySelectorAll("a[data-profile]").forEach((a) => {
@@ -971,9 +973,7 @@ function renderDailyStatsBody(summary) {
     </div>
     <h2 class="daily-stats-sub">Guess distribution</h2>
     <div class="ddist">${rows || '<p class="muted small">No solves yet.</p>'}</div>
-    <p class="daily-stats-foot muted small">Failed today: ${fmt(v.losses)}</p>
-    <h2 class="daily-stats-sub">Players</h2>
-    <div class="daily-roster" id="dailyRoster"><p class="muted small">Loading players…</p></div>`;
+    <p class="daily-stats-foot muted small">Failed today: ${fmt(v.losses)}</p>`;
 }
 
 // The Living Lab reader — human-readable, blog-style discoveries over the same
