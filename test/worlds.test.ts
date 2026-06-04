@@ -57,3 +57,11 @@ describe("worlds registry", () => {
     expect(worldSlugFromPath(undefined)).toBe(null);
   });
 });
+
+import { WORLDS as TWIN_WORLDS } from "/worlds.js";
+
+describe("worlds registry — browser twin parity", () => {
+  it("public/worlds.js is byte-for-byte identical data to src/worlds.ts", () => {
+    expect(TWIN_WORLDS).toEqual(WORLDS);
+  });
+});

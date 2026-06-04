@@ -30,6 +30,7 @@ export default defineConfig({
       { find: /^\/daily-card\.js$/, replacement: new URL("./public/daily-card.js", import.meta.url).pathname },
       { find: /^\/race-copy\.js$/, replacement: new URL("./public/race-copy.js", import.meta.url).pathname },
       { find: /^\/vibe-studio-core\.js$/, replacement: new URL("./public/vibe-studio-core.js", import.meta.url).pathname },
+      { find: /^\/worlds\.js$/, replacement: new URL("./public/worlds.js", import.meta.url).pathname },
     ],
   },
 });
