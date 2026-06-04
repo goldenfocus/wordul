@@ -6,6 +6,8 @@
 export const edition = {
   id: "default",
   name: "Wordul",
+  // Blessed: this IS the elegant :root board, so it repaints the full surface. (See applyEdition.)
+  morphBoard: true,
   palette: {
     bg: "#0e0e10", fg: "#f4f2ec", muted: "#8a8a8f", border: "#2a2a2e",
     tileEmpty: "#0e0e10", tilePendingBorder: "#46464c", keyBg: "#2a2a2e",

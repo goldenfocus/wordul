@@ -104,6 +104,38 @@ describe("applyEdition", () => {
   });
 });
 
+describe("applyEdition — neutral board (morphBoard gate)", () => {
+  const html = document.documentElement;
+  // Board vars must NEVER carry inline overrides from an unblessed edition; they fall back
+  // to the elegant :root default. Chrome (accent) always morphs so the day keeps its signature.
+  const BOARD = ["--bg", "--fg", "--tile-empty", "--key-bg", "--green", "--yellow", "--gray", "--border"];
+
+  it("an unblessed edition (tactile) leaves the board neutral but still morphs the accent", () => {
+    applyEdition("tactile");
+    for (const v of BOARD) expect(html.style.getPropertyValue(v).trim()).toBe("");
+    // chrome still morphs: tactile's orange accent drives the enter key + glow
+    expect(html.style.getPropertyValue("--accent").trim()).toBe("#ff9a52");
+    // shape/texture + fonts still come from the edition
+    expect(html.dataset.edition).toBe("tactile");
+    expect(html.style.getPropertyValue("--font-display")).not.toBe("");
+  });
+
+  it("clears stale board overrides when morphing from a blessed edition to an unblessed one", () => {
+    applyEdition("default");                                   // blessed: paints the board
+    expect(html.style.getPropertyValue("--tile-empty").trim()).toBe("#0e0e10");
+    applyEdition("robot");                                     // unblessed: must wipe the board
+    for (const v of BOARD) expect(html.style.getPropertyValue(v).trim()).toBe("");
+    expect(html.style.getPropertyValue("--accent").trim()).toBe("#ff7043");
+  });
+
+  it("blessed editions (default, yang) still paint the full board", () => {
+    applyEdition("yang");
+    expect(html.style.getPropertyValue("--bg").trim()).toBe("#0b0a0c");
+    expect(html.style.getPropertyValue("--green").trim()).toBe("#6f9e7a");
+    expect(html.style.getPropertyValue("--accent").trim()).toBe("#f0c14b");
+  });
+});
+
 import { colorSchemeVars } from "/edition.js";
 
 describe("colorSchemeVars", () => {

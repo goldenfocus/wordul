@@ -2252,6 +2252,32 @@ body.hub-home .topbar-stats { display: flex; }
 .daily-edition { margin: 0; font-size: 13.5px; color: var(--fg); }
 .daily-edition-by { color: rgba(255,255,255,0.42); }
 
+/* ── Desktop: the home is a phone-first vertical stack, which reads as a stranded
+   mobile column on a wide viewport. Spread it into two columns — the daily hero on
+   the left, "other ways to play" + recent on the right — so it fills the horizontal
+   space instead of floating in a void. Mobile (< 860px) is byte-for-byte unchanged. ── */
+@media (min-width: 860px) {
+  /* .screen.home is a flex item that shrink-wraps to its content; max-width only caps it, so
+     it needs width:100% to actually claim the desktop width (and #hub to fill it). */
+  .screen.home { max-width: 940px; width: 100%; }
+  #hub { width: 100%; }
+  .hub-content { padding-left: 24px; padding-right: 24px; }
+  .hub-panel.daily {
+    max-width: 940px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "head   modes"
+      "card   recent";
+    column-gap: 48px;
+    align-items: start;
+  }
+  .hub-panel.daily .daily-head   { grid-area: head; align-self: end; }
+  .hub-panel.daily .daily-card   { grid-area: card; margin-top: 14px; }
+  .hub-panel.daily .hub-modes    { grid-area: modes; margin-top: 0; align-self: end; }
+  .hub-panel.daily .daily-recent { grid-area: recent; margin-top: 14px; }
+}
+
 /* The play card — tap, Enter/Space, or just start typing. Breathes softly. */
 .daily-card {
   position: relative; display: block; width: 100%;

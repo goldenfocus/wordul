@@ -101,11 +101,22 @@ export function companionReact(event, ctx = {}) {
   return { text, raw, tier, speak: voiceOn && shouldSpeak(event, tier, react, ctx.rng) };
 }
 
-const VAR_MAP = {
+// The palette is split into two surfaces with different morphing rules:
+//
+// CHROME always morphs — accent (the day's signature: enter key + every color-mix(var(--accent))
+// glow), the home card, and transient error. One color is hard to make ugly.
+//
+// BOARD is the surface the player stares at for minutes — tiles, keys, feedback colors. We only
+// let an edition repaint it if it carries `morphBoard: true` (a curated, eyeballed theme). Every
+// other edition leaves the board on the elegant :root default, so an auto/loosely-themed day
+// (e.g. Tactile's browns) can't turn the board muddy, and green/yellow keep a stable meaning
+// across days. applyEdition removes any stale board overrides when morphing into an unblessed
+// edition, so switching themes never leaves yesterday's colors stuck inline.
+const CHROME_VARS = { accent: "--accent", bgCard: "--bg-card", error: "--error" };
+const BOARD_VARS = {
   bg: "--bg", fg: "--fg", muted: "--muted", border: "--border",
   tileEmpty: "--tile-empty", tilePendingBorder: "--tile-pending-border",
   keyBg: "--key-bg", green: "--green", yellow: "--yellow", gray: "--gray",
-  accent: "--accent", bgCard: "--bg-card", error: "--error",
 };
 
 // Vibe Studio — a curated day ships a 3-color palette {a1,a2,a3}. Map it to the CSS custom
@@ -143,8 +154,15 @@ export function applyEdition(id) {
   activeId = ed.id;
   const html = document.documentElement;
   html.dataset.edition = ed.id;
-  for (const [k, cssVar] of Object.entries(VAR_MAP)) {
+  // Chrome always morphs.
+  for (const [k, cssVar] of Object.entries(CHROME_VARS)) {
     if (ed.palette[k] != null) html.style.setProperty(cssVar, ed.palette[k]);
+  }
+  // Board only morphs for a blessed edition; otherwise fall back to the elegant :root default
+  // (removeProperty clears any inline override a previous blessed edition left behind).
+  for (const [k, cssVar] of Object.entries(BOARD_VARS)) {
+    if (ed.morphBoard && ed.palette[k] != null) html.style.setProperty(cssVar, ed.palette[k]);
+    else html.style.removeProperty(cssVar);
   }
   html.style.setProperty("--font-display", ed.fonts.display);
   html.style.setProperty("--font-body", ed.fonts.body);

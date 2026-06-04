@@ -4,6 +4,8 @@
 export const edition = {
   id: "yang",
   name: "Yang's Table",
+  // Blessed: the owner's hand-tuned dark+gold board is coherent, so it repaints the full surface.
+  morphBoard: true,
   palette: {
     bg: "#0b0a0c", fg: "#f7f1e3", muted: "#9a9388", border: "#2e2a22",
     tileEmpty: "#0b0a0c", tilePendingBorder: "#4a4334", keyBg: "#2a2620",
