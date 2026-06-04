@@ -70,6 +70,19 @@ export default {
       return stub.fetch(new Request(`https://do/?username=${name}`, { method: "GET" }));
     }
 
+    // Daily leaderboard JSON API: /api/daily/<YYYY-MM-DD>/leaderboard?username=<u>
+    // Proxies to the day's single Room DO (keyed exactly like the /ws daily room).
+    const dailyLb = url.pathname.match(/^\/api\/daily\/(\d{4}-\d{2}-\d{2})\/leaderboard$/);
+    if (dailyLb && req.method === "GET") {
+      const date = dailyLb[1];
+      const u = normalizeUsername(url.searchParams.get("username") ?? "");
+      const stub = env.ROOM.get(env.ROOM.idFromName(`daily/${date}`));
+      return stub.fetch(new Request(
+        `https://do/leaderboard?username=${encodeURIComponent(u)}&n=3`,
+        { method: "GET" },
+      ));
+    }
+
     // Mint a challenge: POST /api/challenge
     if (url.pathname === "/api/challenge" && req.method === "POST") {
       const id = makeChallengeId();
