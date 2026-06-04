@@ -276,7 +276,7 @@ function renderHomeIdentity() {
 // roomPath is daily/<today>. Drives the home's post-play recap. null = not played yet.
 function dailyResultFor(profile) {
   const g = (profile?.games || []).find((x) => x.roomPath === "daily/" + todayUTC());
-  return g ? { won: g.result === "won", guesses: g.guesses } : null;
+  return g ? { won: g.result === "won", guesses: g.guesses, solveGrid: g.solveGrid ?? null } : null;
 }
 
 // Share today's result from the home — a spoiler-free line + the day's link (no board

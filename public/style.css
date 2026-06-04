@@ -2633,7 +2633,7 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .lab-entry { display: inline-block; margin-top: 8px; color: var(--accent); font-weight: 600; }
 
 /* Daily post-play: gold won + Today's Top leaderboard */
-.daily-result-gold { color: var(--accent); font-weight: 600; }
+.daily-result-gold { color: #f0c14b; font-weight: 600; display: inline-flex; align-items: center; }
 
 .daily-top { margin-top: 1rem; }
 .daily-top .section-label { display: block; margin-bottom: .5rem; }
@@ -2648,9 +2648,31 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
   background: var(--bg-card);
 }
 .daily-top-row.is-you { outline: 1px solid var(--accent); }
-.daily-top-rank { text-align: center; font-variant-numeric: tabular-nums; }
+.daily-top-rank { display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; color: var(--muted); font-size: .9em; }
 .daily-top-name { color: var(--fg); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .daily-top-name:hover { text-decoration: underline; }
-.daily-top-gold { color: var(--accent); font-variant-numeric: tabular-nums; }
+.daily-top-gold { color: #f0c14b; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; justify-content: flex-end; font-weight: 600; }
 .daily-top-guesses { color: var(--muted); font-variant-numeric: tabular-nums; }
 .daily-top-sep { height: 1px; margin: .25rem 0; background: var(--muted); opacity: .25; }
+
+/* Luxe rank medallions + the precious coin (struck SVGs, soft static glow). */
+.wmedal { width: 1.5em; height: 1.5em; display: block; }
+.wmedal-1 { filter: drop-shadow(0 0 3px rgba(233,178,61,.5)); }
+.wmedal-2 { filter: drop-shadow(0 0 2px rgba(195,204,217,.42)); }
+.wmedal-3 { filter: drop-shadow(0 0 2px rgba(207,138,68,.42)); }
+.wcoin { width: .92em; height: .92em; margin-left: .28em; vertical-align: -.14em; filter: drop-shadow(0 0 2.5px rgba(233,178,61,.5)); }
+
+/* Crystallized stamp of your own solved board — mirrors the precious/champagne/obsidian
+   board treatment, shrunk to a seal. Tiny glass sheen on every cell. */
+.daily-stamp { display: grid; gap: 3px; justify-content: center; margin: .15rem 0 .35rem; }
+.stamp-row { display: flex; gap: 3px; }
+.stamp-cell { position: relative; width: 14px; height: 14px; border-radius: 3px; overflow: hidden; }
+.stamp-cell::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(135deg, rgba(255,255,255,.22), transparent 48%); pointer-events: none; }
+.stamp-cell.is-correct { background: linear-gradient(135deg, #ffe7a3, #e9b23d 55%, #a87a1f); box-shadow: 0 0 0 1px rgba(255,231,163,.5), 0 0 7px rgba(233,178,61,.3); }
+.stamp-cell.is-present { background: rgba(216,201,122,.10); box-shadow: 0 0 0 1px rgba(207,214,227,.35) inset; }
+.stamp-cell.is-absent { background: #0d0d0f; box-shadow: 0 0 0 1px #1f1f23 inset; }
+@media (prefers-reduced-motion: no-preference) { .wmedal-1 { animation: medal-breathe 7.5s ease-in-out infinite; } }
+@keyframes medal-breathe {
+  0%, 100% { filter: drop-shadow(0 0 2px rgba(233,178,61,.4)); }
+  50% { filter: drop-shadow(0 0 5px rgba(233,178,61,.6)); }
+}

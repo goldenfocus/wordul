@@ -7,9 +7,49 @@
 // The shell (hub.js) supplies the header + modes; this file owns the card.
 import { GLYPH } from "/hub-glyphs.js";
 
-const MEDALS = ["🥇", "🥈", "🥉"];
 function escAttr(s) { return String(s).replace(/[^a-z0-9_-]/gi, ""); } // usernames are [a-z0-9_-]
-function fmtGold(n) { return `${Number(n).toLocaleString()}g`; }
+
+// "The precious" — a small struck gold coin. Inline fills (no gradient <defs>, so it
+// repeats safely down the list); the soft glow lives in CSS.
+const COIN = `<svg class="wcoin" viewBox="0 0 24 24" aria-hidden="true">` +
+  `<circle cx="12" cy="12" r="9" fill="#e9b23d"/>` +
+  `<circle cx="12" cy="12" r="9" fill="none" stroke="#ffe7a3" stroke-width="1.3" stroke-opacity=".7"/>` +
+  `<circle cx="12" cy="12" r="5.4" fill="none" stroke="#8a6314" stroke-width="1.1" stroke-opacity=".65"/>` +
+  `<path d="M12 8.85l.93 1.88 2.07.3-1.5 1.46.35 2.06L12 14.64l-1.85.97.35-2.06-1.5-1.46 2.07-.3z" fill="#fff3cf" fill-opacity=".85"/>` +
+  `</svg>`;
+
+// A struck podium medallion (1/2/3) with a serif numeral — luxe, never an OS emoji.
+// Per-rank flat metal so the SVG repeats without colliding gradient ids.
+const MEDAL_PAL = {
+  1: { a: "#ffe7a3", b: "#e9b23d", c: "#a87a1f", ink: "#3a2a07" }, // gold ("the precious")
+  2: { a: "#f4f7fb", b: "#c3ccd9", c: "#8b95a6", ink: "#2c313a" }, // silver
+  3: { a: "#f6cda0", b: "#cf8a44", c: "#8a5320", ink: "#3a230c" }, // bronze
+};
+function medalGlyph(rank) {
+  const p = MEDAL_PAL[rank];
+  if (!p) return `#${rank}`;
+  return `<svg class="wmedal wmedal-${rank}" viewBox="0 0 24 24" aria-hidden="true">` +
+    `<circle cx="12" cy="12" r="9.2" fill="${p.b}"/>` +
+    `<circle cx="12" cy="12" r="9.2" fill="none" stroke="${p.a}" stroke-width="1.4" stroke-opacity=".8"/>` +
+    `<circle cx="12" cy="12" r="6.4" fill="none" stroke="${p.c}" stroke-width="1" stroke-opacity=".6"/>` +
+    `<text x="12" y="12.3" text-anchor="middle" dominant-baseline="central" font-family="Fraunces, Georgia, serif" font-size="10.5" font-weight="700" fill="${p.ink}">${rank}</text>` +
+    `</svg>`;
+}
+
+// A gold value: number + coin. Warm-gold styling lives in CSS.
+function goldValue(n) { return `${Number(n).toLocaleString()}${COIN}`; }
+
+// A crystallized stamp of a solved board: one tiny glass tile per cell, mirroring the
+// real board's precious-gold / champagne / obsidian treatment. grid is an array of row
+// strings ("g"=correct, "y"=present, "x"=absent). Empty → nothing.
+const STAMP_CLS = { g: "is-correct", y: "is-present", x: "is-absent" };
+function renderStamp(grid) {
+  if (!Array.isArray(grid) || grid.length === 0) return "";
+  const rows = grid.map((r) =>
+    `<div class="stamp-row">${[...String(r)].map((ch) =>
+      `<span class="stamp-cell ${STAMP_CLS[ch] || "is-absent"}"></span>`).join("")}</div>`).join("");
+  return `<div class="daily-stamp" aria-hidden="true">${rows}</div>`;
+}
 
 // Build the leaderboard HTML from a LeaderboardView ({ top, you, total }) and the
 // viewer's own username. Top-3 medal rows; your medal row gets .is-you; if you're
@@ -18,13 +58,13 @@ function renderLeaderboard(view, me) {
   if (!view || !Array.isArray(view.top) || view.top.length === 0) return "";
   const row = (entry, rank, opts = {}) => {
     const u = escAttr(entry.username);
-    const badge = opts.pinned ? `#${rank}` : (MEDALS[rank - 1] ?? `#${rank}`);
+    const badge = opts.pinned ? `#${rank}` : medalGlyph(rank);
     const mine = u === escAttr(me);
     const label = mine ? `you (@${u})` : `@${u}`;
     return `<li class="daily-top-row${mine ? " is-you" : ""}${opts.pinned ? " is-pinned" : ""}">
       <span class="daily-top-rank" aria-hidden="true">${badge}</span>
       <a class="daily-top-name" href="/@${u}" data-profile="${u}">${label}</a>
-      <span class="daily-top-gold">${fmtGold(entry.gold)}</span>
+      <span class="daily-top-gold">${goldValue(entry.gold)}</span>
       <span class="daily-top-guesses">in ${entry.guesses}</span>
     </li>`;
   };
@@ -82,6 +122,7 @@ export function renderDailyCard({ themeId, result }) {
         <span class="daily-result-text">${won ? `Solved in ${result.guesses}` : "Missed today"}</span>
         <span class="daily-result-gold" id="dailyResultGold" hidden></span>
       </div>
+      ${renderStamp(result.solveGrid)}
       <section class="daily-top" id="dailyTop" hidden aria-label="Today's top players"></section>
       <div class="daily-next">
         <span class="daily-next-label">Next Wordul in</span>
@@ -127,7 +168,7 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
         const mine = (view.you) ?? (view.top || []).find((e) => e.username === username);
         const goldEl = document.getElementById("dailyResultGold");
         if (goldEl && mine && typeof mine.gold === "number") {
-          goldEl.textContent = ` · +${mine.gold.toLocaleString()} gold`;
+          goldEl.innerHTML = ` · +${goldValue(mine.gold)}`;
           goldEl.hidden = false;
         }
         const board = document.getElementById("dailyTop");
