@@ -2631,3 +2631,26 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .lab-note cite { font-size: .8rem; color: var(--muted); font-style: normal; }
 
 .lab-entry { display: inline-block; margin-top: 8px; color: var(--accent); font-weight: 600; }
+
+/* Daily post-play: gold won + Today's Top leaderboard */
+.daily-result-gold { color: var(--accent); font-weight: 600; }
+
+.daily-top { margin-top: 1rem; }
+.daily-top .section-label { display: block; margin-bottom: .5rem; }
+.daily-top-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
+.daily-top-row {
+  display: grid;
+  grid-template-columns: 1.75rem 1fr auto auto;
+  align-items: center;
+  gap: .6rem;
+  padding: .4rem .6rem;
+  border-radius: .6rem;
+  background: var(--bg-card);
+}
+.daily-top-row.is-you { outline: 1px solid var(--accent); }
+.daily-top-rank { text-align: center; font-variant-numeric: tabular-nums; }
+.daily-top-name { color: var(--fg); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.daily-top-name:hover { text-decoration: underline; }
+.daily-top-gold { color: var(--accent); font-variant-numeric: tabular-nums; }
+.daily-top-guesses { color: var(--muted); font-variant-numeric: tabular-nums; }
+.daily-top-sep { height: 1px; margin: .25rem 0; background: var(--muted); opacity: .25; }
