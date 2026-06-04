@@ -48,7 +48,7 @@ export const PHRASE_WORDS: readonly string[] = [
 /** Generate a passphrase: [anchor, w1..wN] with N random distinct words from PHRASE_WORDS.
  *  Takes ONLY an rng — there is intentionally no username parameter, so the phrase can
  *  never be derived from the public handle. */
-export function makePassphrase(rng: () => number): string[] {
+export function makePassphrase(rng: () => number = Math.random): string[] {
   const pick: string[] = [];
   const used = new Set<number>();
   while (pick.length < PHRASE_WORD_COUNT) {

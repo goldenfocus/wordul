@@ -46,8 +46,18 @@ describe("makePassphrase", () => {
     for (const w of words.slice(1)) expect(PHRASE_WORDS).toContain(w);
   });
 
-  it("is NOT derived from any username (no username input at all)", () => {
-    expect(makePassphrase.length).toBe(1);
+  it("can be called with no arguments (defaults to Math.random — server uses makePassphrase())", () => {
+    const words = makePassphrase();
+    expect(words[0]).toBe(PHRASE_ANCHOR);
+    expect(words.length).toBe(PHRASE_WORD_COUNT + 1);
+    for (const w of words.slice(1)) expect(PHRASE_WORDS).toContain(w);
+  });
+
+  it("is not derived from any username — output words come only from PHRASE_WORDS", () => {
+    // The function takes no username parameter at all, so a handle cannot leak into the
+    // phrase; assert every generated word is from the curated list (never a handle).
+    const words = makePassphrase(seededRng(99));
+    for (const w of words.slice(1)) expect(PHRASE_WORDS).toContain(w);
   });
 
   it("re-rolls to a different phrase", () => {
