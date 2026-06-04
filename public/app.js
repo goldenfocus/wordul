@@ -908,11 +908,6 @@ async function loadFeedStream() {
     a.addEventListener("click", (e) => { e.preventDefault(); navigate("/feed/" + card.date); });
     const h = document.createElement("h2"); h.className = "lab-card-title"; h.textContent = card.title; a.appendChild(h);
     if (card.intro) { const p = document.createElement("p"); p.className = "lab-card-intro"; p.textContent = card.intro; a.appendChild(p); }
-    if (card.pillars && card.pillars.length) {
-      const tags = document.createElement("div"); tags.className = "lab-pillars";
-      for (const pl of card.pillars) { const tg = document.createElement("span"); tg.className = "lab-pillar"; tg.dataset.pillar = pl; tg.textContent = pl; tags.appendChild(tg); }
-      a.appendChild(tags);
-    }
     const more = document.createElement("span"); more.className = "lab-more"; more.textContent = "Read →"; a.appendChild(more);
     body.appendChild(a);
   }

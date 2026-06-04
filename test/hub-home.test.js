@@ -18,6 +18,7 @@ function makeCallbacks(over = {}) {
     onPlay: vi.fn(),
     onSolo: vi.fn(),
     onPvP: vi.fn(),
+    onArena: vi.fn(),
     onStats: vi.fn(),
     onShareDaily: vi.fn(),
     fetchPlayed: () => Promise.resolve(null),
@@ -36,10 +37,28 @@ describe("hub home (redesign)", () => {
     expect(document.querySelector(".daily-head .daily-kicker")).toBeTruthy();
     expect(document.getElementById("modeSolo")).toBeTruthy();
     expect(document.getElementById("modePvP")).toBeTruthy();
+    expect(document.getElementById("modeArena")).toBeTruthy(); // Arena is back, third tile
     expect(document.getElementById("dailyStats")).toBeTruthy();
     // No instructional copy, no OS emoji on this surface.
     expect(html).not.toMatch(/start typing/i);
     expect(html).not.toMatch(/[⚡\u{1F465}\u{1F4CA}▶]/u); // ⚡ 👥 📊 ▶
+  });
+
+  it("mode tiles are icon-only (no text labels) and each routes to its mode", () => {
+    const cb = makeCallbacks();
+    renderHub({}, cb);
+    // Icon-only: tiles carry an accessible label but render no visible word.
+    for (const id of ["modeSolo", "modePvP", "modeArena"]) {
+      const tile = document.getElementById(id);
+      expect(tile.getAttribute("aria-label")).toBeTruthy();
+      expect(tile.textContent.trim()).toBe(""); // glyph only, no label text
+    }
+    document.getElementById("modeSolo").click();
+    document.getElementById("modePvP").click();
+    document.getElementById("modeArena").click();
+    expect(cb.onSolo).toHaveBeenCalledTimes(1);
+    expect(cb.onPvP).toHaveBeenCalledTimes(1);
+    expect(cb.onArena).toHaveBeenCalledTimes(1);
   });
 
   it("tap plays today's word; Stats goes to its own page (not the card)", () => {

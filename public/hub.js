@@ -58,18 +58,15 @@ function renderDaily() {
     ${renderDailyCard({ themeId, result: hubCallbacks.dailyResult ?? null })}
 
     <section class="hub-modes" aria-label="Other ways to play">
-      <div class="mode-grid">
-        <button id="modeSolo" class="mode-tile" type="button">
-          <span class="mode-ico">${GLYPH.bolt}</span>
-          <span class="mode-name">Solo</span>
+      <div class="mode-grid mode-grid-3">
+        <button id="modeSolo" class="mode-tile" type="button" aria-label="Solo" title="Solo">
+          <span class="mode-ico">${GLYPH.solo}</span>
         </button>
-        <button id="modePvP" class="mode-tile" type="button">
+        <button id="modePvP" class="mode-tile" type="button" aria-label="Head-to-head" title="Head-to-head">
           <span class="mode-ico">${GLYPH.duo}</span>
-          <span class="mode-name">Head-to-head</span>
         </button>
-        <button id="modeArena" class="mode-tile mode-tile-wide" type="button">
-          <span class="mode-ico">${GLYPH.swords}</span>
-          <span class="mode-name">Arena</span>
+        <button id="modeArena" class="mode-tile" type="button" aria-label="Arena" title="Arena">
+          <span class="mode-ico">${GLYPH.crowd}</span>
         </button>
       </div>
     </section>

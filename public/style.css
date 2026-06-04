@@ -2333,30 +2333,27 @@ body.hub-home .topbar-stats { display: flex; }
 .daily-done-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .daily-done-btn .glyph { width: 16px; height: 16px; color: var(--accent); }
 
-/* Modes — bigger, calmer tiles: an icon chip + label. Not emoji, not pills. */
 /* Modes — shapeless glass fields, NOT bordered tiles or pills. Edges dissolve into
-   the background; the glyph is bare (no chip); just an icon + one word, no subtitle. */
+   the background; the glyph is bare (no chip) and now label-less — the player-count
+   icon (one / two / a crowd) carries the meaning. Solo · Head-to-head · Arena. */
 .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+.mode-grid-3 { grid-template-columns: repeat(3, 1fr); }
 .mode-tile {
-  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 12px;
-  padding: 22px 20px; min-height: 100px; text-align: left; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px 12px; min-height: 92px; cursor: pointer;
   border: 0; border-radius: 24px;
   background: rgba(30,21,56,0.40);
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
   /* dissolve every edge — a flowing glass field, never a hard box / pill */
-  -webkit-mask-image: radial-gradient(ellipse 115% 115% at 42% 40%, #000 56%, transparent 100%);
-  mask-image: radial-gradient(ellipse 115% 115% at 42% 40%, #000 56%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 120% 120% at 50% 45%, #000 54%, transparent 100%);
+  mask-image: radial-gradient(ellipse 120% 120% at 50% 45%, #000 54%, transparent 100%);
   transition: transform .14s, background .25s;
 }
 .mode-tile:hover { transform: translateY(-2px); background: rgba(46,33,82,0.5); }
 .mode-tile:active { transform: translateY(0); }
 .mode-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 24px; }
-.mode-ico { color: var(--accent); opacity: .9; }   /* bare glyph — no chip, no pill */
-.mode-ico .glyph { width: 27px; height: 27px; }
-.mode-name { font-family: var(--font-display); font-size: 20px; line-height: 1.05; color: var(--fg); }
-/* The Arena tile spans the full row under Solo + Head-to-head — a wide, horizontal
-   door into the open-games list. Same glass field, just laid out in a row. */
-.mode-tile-wide { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: flex-start; min-height: 72px; padding: 18px 22px; }
+.mode-ico { color: var(--accent); opacity: .9; display: grid; place-items: center; }   /* bare glyph — no chip, no pill, no label */
+.mode-ico .glyph { width: 30px; height: 30px; }
 @media (prefers-reduced-motion: reduce) {
   .daily-card, .daily-tile.is-cursor { animation: none !important; }
   .daily-card, .mode-tile { transition: none !important; }
@@ -2555,12 +2552,8 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .lab-card-intro { margin: 0; color: var(--muted); line-height: 1.5; }
 .lab-more { font-size: .85rem; color: var(--accent); font-weight: 600; }
 
-.lab-pillars { display: flex; flex-wrap: wrap; gap: 6px; }
-.lab-pillar { font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
-.lab-pillar[data-pillar="mind"] { color: #9d8bff; border-color: #9d8bff55; }
-.lab-pillar[data-pillar="body"] { color: #6fcf97; border-color: #6fcf9755; }
-.lab-pillar[data-pillar="spirit"] { color: #d8c97a; border-color: #d8c97a55; }
-.lab-pillar[data-pillar="soul"] { color: #e08bb8; border-color: #e08bb855; }
+/* Pillar tags removed — the rounded mind/body/spirit/soul chips read as pills and
+   cluttered the cards. The pillar still tints the per-note left border below. */
 
 .lab-post { display: flex; flex-direction: column; gap: 16px; }
 .lab-post-title { font-family: var(--font-display); font-size: clamp(1.5rem, 5vw, 2.1rem); line-height: 1.2; margin: 0; }
