@@ -9,11 +9,12 @@ export type RankablePlayer = {
   username: string;
   guessCount: number;
   won: boolean;
+  resigned?: boolean;   // gave up (vs ran out of guesses) — drives the 💀 board marker
   isBot?: boolean;
   goldAwarded?: number | null;
 };
 
-export type LeaderEntry = { username: string; gold: number; guesses: number; won: boolean };
+export type LeaderEntry = { username: string; gold: number; guesses: number; won: boolean; resigned?: boolean };
 export type LeaderboardView = {
   top: LeaderEntry[];                            // top N by gold desc, then fewer guesses
   you: (LeaderEntry & { rank: number }) | null;  // caller's row + 1-based rank, ONLY when outside top N
@@ -29,7 +30,7 @@ function clampN(n: number): number {
 export function topDaily(players: RankablePlayer[], username: string, n: number): LeaderboardView {
   const ranked: LeaderEntry[] = (players ?? [])
     .filter((p) => p && !p.isBot && typeof p.goldAwarded === "number")
-    .map((p) => ({ username: p.username, gold: p.goldAwarded as number, guesses: p.guessCount, won: p.won }))
+    .map((p) => ({ username: p.username, gold: p.goldAwarded as number, guesses: p.guessCount, won: p.won, resigned: p.resigned }))
     .sort((a, b) =>
       b.gold - a.gold ||
       a.guesses - b.guesses ||

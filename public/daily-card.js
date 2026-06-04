@@ -67,11 +67,18 @@ function renderLeaderboard(view, me) {
     const badge = opts.pinned ? `#${rank}` : medalGlyph(rank);
     const mine = u === escAttr(me);
     const label = mine ? `you (@${u})` : `@${u}`;
+    // Result column: solved → "in N"; gave up → 💀 (forfeit, 0 gold); ran out of guesses
+    // → "X/N" (N == maxGuesses, since exhaustion is the only non-resign loss).
+    const result = entry.won
+      ? `in ${entry.guesses}`
+      : entry.resigned
+        ? `<span class="is-quit" title="gave up" aria-label="gave up">💀</span>`
+        : `X/${entry.guesses}`;
     return `<li class="daily-top-row${mine ? " is-you" : ""}${opts.pinned ? " is-pinned" : ""}">
       <span class="daily-top-rank" aria-hidden="true">${badge}</span>
       <a class="daily-top-name" href="/@${u}" data-profile="${u}">${label}</a>
       <span class="daily-top-gold">${goldValue(entry.gold)}</span>
-      <span class="daily-top-guesses">in ${entry.guesses}</span>
+      <span class="daily-top-guesses">${result}</span>
     </li>`;
   };
   const medals = view.top.map((e, i) => row(e, i + 1)).join("");

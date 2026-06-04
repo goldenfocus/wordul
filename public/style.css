@@ -2675,6 +2675,7 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .daily-top-name:hover { text-decoration: underline; }
 .daily-top-gold { color: #f0c14b; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; justify-content: flex-end; font-weight: 600; }
 .daily-top-guesses { color: var(--muted); font-variant-numeric: tabular-nums; }
+.daily-top-guesses .is-quit { opacity: .65; filter: grayscale(.4); cursor: help; } /* gave up → 💀 */
 .daily-top-sep { height: 1px; margin: .25rem 0; background: var(--muted); opacity: .25; }
 
 /* Luxe rank medallions + the precious coin (struck SVGs, soft static glow). */

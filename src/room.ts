@@ -164,6 +164,7 @@ export class Room extends DurableObject<Env> {
         username: p.username,
         guessCount: p.guesses.length,
         won: p.status === "won",
+        resigned: p.resigned,
         isBot: p.isBot,
         goldAwarded: p.goldAwarded,
       }));
@@ -875,6 +876,10 @@ export class Room extends DurableObject<Env> {
     const player = this.state.players.find((p) => p.username === username);
     if (!player || player.status !== "playing") return;
     player.status = "lost";
+    // Giving up forfeits the run: zero the live score now (vs running out of guesses,
+    // which keeps whatever was earned). scorePlayer then mints 0 gold for resigners.
+    player.resigned = true;
+    player.points = 0;
     if (!this.isGameOver()) this.pushSystem(`${username} gave up`);
     this.emitPlayerFinished(player, "resigned", Date.now());
     await this.afterPlayerStatus(player);
@@ -1187,7 +1192,9 @@ export class Room extends DurableObject<Env> {
     // Stamp the daily record with the player's color grid (the home's crystallized
     // solve stamp reads this back; letters stay server-side).
     if (record) record.solveGrid = encodeSolveGrid(player.guesses);
-    const gold = goldFromPoints(player.points) + DAILY_GOLD_BONUS; // score mint + goody
+    // Resigners forfeited to 0 (points were zeroed in onResign); everyone else gets the
+    // score mint + flat daily goody. The record above still captures their solveGrid.
+    const gold = player.resigned ? 0 : goldFromPoints(player.points) + DAILY_GOLD_BONUS;
     const stub = this.env.USER.get(this.env.USER.idFromName(player.username));
     // Record append is best-effort but observable (FIX 10): log a non-2xx, never throw.
     try {
@@ -1201,6 +1208,14 @@ export class Room extends DurableObject<Env> {
     // Bots never mint; mark them scored so they don't retry forever.
     if (player.isBot) {
       player.scored = true;
+      return;
+    }
+    // Resigners forfeit to 0 gold — skip the pointless 0-delta ledger write, but still
+    // mark scored + goldAwarded=0 so they stay RANKED (topDaily needs a number) as a 💀
+    // shame-row at the bottom of the board.
+    if (player.resigned) {
+      player.scored = true;
+      player.goldAwarded = 0;
       return;
     }
     // Gold goody must be HONEST: only mark scored + record goldAwarded once the ledger

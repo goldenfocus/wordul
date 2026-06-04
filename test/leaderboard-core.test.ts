@@ -50,6 +50,18 @@ describe("topDaily", () => {
     expect(topDaily([], "ava", 3)).toEqual({ top: [], you: null, total: 0 });
   });
 
+  it("carries the resigned flag through and sinks a 0-gold quitter to the bottom", () => {
+    const players: RankablePlayer[] = [
+      p("ava", 1240, 2),                                                              // solved
+      { username: "quit", guessCount: 2, won: false, resigned: true, goldAwarded: 0 }, // gave up, forfeited
+      { username: "tried", guessCount: 6, won: false, goldAwarded: 90 },              // ran out, kept gold
+    ];
+    const { top } = topDaily(players, "quit", 3);
+    expect(top.map((e) => e.username)).toEqual(["ava", "tried", "quit"]); // quitter last (0 gold)
+    expect(top.find((e) => e.username === "quit")).toMatchObject({ gold: 0, resigned: true, won: false });
+    expect(top.find((e) => e.username === "tried")?.resigned).toBeUndefined(); // ran-out is not a resign
+  });
+
   it("clamps n into [1,10] and defaults bad n to 3", () => {
     const players = [p("a", 5, 2), p("b", 4, 2), p("c", 3, 2), p("d", 2, 2)];
     expect(topDaily(players, "a", 0).top).toHaveLength(3);   // 0 → default 3
