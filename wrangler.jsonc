@@ -27,6 +27,10 @@
       {
         "name": "USER",
         "class_name": "User"
+      },
+      {
+        "name": "WORDSTATS",
+        "class_name": "WordStats"
       }
     ]
   },
@@ -61,6 +65,11 @@
       // grandfathered on new_classes from before this restriction.)
       "tag": "v2",
       "new_sqlite_classes": ["User"]
+    },
+    {
+      // Per-word public solve stats; one instance per word. New DO → SQLite-backed.
+      "tag": "v3",
+      "new_sqlite_classes": ["WordStats"]
     }
   ],
 

@@ -3,7 +3,8 @@ import { User } from "./user.ts";
 import type { Env } from "./types.ts";
 import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts";
 import { isWordPage, slugFor, wordOfTheDay, ANSWER_WORDS } from "./words.ts";
-export { Room, User };
+import { WordStats } from "./wordstats-do.ts";
+export { Room, User, WordStats };
 
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;

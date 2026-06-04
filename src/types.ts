@@ -18,6 +18,7 @@ export interface Env {
   ASSETS: Fetcher;
   ROOM: DurableObjectNamespace;
   USER: DurableObjectNamespace;
+  WORDSTATS: DurableObjectNamespace;
   DIRECTORY: KVNamespace;
   DESIGNS: R2Bucket;
   OG: R2Bucket;
