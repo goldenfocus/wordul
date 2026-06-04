@@ -1037,12 +1037,27 @@ export class Room extends DurableObject<Env> {
     for (const b of dueBots(this.state.players, now)) {
       if (this.state.phase !== "playing") break;          // a first-solve mid-batch ended it
       if (b.status !== "playing") continue;               // outpaced→lost by an earlier bot this batch
+
+      if (b.pendingWord) {
+        // COMMIT: the bot "finished typing" the word it decided last fire — land it now.
+        const word = b.pendingWord;
+        b.pendingWord = undefined;
+        await this.applyGuess(b, word);
+        b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random()); // think before next row
+        acted = true;
+        continue;
+      }
+
+      // DECIDE: pick the word, then "type" it (cosmetic pulses) and commit on the next fire.
       const view = { wordLength: this.state.wordLength, ownGuesses: b.guesses };
       const word = this.state.seed
         ? noobGuess(view, { mistakeRate: mistakeRateFor(this.state.wordLength, opponents) }, Math.random())
         : computeNextGuess(view);
-      if (word) await this.applyGuess(b, word);
-      b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random());
+      if (!word) { b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random()); continue; }
+      const steps = planKeystrokes(word, seeded ? NOOB_HAND : SHARP_HAND, Math.random);
+      b.pendingWord = word;                               // durable truth (stripped outbound)
+      b.nextGuessAt = Date.now() + Math.max(1, timelineMs(steps)); // commit when the typing span elapses
+      this.scheduleBotTyping(b.username, steps);
       acted = true;
     }
     if (acted) await this.persistAndBroadcast();
