@@ -53,11 +53,21 @@
 - Weekly research note: `/feed/weekly` (HTML) or `/feed/weekly.json`.
 - Every finding is computed live from the aggregates; the active day shows participation only (no answer-level stats, no spoilers).
 
+## Word wiki (2,315 permanent pages)
+Wordul is also a word wiki: every one of the 2,315 answer words has its own rich, permanent,
+indexable page. These are stable reference pages, citation-friendly and built for AI answers.
+- A-Z index of every word: https://wordul.com/words
+- Per-word page URL pattern: `https://wordul.com/word/<word>` — always lowercase (e.g.
+  `/word/ocean`, `/word/abyss`). Uppercase or mixed-case slugs 301-redirect to the lowercase URL.
+- Featured word of the day: `https://wordul.com/today` redirects to that day's word page.
+- Each word page includes: a plain-language definition, the word's senses/meanings with example
+  sentences (and register labels like *figurative*), IPA pronunciation and syllable count, the
+  word's etymology/origin, a verified "Did you know?" fact, a verified attributed quotation,
+  a related-word graph (anagrams, same-start neighbors), an FAQ, and a per-word social card at
+  `/word/og/<word>.png`. Every page carries JSON-LD (`DefinedTerm`, `WebPage`, `FAQPage`,
+  `Quotation`) so it can be cited cleanly.
+- See llms-full.txt for the full content model of a word page.
+
 ## Site
 - Home: https://wordul.com
-- Sitemap: https://wordul.com/sitemap.xml
-
-## Word wiki
-Every Wordul answer word has a permanent page: https://wordul.com/word/<word> (e.g. /word/ocean).
-Browse them all at https://wordul.com/words. Each page has a definition, a surprising fact, a
-quote, word origin, related words, and live solve stats.
+- Sitemap: https://wordul.com/sitemap.xml (lists `/words` plus every `/word/<word>` page)

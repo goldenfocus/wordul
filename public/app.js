@@ -3076,14 +3076,41 @@ function renderWordCard(parent, word) {
   big.textContent = word.toUpperCase();
   card.appendChild(big);
 
+  // The reward: an inline preview of the word's OG card. Every answer word has a
+  // pre-rendered card at /word/og/<slug>.png; this only runs when the word is
+  // revealed (renderWordCard is only called with snap.word present). Lazy + async
+  // so it never blocks the modal, and self-hides on error so a missing image can
+  // never break the end-card.
+  const preview = document.createElement("img");
+  preview.className = "ewc-preview";
+  preview.src = `/word/og/${w}.png`;
+  preview.alt = `${word.toUpperCase()} — word card`;
+  preview.loading = "lazy";
+  preview.decoding = "async";
+  // Keep it small and tasteful even before any .ewc-preview CSS lands: the OG card
+  // is 1200×630, so a fluid full-width box with a 1200/630 aspect ratio stays crisp.
+  preview.style.width = "100%";
+  preview.style.maxWidth = "320px";
+  preview.style.aspectRatio = "1200 / 630";
+  preview.style.height = "auto";
+  preview.style.borderRadius = "10px";
+  preview.style.display = "block";
+  preview.style.margin = "10px auto 0";
+  preview.onerror = () => { preview.remove(); };
+  card.appendChild(preview);
+
   const def = document.createElement("div");
   def.className = "ewc-def";
   card.appendChild(def);
 
+  // Inward link to the word's wiki page — "see the full story of <WORD>". Plain link,
+  // no auto-redirect and nothing gating the next game; the player taps it if they want.
   const look = document.createElement("a");
   look.className = "ewc-look";
   look.href = `/word/${w}`;
   look.textContent = t("endscreen.lookup");
+  look.title = `See the full story of ${word.toUpperCase()}`;
+  look.setAttribute("aria-label", `See the full story of ${word.toUpperCase()}`);
 
   const intel = wordIntel(word);
   if (intel) {

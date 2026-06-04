@@ -32,9 +32,22 @@ export function renderWordPage(word, intel, graph, origin) {
   ];
   const faq = faqCandidates.filter(Boolean);
 
+  // Structured image pointing at the existing OG card — gives Google Images and AI
+  // engines a real ImageObject (contentUrl, caption, dimensions) rather than a bare URL.
+  const imageObject = {
+    "@type": "ImageObject",
+    "@id": "#og",
+    contentUrl: ogImg,
+    url: ogImg,
+    caption: i.def || `${W} — a word in Wordul.`,
+    width: 1200,
+    height: 630,
+  };
+
   const graphNodes = [
-    { "@type": "DefinedTerm", "@id": "#term", name: W, description: i.def || "", inDefinedTermSet: `${origin}/words` },
-    { "@type": "WebPage", name: title, url: canonical, primaryImageOfPage: { "@type": "ImageObject", url: ogImg } },
+    { "@type": "DefinedTerm", "@id": "#term", name: W, description: i.def || "", inDefinedTermSet: `${origin}/words`, image: { "@id": "#og" } },
+    { "@type": "WebPage", name: title, url: canonical, primaryImageOfPage: { "@id": "#og" }, image: { "@id": "#og" } },
+    imageObject,
     { "@type": "FAQPage", mainEntity: faq.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })) },
   ];
   if (i.poem && i.poem.lines && i.poem.lines.length) {
