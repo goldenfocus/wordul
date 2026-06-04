@@ -2473,8 +2473,8 @@ body.hub-home .topbar-stats { display: flex; }
 .daily-story-kicker {
   display: block;
   font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
-  color: #a78bfa;
-  text-shadow: 0 0 8px rgba(167,139,250,0.5);
+  color: var(--accent);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 50%, transparent);
   margin-bottom: 6px;
 }
 .daily-story h3 {
@@ -2498,6 +2498,28 @@ body.hub-home .topbar-stats { display: flex; }
   color: rgba(255,255,255,0.5) !important;
   font-size: 13.5px !important; line-height: 1.55 !important;
   font-style: italic;
+}
+
+/* ── Vibe Studio: curated-day re-theme (only when a colorScheme is applied → html[data-themed]) ──
+   These layers are inert on legacy days. a1 already drives --accent (re-lighting the rim, border,
+   kicker, tip rule); a2 adds a cooler counter-bloom and a3 deepens the glass toward the palette. */
+html[data-themed] .daily-unlock {
+  background: color-mix(in srgb, var(--a3, #0c0b10) 70%, rgba(12, 11, 16, 0.55));
+}
+html[data-themed] .daily-unlock::after {
+  content: ""; position: absolute; inset: 0; border-radius: 22px; pointer-events: none; z-index: 0;
+  background: radial-gradient(ellipse 90% 60% at 50% 100%,
+    color-mix(in srgb, var(--a2, var(--accent)) 16%, transparent) 0%, transparent 70%);
+}
+
+/* The curated day's title (vibeTitle) wears the palette itself: an a1→a2 gradient ink with an
+   a1 glow, printed into the board title. Falls back to a flat accent if background-clip is unset. */
+html[data-themed] body.daily #roomName {
+  background: linear-gradient(100deg, var(--a1, var(--accent)) 0%,
+    color-mix(in srgb, var(--a2, var(--accent)) 70%, var(--a1, var(--accent))) 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--a1, var(--accent)) 45%, transparent));
 }
 
 /* The bridge: a primary "Keep playing" that GLOWS (the hub's hero-btn treatment,
