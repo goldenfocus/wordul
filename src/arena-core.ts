@@ -13,8 +13,9 @@ export type SeedRec = {
   personaIcon: string; // human avatar (emoji)
   edition: string; // theme id from the existing library
   wordLength: number; // always 5 in v1
-  seats: string; // "1/2"
+  seats: string; // "1/2" (multi-bot seat variety is Increment 2)
   mintedAt: number; // epoch ms at mint
+  lifetimeMs: number; // jittered expiry budget from mint; 0 ⇒ fall back to MAX_OPEN_MS
   status: SeedStatus;
 };
 
@@ -121,7 +122,10 @@ export function prune(state: ArenaState, nowMs: number): ArenaState {
   for (const [path, r] of Object.entries(state.seeded)) {
     if (r.status === "closed") continue;
     if (r.status === "minted" && nowMs - r.mintedAt > STALE_MS) continue;
-    if (r.status === "registered" && nowMs - r.mintedAt > MAX_OPEN_MS) continue;
+    if (r.status === "registered") {
+      const budget = r.lifetimeMs && r.lifetimeMs > 0 ? r.lifetimeMs : MAX_OPEN_MS;
+      if (nowMs - r.mintedAt > budget) continue;
+    }
     seeded[path] = r;
   }
   return { ...state, seeded };

@@ -25,6 +25,7 @@ function rec(over: Partial<SeedRec> = {}): SeedRec {
     wordLength: 5,
     seats: "1/2",
     mintedAt: 0,
+    lifetimeMs: 0,
     status: "minted",
     ...over,
   };
@@ -224,5 +225,27 @@ describe("rollLifetime", () => {
     const mid = rollLifetime(0.5);
     expect(mid).toBeGreaterThan(LIFETIME_MIN_MS);
     expect(mid).toBeLessThan(LIFETIME_MAX_MS);
+  });
+});
+
+describe("prune honors per-rec lifetimeMs", () => {
+  it("drops a registered rec past its own lifetimeMs", () => {
+    let s = withRec(emptyArenaState(), rec({ status: "minted", mintedAt: 0, lifetimeMs: 50_000 }));
+    s = apply(s, { type: "register", path: "arena/maya-0" });
+    // 60s elapsed > 50s budget → pruned, even though far under the 4h MAX_OPEN_MS.
+    expect(prune(s, 60_000).seeded["arena/maya-0"]).toBeUndefined();
+  });
+
+  it("keeps a registered rec inside its lifetimeMs", () => {
+    let s = withRec(emptyArenaState(), rec({ status: "minted", mintedAt: 0, lifetimeMs: 120_000 }));
+    s = apply(s, { type: "register", path: "arena/maya-0" });
+    expect(prune(s, 60_000).seeded["arena/maya-0"]).toBeDefined();
+  });
+
+  it("falls back to MAX_OPEN_MS when lifetimeMs is missing/zero (legacy recs)", () => {
+    let s = withRec(emptyArenaState(), rec({ status: "minted", mintedAt: 0, lifetimeMs: 0 }));
+    s = apply(s, { type: "register", path: "arena/maya-0" });
+    expect(prune(s, 60_000).seeded["arena/maya-0"]).toBeDefined(); // 60s < 4h
+    expect(prune(s, MAX_OPEN_MS + 1).seeded["arena/maya-0"]).toBeUndefined();
   });
 });
