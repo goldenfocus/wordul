@@ -921,6 +921,7 @@ export class Room extends DurableObject<Env> {
     const hadWinner = this.state.winner !== null;
     const mask = scoreGuess(word, this.state.word!);
     player.guesses.push({ word, mask });
+    if (player.firstGuessAt == null) player.firstGuessAt = now;
     player.points = pointsEarned(player.guesses, this.state.maxGuesses) - player.pointsSpent;
     const allGreen = mask.every((c) => c === "green");
     if (allGreen) {
@@ -935,6 +936,7 @@ export class Room extends DurableObject<Env> {
     }
     this.emitAcceptedGuess(player, mask, now);
     if (priorStatus === "playing" && player.status !== "playing") {
+      player.finishedAt = now;
       this.emitPlayerFinished(player, player.status === "won" ? "won" : "lost", now);
     }
     // First solve ends the race for everyone (live, non-daily rooms — Arena AND
@@ -1175,6 +1177,7 @@ export class Room extends DurableObject<Env> {
     // which keeps whatever was earned). scorePlayer then mints 0 gold for resigners.
     player.resigned = true;
     player.points = 0;
+    player.finishedAt = Date.now();
     if (!this.isGameOver()) this.pushSystem(`${username} gave up`);
     this.emitPlayerFinished(player, "resigned", Date.now());
     await this.afterPlayerStatus(player);
