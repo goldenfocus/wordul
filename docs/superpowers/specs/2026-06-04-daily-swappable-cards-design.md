@@ -163,9 +163,12 @@ omitted** to keep a hundreds-of-players payload lean.
 Extend the worker route `/api/daily/<date>/leaderboard` (`worker.ts:73`) to forward a
 `full=1` param (today it hardcodes `n=3`).
 
-**Render (`public/app.js` `showDailyStats`).** After the aggregates render, fetch
-`/api/daily/<date>/leaderboard?full=1&username=<me>` and render the roster where the
-placeholder is. Each row: `rank · @name · gold · in N · duration`; `@name` → `onProfile`;
+**Render (`public/app.js` `showDailyStats`).** **Keep every existing aggregate
+exactly as-is** (Played / Solved / Avg guesses / Avg score / guess distribution /
+Failed today). The roster is purely **additive at the bottom**: it replaces *only* the
+dead `"Top-10 leaderboard coming soon"` placeholder line (`app.js:910`) — nothing else
+on the page changes. After the aggregates render, fetch
+`/api/daily/<date>/leaderboard?full=1&username=<me>` and render the roster there. Each row: `rank · @name · gold · in N · duration`; `@name` → `onProfile`;
 the viewer's row gets `is-you`. A pure `computeRosterView`/render helper lives alongside
 `daily-stats.js`; `fmtDuration` is shared with the home card (exported from `daily-card.js`
 or a tiny shared util — extracted once, used in both places).
