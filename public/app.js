@@ -3293,7 +3293,10 @@ async function shareResult() {
   // Best: native share of the image card + room link.
   if (img?.file && navigator.canShare?.({ files: [img.file] })) {
     try {
-      await navigator.share({ files: [img.file], text: img.text, url: img.url });
+      // iOS Messages drops a standalone `url` when a file is attached — the only
+      // "link" left is the one painted into the PNG (not tappable). Fold the URL
+      // into the text so the message body carries a real, tappable link.
+      await navigator.share({ files: [img.file], text: `${img.text} ${img.url}` });
       return;
     } catch (e) {
       if (e && e.name === "AbortError") return;
