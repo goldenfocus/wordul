@@ -32,6 +32,7 @@ export interface Env {
   OG: R2Bucket;
   AI?: Ai;                    // Workers AI — powers POST /vibe-studio/tune (optional: route 503s if absent)
   DAILY_ADMIN_TOKEN?: string; // wrangler secret; gates POST /daily/schedule
+  DAILY_SALT?: string;        // wrangler secret; server-only seed salt for the daily house word (empty = NO-OP). Set via: wrangler secret put DAILY_SALT
 }
 
 export type GuessRow = { word: string; mask: Color[] };

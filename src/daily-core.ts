@@ -45,10 +45,18 @@ export function fnv1a(str: string): number {
   return h >>> 0;
 }
 
-/** Deterministic pick from an answer pool, seeded by the date string. */
-export function fallbackWord(date: string, answers: string[]): string {
+/**
+ * Deterministic pick from an answer pool, seeded by the date string.
+ *
+ * `salt` is an optional SERVER-ONLY secret folded into the seed so the daily
+ * pick can't be predicted off the public date alone. It is a strict NO-OP when
+ * empty: `date + '' === date`, so an unset salt reproduces the exact unsalted
+ * pick (`answers[fnv1a(date) % answers.length]`). Set it via:
+ *   wrangler secret put DAILY_SALT
+ */
+export function fallbackWord(date: string, answers: string[], salt = ""): string {
   if (!answers || answers.length === 0) return "";
-  return answers[fnv1a(date) % answers.length];
+  return answers[fnv1a(date + salt) % answers.length];
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -65,9 +73,10 @@ function isColor(v: unknown): v is string {
     (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v) || /^(hsl|rgb)a?\(/i.test(v.trim()));
 }
 
-/** A generic "house" World for any unauthored date — deterministic fallback word. */
-export function houseWorld(date: string, nowMs: number): World {
-  const word = fallbackWord(date, WORDS_BY_SIZE[5]?.answers ?? []);
+/** A generic "house" World for any unauthored date — deterministic fallback word.
+ *  `salt` (server-only secret; empty = NO-OP) threads through to fallbackWord. */
+export function houseWorld(date: string, nowMs: number, salt = ""): World {
+  const word = fallbackWord(date, WORDS_BY_SIZE[5]?.answers ?? [], salt);
   return {
     date,
     word,
@@ -83,9 +92,10 @@ export function houseWorld(date: string, nowMs: number): World {
   };
 }
 
-/** Curated World for the date if scheduled, else the deterministic house World. */
-export function resolveWorld(schedule: DailySchedule, date: string, nowMs: number): World {
-  return schedule[date] ?? houseWorld(date, nowMs);
+/** Curated World for the date if scheduled, else the deterministic house World.
+ *  `salt` (server-only secret; empty = NO-OP) threads through to fallbackWord. */
+export function resolveWorld(schedule: DailySchedule, date: string, nowMs: number, salt = ""): World {
+  return schedule[date] ?? houseWorld(date, nowMs, salt);
 }
 
 /** Validate + normalize an admin-supplied World payload. Returns null if invalid. */

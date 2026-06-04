@@ -21,7 +21,11 @@ export class Daily extends DurableObject<Env> {
     if (req.method === "GET" && url.pathname === "/resolve") {
       const date = url.searchParams.get("date") || activeDate(Date.now());
       const state = await this.load();
-      const world = resolveWorld(state.schedule, date, Date.now());
+      // Server-only salt folds into the house-word seed so the daily pick can't be
+      // predicted off the public date alone. Empty (unset secret) is a strict NO-OP.
+      // Set via: wrangler secret put DAILY_SALT
+      const salt = this.env.DAILY_SALT ?? "";
+      const world = resolveWorld(state.schedule, date, Date.now(), salt);
       // Only a date that's reached (≤ today UTC) becomes an archive/sitemap artifact —
       // a future permalink probe must not pollute the archive (anti gold-farm seeding).
       if (date <= activeDate(Date.now()) && !state.seen.includes(date)) {

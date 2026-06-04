@@ -51,6 +51,41 @@ describe("fallbackWord", () => {
   });
 });
 
+describe("fallbackWord — server-only salt (NO-OP when empty)", () => {
+  // A pool big enough that a salt can land on a different index.
+  const pool = ["ALPHA", "BRAVO", "CRANE", "DELTA", "EAGLE", "FROST", "GLINT", "HAVEN"];
+  const dates = ["2026-06-01", "2026-06-02", "2026-06-15", "2026-12-31", "2027-01-09"];
+
+  it("salt='' reproduces the exact unsalted pick for several dates (date + '' === date)", () => {
+    for (const d of dates) {
+      const unsalted = pool[fnv1a(d) % pool.length];
+      expect(fallbackWord(d, pool, "")).toBe(unsalted);
+    }
+  });
+
+  it("the omitted-salt path equals the unsalted pick for several dates", () => {
+    for (const d of dates) {
+      const unsalted = pool[fnv1a(d) % pool.length];
+      expect(fallbackWord(d, pool)).toBe(unsalted);       // default arg
+      expect(fallbackWord(d, pool)).toBe(fallbackWord(d, pool, "")); // == explicit empty
+    }
+  });
+
+  it("a non-empty salt is deterministic and changes the pick for at least one date", () => {
+    const salt = "s3cr3t-server-only";
+    // Deterministic: same (date, salt) → same word every call.
+    for (const d of dates) {
+      expect(fallbackWord(d, pool, salt)).toBe(fallbackWord(d, pool, salt));
+    }
+    // And it must actually diverge from the unsalted pick for at least one date,
+    // proving the salt is wired into the seed (not silently dropped).
+    const changed = dates.some(
+      (d) => fallbackWord(d, pool, salt) !== fallbackWord(d, pool, ""),
+    );
+    expect(changed).toBe(true);
+  });
+});
+
 import { houseWorld, resolveWorld, normalizeWorld } from "../src/daily-core.ts";
 import type { World } from "../src/daily-core.ts";
 
@@ -69,6 +104,14 @@ describe("houseWorld", () => {
     expect(typeof w.story.body).toBe("string");
     expect(houseWorld("2026-06-02", 1).word).toBe(w.word); // deterministic word
   });
+  it("threads salt through to the house word: empty salt == omitted, set salt is deterministic", () => {
+    const base = houseWorld("2026-06-02", 1).word;
+    expect(houseWorld("2026-06-02", 1, "").word).toBe(base);            // empty salt = NO-OP
+    const salted = houseWorld("2026-06-02", 1, "server-secret").word;
+    expect(salted).toBe(houseWorld("2026-06-02", 1, "server-secret").word); // deterministic
+    expect(salted).toMatch(/^[A-Z]+$/);
+    expect(salted.length).toBe(5); // still drawn from the 5-letter pool
+  });
 });
 
 describe("resolveWorld", () => {
@@ -84,6 +127,13 @@ describe("resolveWorld", () => {
     const w = resolveWorld({}, "2026-06-05", 99);
     expect(w.edition).toBe("yang");
     expect(w.word.length).toBe(5);
+  });
+  it("empty/omitted salt reproduces the unsalted house word; a curated date ignores salt", () => {
+    const base = resolveWorld({}, "2026-06-05", 99).word;
+    expect(resolveWorld({}, "2026-06-05", 99, "").word).toBe(base);          // empty = NO-OP
+    expect(resolveWorld({}, "2026-06-05", 99).word).toBe(base);              // omitted = same
+    // Salt only seeds the house fallback — a scheduled World is returned verbatim.
+    expect(resolveWorld({ "2026-06-02": curated }, "2026-06-02", 99, "server-secret").word).toBe("EMBER");
   });
 });
 
