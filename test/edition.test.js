@@ -174,3 +174,30 @@ describe("applyColorScheme", () => {
     expect(html.dataset.themed).toBeUndefined();
   });
 });
+
+import { setDefaultEdition, getActiveEditionId } from "/edition.js";
+
+describe("edition try-on vs default persistence", () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  it("applyEdition persists by default", () => {
+    applyEdition("jackpot");
+    expect(getActiveEditionId()).toBe("jackpot");
+  });
+
+  it("applyEdition with persist:false does NOT change the saved default", () => {
+    setDefaultEdition("default");
+    applyEdition("arcade", { persist: false });
+    expect(getActiveEditionId()).toBe("default");
+  });
+
+  it("setDefaultEdition persists the chosen edition", () => {
+    setDefaultEdition("robot");
+    expect(getActiveEditionId()).toBe("robot");
+  });
+
+  it("setDefaultEdition falls back to a real edition for an unknown id", () => {
+    setDefaultEdition("not-an-edition");
+    expect(getActiveEditionId()).toBe("default");
+  });
+});

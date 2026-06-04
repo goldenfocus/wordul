@@ -149,7 +149,9 @@ export function applyColorScheme(cs) {
   return true;
 }
 
-export function applyEdition(id) {
+// persist:false applies the skin in-memory + on <html> (a "try-on") WITHOUT saving it
+// as the default. Default true keeps every existing caller's behavior unchanged.
+export function applyEdition(id, { persist = true } = {}) {
   const ed = getEdition(id);
   activeId = ed.id;
   const html = document.documentElement;
@@ -168,8 +170,17 @@ export function applyEdition(id) {
   html.style.setProperty("--font-body", ed.fonts.body);
   if (ed.fonts.link) injectFontLink(ed.id, ed.fonts.link);
   window.WordulMotion = { ...ed.motion };
-  localStorage.setItem(LS.edition, ed.id);
+  if (persist) localStorage.setItem(LS.edition, ed.id);
   return ed;
+}
+
+// The one explicit way a chosen edition becomes the saved default. Used by the World
+// page's "Make this my default" action. Normalizes through getEdition so an unknown id
+// can't poison the stored value.
+export function setDefaultEdition(id) {
+  const ed = getEdition(id);
+  localStorage.setItem(LS.edition, ed.id);
+  return ed.id;
 }
 
 function injectFontLink(id, href) {
