@@ -5,9 +5,15 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.ts";
 import type { DailySchedule, World } from "./daily-core.ts";
-import { activeDate, resolveWorld, normalizeWorld } from "./daily-core.ts";
+import { activeDate, resolveWorld, normalizeWorld, saltForDate } from "./daily-core.ts";
 
 type DailyState = { schedule: DailySchedule; seen: string[] };
+
+// Daily picks on/after this UTC date are salted (when the DAILY_SALT secret is set);
+// earlier dates are never salted, so enabling the secret doesn't rewrite history.
+// House worlds are recomputed on demand (not stored), so without this cutoff, turning
+// the salt on would retroactively change every past/today uncurated answer.
+const SALT_FROM = "2026-06-05";
 
 export class Daily extends DurableObject<Env> {
   private async load(): Promise<DailyState> {
@@ -22,9 +28,10 @@ export class Daily extends DurableObject<Env> {
       const date = url.searchParams.get("date") || activeDate(Date.now());
       const state = await this.load();
       // Server-only salt folds into the house-word seed so the daily pick can't be
-      // predicted off the public date alone. Empty (unset secret) is a strict NO-OP.
+      // predicted off the public alphabetical answer list + date alone. Empty (unset
+      // secret) is a strict NO-OP, and the SALT_FROM cutoff keeps past/today unchanged.
       // Set via: wrangler secret put DAILY_SALT
-      const salt = this.env.DAILY_SALT ?? "";
+      const salt = saltForDate(date, this.env.DAILY_SALT, SALT_FROM);
       const world = resolveWorld(state.schedule, date, Date.now(), salt);
       // Only a date that's reached (≤ today UTC) becomes an archive/sitemap artifact —
       // a future permalink probe must not pollute the archive (anti gold-farm seeding).

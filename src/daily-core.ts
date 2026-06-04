@@ -59,6 +59,15 @@ export function fallbackWord(date: string, answers: string[], salt = ""): string
   return answers[fnv1a(date + salt) % answers.length];
 }
 
+/** The salt to fold into the house-word seed for `date`: the server `secret` only
+ *  on/after the `from` cutoff ("YYYY-MM-DD"), else "" (a strict NO-OP). House worlds are
+ *  recomputed on demand (not stored), so an ungated salt would rewrite every past/today
+ *  uncurated answer; the cutoff keeps already-played days byte-identical while making every
+ *  future house day unpredictable. Empty/undefined secret is also a NO-OP. */
+export function saltForDate(date: string, secret: string | undefined, from: string): string {
+  return secret && date >= from ? secret : "";
+}
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Clamp n into [lo, hi]; return fallback if n is not a finite number. */

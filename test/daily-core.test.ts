@@ -314,3 +314,32 @@ describe("normalizeWorld — back-compat", () => {
     expect(w.story.title).toBe("Why EMBER?");
   });
 });
+
+import { saltForDate } from "../src/daily-core.ts";
+
+describe("saltForDate (cutoff gate — closes the daily-answer leak without rewriting history)", () => {
+  const FROM = "2026-06-05";
+  it("returns '' (no-op) for dates before the cutoff, even with a secret set", () => {
+    expect(saltForDate("2026-06-04", "s3cr3t", FROM)).toBe("");
+    expect(saltForDate("2025-01-01", "s3cr3t", FROM)).toBe("");
+  });
+  it("applies the secret on/after the cutoff date", () => {
+    expect(saltForDate("2026-06-05", "s3cr3t", FROM)).toBe("s3cr3t");
+    expect(saltForDate("2026-12-31", "s3cr3t", FROM)).toBe("s3cr3t");
+  });
+  it("is a no-op when the secret is unset/empty regardless of date", () => {
+    expect(saltForDate("2026-06-05", undefined, FROM)).toBe("");
+    expect(saltForDate("2026-06-05", "", FROM)).toBe("");
+  });
+  it("keeps past/today house picks identical while changing future ones", () => {
+    const answers = ["AAAAA", "BBBBB", "CCCCC", "DDDDD", "EEEEE"];
+    for (const d of ["2026-06-03", "2026-06-04"]) {
+      expect(fallbackWord(d, answers, saltForDate(d, "s3cr3t", FROM))).toBe(fallbackWord(d, answers, ""));
+    }
+    const future = ["2026-06-05", "2026-06-06", "2026-06-07", "2026-06-08", "2026-06-09"];
+    const diverged = future.some(
+      (d) => fallbackWord(d, answers, saltForDate(d, "s3cr3t", FROM)) !== fallbackWord(d, answers, ""),
+    );
+    expect(diverged).toBe(true);
+  });
+});
