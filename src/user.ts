@@ -3,13 +3,14 @@ import { DurableObject } from "cloudflare:workers";
 import type { Env, UserProfile, OwnedRoom } from "./types.ts";
 import { applyGame, appendCapped } from "./stats.ts";
 import { healProfile, freshProfile, applyH2H } from "./user-core.ts";
-import { publicProfile, makePassphrase, canClaim, addSession, projectDirectory } from "./account-core.ts";
-import { hashPassphrase, mintToken, hashToken } from "./account-crypto.ts";
+import { publicProfile, makePassphrase, canClaim, addSession, revokeSession, touchSession, projectDirectory, validatePassphraseShape } from "./account-core.ts";
+import { hashPassphrase, verifyPassphrase, mintToken, hashToken } from "./account-crypto.ts";
 import type { GameRecord } from "./records.ts";
 
 const HISTORY_CAP = 100;
 const ROOMS_CAP = 100;
 const PENDING_TTL_MS = 10 * 60 * 1000; // a previewed-but-uncommitted passphrase expires in 10 min
+const MAX_SESSIONS = 20; // per-account device cap; oldest (by lastSeen) is evicted on a new login
 
 export class User extends DurableObject<Env> {
   private async load(username: string): Promise<UserProfile> {
@@ -130,6 +131,76 @@ export class User extends DurableObject<Env> {
         await this.env.DIRECTORY.put(`auth:${username}`, JSON.stringify(projectDirectory(profile)));
       } catch (e) { console.error("auth projection failed", username, (e as Error).message); }
       return Response.json({ sessionToken: token, history: { games: profile.games.length, since: profile.createdAt } });
+    }
+
+    // Accounts P0 — login on a new device with username + passphrase → a fresh session.
+    if (req.method === "POST" && url.pathname.endsWith("/account/login")) {
+      let loginBody: { passphrase?: string };
+      try { loginBody = (await req.json()) as { passphrase?: string }; }
+      catch { return Response.json({ error: "bad_request" }, { status: 400 }); }
+      const profile = await this.load(username);
+      const phrase = (loginBody.passphrase ?? "").trim().toLowerCase();
+      // Generic failure for every reject path (no oracle: unclaimed vs wrong phrase look identical).
+      if (!profile.claimed || !profile.auth || !validatePassphraseShape(phrase)) {
+        return Response.json({ error: "invalid_credentials" }, { status: 401 });
+      }
+      const ok = await verifyPassphrase(phrase, profile.auth.salt, profile.auth.phraseHash);
+      if (!ok) return Response.json({ error: "invalid_credentials" }, { status: 401 });
+      // Enforce the per-account session cap: evict the oldest (by lastSeen) before adding.
+      const hashes = Object.keys(profile.auth.sessions);
+      if (hashes.length >= MAX_SESSIONS) {
+        const oldest = hashes.reduce((a, b) => (profile.auth!.sessions[a].lastSeen <= profile.auth!.sessions[b].lastSeen ? a : b));
+        revokeSession(profile.auth.sessions, oldest);
+      }
+      const token = mintToken();
+      const now = Date.now();
+      addSession(profile.auth.sessions, await hashToken(token), { createdAt: now, lastSeen: now });
+      await this.ctx.storage.put("profile", profile);
+      return Response.json({ sessionToken: token });
+    }
+
+    // Accounts P0 — revoke a session. Caller proves ownership with its OWN sessionToken;
+    // `target` is the session-id (= token hash, from /account/me) to kill (default = self).
+    if (req.method === "POST" && url.pathname.endsWith("/account/sessions/revoke")) {
+      let revokeBody: { sessionToken?: string; target?: string };
+      try { revokeBody = (await req.json()) as { sessionToken?: string; target?: string }; }
+      catch { return Response.json({ error: "bad_request" }, { status: 400 }); }
+      const { sessionToken, target } = revokeBody;
+      const profile = await this.load(username);
+      if (!profile.auth || !sessionToken) return Response.json({ error: "unauthorized" }, { status: 401 });
+      const callerHash = await hashToken(sessionToken);
+      if (!profile.auth.sessions[callerHash]) return Response.json({ error: "unauthorized" }, { status: 401 });
+      const killed = revokeSession(profile.auth.sessions, target || callerHash);
+      await this.ctx.storage.put("profile", profile);
+      return Response.json({ ok: killed });
+    }
+
+    // Accounts P0 — who am I? Bearer sessionToken → account flags + session list (NO secrets;
+    // session ids are token HASHES, which can't be reversed to a usable token).
+    if (req.method === "GET" && url.pathname.endsWith("/account/me")) {
+      const auth = req.headers.get("Authorization") ?? "";
+      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+      const profile = await this.load(username);
+      if (!profile.auth || !token) return Response.json({ error: "unauthorized" }, { status: 401 });
+      const callerHash = await hashToken(token);
+      if (!profile.auth.sessions[callerHash]) return Response.json({ error: "unauthorized" }, { status: 401 });
+      touchSession(profile.auth.sessions, callerHash, Date.now());
+      await this.ctx.storage.put("profile", profile);
+      const sessions = Object.entries(profile.auth.sessions).map(([id, m]) => ({
+        id, current: id === callerHash, createdAt: m.createdAt, lastSeen: m.lastSeen, label: m.label,
+      }));
+      return Response.json({ username, claimed: true, verified: false, sessions });
+    }
+
+    // Accounts P0 — the hello seam (consumed by P1 worlds). Cheap validity check for a token.
+    if (req.method === "POST" && url.pathname.endsWith("/account/verify-session")) {
+      let verifyBody: { sessionToken?: string };
+      try { verifyBody = (await req.json()) as { sessionToken?: string }; }
+      catch { return Response.json({ valid: false }); }
+      const profile = await this.load(username);
+      if (!profile.auth || !verifyBody.sessionToken) return Response.json({ valid: false });
+      const ok = !!profile.auth.sessions[await hashToken(verifyBody.sessionToken)];
+      return Response.json({ valid: ok });
     }
 
     return new Response("not found", { status: 404 });
