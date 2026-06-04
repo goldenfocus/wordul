@@ -113,3 +113,154 @@ describe("normalizeWorld", () => {
     expect(w && "feedEditorial" in w).toBe(false);
   });
 });
+
+// ----- Vibe Studio v1, Increment 1: additive themed World fields -----
+
+describe("World type — vibe fields", () => {
+  it("accepts a fully-enriched World fixture (compile-time shape)", () => {
+    const w: World = {
+      date: "2026-06-10", word: "EMBER", edition: "yang", voice: "yang",
+      story: { title: "t", body: "b" },
+      vibeTitle: "Embers",
+      rows: 6,
+      invented: false,
+      colorScheme: { a1: "#f0c14b", a2: "#6f9e7a", a3: "#0b0a0c" },
+      glow: { atmosphere: 0.4, header: 0.2 },
+      images: { header: "designs/x/header.jpg" },
+      playlist: { keys: ["designs/x/1.mp3"], autoplayOnEntry: true },
+      createdAt: 1,
+    };
+    expect(w.vibeTitle).toBe("Embers");
+  });
+});
+
+describe("normalizeWorld — rows", () => {
+  const base = { date: "2026-06-10", word: "EMBER", story: { title: "t", body: "b" } };
+  it("defaults rows to 6 when absent", () => {
+    expect(normalizeWorld(base)?.rows).toBe(6);
+  });
+  it("keeps a valid rows value", () => {
+    expect(normalizeWorld({ ...base, rows: 4 })?.rows).toBe(4);
+  });
+  it("clamps rows below 3 up to 3 and above 10 down to 10", () => {
+    expect(normalizeWorld({ ...base, rows: 1 })?.rows).toBe(3);
+    expect(normalizeWorld({ ...base, rows: 99 })?.rows).toBe(10);
+  });
+  it("defaults rows to 6 for a non-numeric value", () => {
+    expect(normalizeWorld({ ...base, rows: "lots" })?.rows).toBe(6);
+  });
+});
+
+describe("normalizeWorld — invented words", () => {
+  const base = { date: "2026-06-10", story: { title: "t", body: "b" } };
+  it("accepts a real pooled word with invented false/absent", () => {
+    expect(normalizeWorld({ ...base, word: "EMBER" })?.word).toBe("EMBER");
+    expect(normalizeWorld({ ...base, word: "EMBER" })?.invented).toBe(false);
+  });
+  it("rejects a non-pooled word when invented is not set", () => {
+    expect(normalizeWorld({ ...base, word: "ZZZZX" })).toBeNull();
+  });
+  it("accepts a non-pooled word when invented is true and flags it", () => {
+    const w = normalizeWorld({ ...base, word: "ZZZZX", invented: true });
+    expect(w?.word).toBe("ZZZZX");
+    expect(w?.invented).toBe(true);
+  });
+  it("still enforces length 4–12 even when invented is true", () => {
+    expect(normalizeWorld({ ...base, word: "ABC", invented: true })).toBeNull();      // 3
+    expect(normalizeWorld({ ...base, word: "ABCDEFGHIJKLM", invented: true })).toBeNull(); // 13
+    expect(normalizeWorld({ ...base, word: "ABCD", invented: true })?.word).toBe("ABCD");  // 4 ok
+  });
+});
+
+describe("normalizeWorld — colorScheme", () => {
+  const base = { date: "2026-06-10", word: "EMBER", story: { title: "t", body: "b" } };
+  it("omits colorScheme when absent", () => {
+    expect(normalizeWorld(base)?.colorScheme).toBeUndefined();
+  });
+  it("keeps a valid hex trio", () => {
+    const cs = { a1: "#f0c14b", a2: "#6f9e7a", a3: "#0B0A0C" };
+    expect(normalizeWorld({ ...base, colorScheme: cs })?.colorScheme).toEqual(cs);
+  });
+  it("accepts hsl() / rgb() colors", () => {
+    const cs = { a1: "hsl(45 80% 62%)", a2: "rgb(111,158,122)", a3: "#000" };
+    expect(normalizeWorld({ ...base, colorScheme: cs })?.colorScheme).toEqual(cs);
+  });
+  it("drops the whole colorScheme if any color is invalid (does not reject the World)", () => {
+    const w = normalizeWorld({ ...base, colorScheme: { a1: "#f0c14b", a2: "notacolor", a3: "#000" } });
+    expect(w).not.toBeNull();
+    expect(w?.colorScheme).toBeUndefined();
+  });
+});
+
+describe("normalizeWorld — glow", () => {
+  const base = { date: "2026-06-10", word: "EMBER", story: { title: "t", body: "b" } };
+  it("omits glow when absent", () => {
+    expect(normalizeWorld(base)?.glow).toBeUndefined();
+  });
+  it("keeps and clamps provided glow bands to 0–1", () => {
+    const w = normalizeWorld({ ...base, glow: { atmosphere: 0.5, header: 2, footer: -1 } });
+    expect(w?.glow).toEqual({ atmosphere: 0.5, header: 1, footer: 0 });
+  });
+  it("ignores non-numeric glow bands", () => {
+    const w = normalizeWorld({ ...base, glow: { atmosphere: "bright", middle: 0.3 } });
+    expect(w?.glow).toEqual({ middle: 0.3 });
+  });
+});
+
+describe("normalizeWorld — images", () => {
+  const base = { date: "2026-06-10", word: "EMBER", story: { title: "t", body: "b" } };
+  it("omits images when absent", () => {
+    expect(normalizeWorld(base)?.images).toBeUndefined();
+  });
+  it("keeps only string band keys", () => {
+    const w = normalizeWorld({ ...base, images: { header: "d/h.jpg", middle: 5, footer: "d/f.jpg" } });
+    expect(w?.images).toEqual({ header: "d/h.jpg", footer: "d/f.jpg" });
+  });
+});
+
+describe("normalizeWorld — playlist", () => {
+  const base = { date: "2026-06-10", word: "EMBER", story: { title: "t", body: "b" } };
+  it("omits playlist when absent", () => {
+    expect(normalizeWorld(base)?.playlist).toBeUndefined();
+  });
+  it("keeps string keys and the autoplay flag", () => {
+    const w = normalizeWorld({ ...base, playlist: { keys: ["a.mp3", 3, "b.mp3"], autoplayOnEntry: true } });
+    expect(w?.playlist).toEqual({ keys: ["a.mp3", "b.mp3"], autoplayOnEntry: true });
+  });
+  it("defaults autoplayOnEntry to false and drops an empty playlist", () => {
+    expect(normalizeWorld({ ...base, playlist: { keys: ["a.mp3"] } })?.playlist)
+      .toEqual({ keys: ["a.mp3"], autoplayOnEntry: false });
+    expect(normalizeWorld({ ...base, playlist: { keys: [] } })?.playlist).toBeUndefined();
+  });
+});
+
+describe("normalizeWorld — vibeTitle", () => {
+  const base = { date: "2026-06-10", word: "EMBER", story: { title: "t", body: "b" } };
+  it("omits vibeTitle when absent", () => {
+    expect(normalizeWorld(base)?.vibeTitle).toBeUndefined();
+  });
+  it("keeps a string vibeTitle, ignores non-strings", () => {
+    expect(normalizeWorld({ ...base, vibeTitle: "Embers" })?.vibeTitle).toBe("Embers");
+    expect(normalizeWorld({ ...base, vibeTitle: 42 })?.vibeTitle).toBeUndefined();
+  });
+});
+
+describe("normalizeWorld — back-compat", () => {
+  it("normalizes a pre-vibe World without adding visual fields (only rows/invented defaults)", () => {
+    const old = {
+      date: "2026-05-31", word: "EMBER", edition: "yang", voice: "yang",
+      story: { title: "Why EMBER?", body: "warmth" }, createdAt: 1,
+    };
+    const w = normalizeWorld(old)!;
+    expect(w.colorScheme).toBeUndefined();
+    expect(w.glow).toBeUndefined();
+    expect(w.images).toBeUndefined();
+    expect(w.playlist).toBeUndefined();
+    expect(w.vibeTitle).toBeUndefined();
+    expect(w.rows).toBe(6);
+    expect(w.invented).toBe(false);
+    expect(w.word).toBe("EMBER");
+    expect(w.edition).toBe("yang");
+    expect(w.story.title).toBe("Why EMBER?");
+  });
+});
