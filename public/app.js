@@ -1145,9 +1145,13 @@ function celebrateCombo(discoveries, mult) {
 function showCompanion(event, ctx = {}) {
   const { text, raw, tier, speak } = companionReact(event, ctx);
   if (!text) return;
-  // Big moments linger; routine lines stay snappy.
-  const big = tier && !(event === "wrong" && tier === "normal");
-  toast(text, { duration: big ? 4200 : 3200 });
+  // The written toast is opt-out via Settings → Companion comments. Voice is governed
+  // separately by the 🔊 sound mute (wordul.muted), so the two channels stay independent.
+  if (getSettings().companionComments) {
+    // Big moments linger; routine lines stay snappy.
+    const big = tier && !(event === "wrong" && tier === "normal");
+    toast(text, { duration: big ? 4200 : 3200 });
+  }
   // The wipe aside is text-only — it fires often enough that voicing it would grate.
   if (!speak || event === "wipe") return;
   // Templated lines (the loss reveal) split across Yan's voice + the robot.
