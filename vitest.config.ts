@@ -6,6 +6,11 @@ export default defineConfig({
     include: ["test/**/*.test.ts", "test/**/*.test.js"],
     environment: "node",
     setupFiles: ["./test/setup.js"],
+    // This repo runs many agents (and their vitest runs) on one box at once. A few
+    // CPU-bound tests (solver, noob word-list sweeps) finish in <2s standalone but get
+    // starved past the 5s default under that contention, flaking the ship gate. 20s gives
+    // headroom without hiding a genuinely hung test.
+    testTimeout: 20000,
   },
   resolve: {
     alias: [
