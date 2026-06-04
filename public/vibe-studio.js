@@ -1,6 +1,7 @@
 import { colorSchemeVars } from "/edition.js";
 import {
   reflowDims, randomHarmony, classifyWord, serializeDraft, restoreDraft, defaultVibe,
+  previewCols,
 } from "/vibe-studio-core.js";
 
 const DRAFT_KEY = "wordul.vibeStudio.draft";
@@ -28,7 +29,7 @@ function applyPalette() {
   for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(k, v);
 }
 
-// Sample colour pattern for the preview row: greens/yellows/grays, deterministic by length.
+// Sample colour pattern for the preview row: greens/yellows/grays, deterministic by position.
 function sampleClass(i) {
   const pat = ["green", "gray", "yellow", "green", "gray", "yellow"];
   return pat[i % pat.length];
@@ -36,12 +37,13 @@ function sampleClass(i) {
 
 function renderBoard() {
   const board = $("previewBoard");
-  board.style.setProperty("--cols", vibe.len);
-  const letters = (vibe.word || "").padEnd(vibe.len).slice(0, vibe.len).split("");
+  const cols = previewCols(vibe.word); // columns follow the typed word; no length control
+  board.style.setProperty("--cols", cols);
+  const letters = (vibe.word || "").padEnd(cols).slice(0, cols).split("");
   let html = "";
   for (let r = 0; r < vibe.rows; r++) {
     html += '<div class="preview-row">';
-    for (let c = 0; c < vibe.len; c++) {
+    for (let c = 0; c < cols; c++) {
       // Only the first row shows the sample colouring + the word's letters.
       const cls = r === 0 ? " " + sampleClass(c) : "";
       const ch = r === 0 ? (letters[c] || "").trim() : "";
@@ -50,6 +52,9 @@ function renderBoard() {
     html += "</div>";
   }
   board.innerHTML = html;
+  $("rowsReadout").textContent = `${vibe.rows} guess${vibe.rows === 1 ? "" : "es"}`;
+  $("rowsMinus").disabled = vibe.rows <= 3;
+  $("rowsPlus").disabled = vibe.rows >= 10;
 }
 
 function renderLabel() {
@@ -78,8 +83,8 @@ function renderBadge() {
 function syncInputs() {
   $("studioTitle").value = vibe.vibeTitle;
   $("wordInput").value = vibe.word;
-  $("lenInput").value = vibe.len;
-  $("rowsInput").value = vibe.rows;
+  $("storyInput").value = vibe.story;
+  $("aiPromptInput").value = vibe.aiPrompt;
   $("sw1").value = vibe.colorScheme.a1;
   $("sw2").value = vibe.colorScheme.a2;
   $("sw3").value = vibe.colorScheme.a3;
@@ -101,8 +106,6 @@ $("wordInput").addEventListener("input", (e) => {
   const w = e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 12);
   e.target.value = w;
   vibe.word = w;
-  // typing the word auto-sets length to match (still clamped, still editable)
-  if (w.length >= 4) { vibe.len = reflowDims(w.length, vibe.rows).len; $("lenInput").value = vibe.len; }
   renderLabel();
   renderBoard();
   saveDraft();
@@ -110,17 +113,21 @@ $("wordInput").addEventListener("input", (e) => {
   badgeDebounce = setTimeout(renderBadge, 350);
 });
 
-$("lenInput").addEventListener("input", (e) => {
-  vibe.len = reflowDims(e.target.value, vibe.rows).len;
-  renderBoard(); saveDraft();
-});
-$("lenInput").addEventListener("blur", () => { $("lenInput").value = vibe.len; });
+// Guess rows live ON the matrix — spreadsheet-style +/− (3–10).
+function nudgeRows(delta) {
+  vibe.rows = reflowDims(5, vibe.rows + delta).rows;
+  renderBoard();
+  saveDraft();
+}
+$("rowsMinus").addEventListener("click", () => nudgeRows(-1));
+$("rowsPlus").addEventListener("click", () => nudgeRows(1));
 
-$("rowsInput").addEventListener("input", (e) => {
-  vibe.rows = reflowDims(vibe.len, e.target.value).rows;
-  renderBoard(); saveDraft();
-});
-$("rowsInput").addEventListener("blur", () => { $("rowsInput").value = vibe.rows; });
+// Why-this-word: the story seed (becomes the published story + feeds the AI).
+$("storyInput").addEventListener("input", (e) => { vibe.story = e.target.value; saveDraft(); });
+
+// ✨ toggles the (seam) AI-tune panel; the chevron reveals the editable prompt.
+$("aiSparkle").addEventListener("click", () => { $("aiTune").classList.toggle("open"); });
+$("aiPromptInput").addEventListener("input", (e) => { vibe.aiPrompt = e.target.value; saveDraft(); });
 
 for (const [id, key] of [["sw1", "a1"], ["sw2", "a2"], ["sw3", "a3"]]) {
   $(id).addEventListener("input", (e) => { vibe.colorScheme[key] = e.target.value; applyPalette(); renderBoard(); saveDraft(); });

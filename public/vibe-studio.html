@@ -36,6 +36,18 @@
   .preview-tile.yellow { background: var(--a2); border-color: var(--a2); color: #0f0f11; }
   .preview-tile.gray   { background: #2c2b28; border-color: #2c2b28; color: #8a877f; }
 
+  /* Spreadsheet-style +/− guess-rows control, attached under the matrix. */
+  .rows-control { display: flex; align-items: center; justify-content: center; gap: 14px;
+    margin: 8px auto 0; }
+  .rows-control button { width: 30px; height: 30px; border-radius: 8px; cursor: pointer;
+    background: color-mix(in srgb, var(--accent) 12%, #181715);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, #2c2b28); color: #f1e9d9;
+    font-size: 18px; line-height: 1; display: grid; place-items: center; transition: all .12s; }
+  .rows-control button:hover:not(:disabled) { border-color: var(--accent); box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 40%, transparent); }
+  .rows-control button:disabled { opacity: .3; cursor: not-allowed; }
+  .rows-control .rows-readout { font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+    color: #8a877f; min-width: 92px; text-align: center; }
+
   .tool-card { position: relative; z-index: 1; margin: 22px auto 0; max-width: 560px;
     background: color-mix(in srgb, #ffffff 5%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 22%, #2c2b28);
     border-radius: 16px; padding: 18px 18px 20px; backdrop-filter: blur(10px); }
@@ -50,6 +62,26 @@
   #wordInput { letter-spacing: .3em; text-transform: uppercase; font-weight: 700; text-align: center; }
   .row { display: flex; gap: 14px; }
   .row .field { flex: 1; }
+
+  /* Why-this-word: the story seed (becomes the published story + feeds AI). */
+  .story-box { position: relative; }
+  .story-box textarea { width: 100%; box-sizing: border-box; min-height: 132px; resize: vertical;
+    font-size: 15px; line-height: 1.5; padding: 14px 14px 38px; background: #181715;
+    border: 1px solid #2c2b28; border-radius: 10px; color: #f1e9d9; font-family: inherit; }
+  .story-box textarea::placeholder { color: #6a675f; }
+  .ai-sparkle { position: absolute; right: 10px; bottom: 10px; background: transparent; border: 0;
+    cursor: pointer; font-size: 17px; line-height: 1; padding: 4px; border-radius: 8px;
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 60%, transparent)); transition: transform .12s; }
+  .ai-sparkle:hover { transform: scale(1.15); }
+  .ai-tune { margin-top: 10px; display: none; }
+  .ai-tune.open { display: block; }
+  .ai-tune-head { display: flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: color-mix(in srgb, var(--accent) 70%, #8a877f); margin-bottom: 6px; }
+  .ai-tune input { width: 100%; box-sizing: border-box; font-size: 13px; padding: 9px 11px;
+    background: #14130f; border: 1px solid #2c2b28; border-radius: 8px; color: #cfc7b6; }
+  .ai-tune-run { margin-top: 8px; background: transparent; border: 0; cursor: not-allowed;
+    color: #8a877f; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }
+  .ai-tune-run .soon { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
   .badge { display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 600; min-height: 18px; }
   .badge.real { color: var(--a1); }
   .badge.invented { color: var(--a2); }
@@ -77,23 +109,30 @@
 
     <div class="word-label" id="wordLabel"></div>
     <div class="preview-board" id="previewBoard"></div>
+    <div class="rows-control">
+      <button id="rowsMinus" type="button" aria-label="Remove a guess row">−</button>
+      <span class="rows-readout" id="rowsReadout">6 guesses</span>
+      <button id="rowsPlus" type="button" aria-label="Add a guess row">+</button>
+    </div>
 
     <div class="tool-card">
-      <h3>Word &amp; size</h3>
-      <div class="field">
-        <label for="wordInput">The word</label>
+      <h3>The word</h3>
+      <div class="field" style="margin-bottom:0;">
         <input id="wordInput" type="text" maxlength="12" autocomplete="off" placeholder="EMBER" />
         <span class="badge muted" id="wordBadge"></span>
       </div>
-      <div class="row">
-        <div class="field">
-          <label for="lenInput">Length (4–12)</label>
-          <input id="lenInput" type="number" min="4" max="12" />
-        </div>
-        <div class="field">
-          <label for="rowsInput">Guesses (3–10)</label>
-          <input id="rowsInput" type="number" min="3" max="10" />
-        </div>
+    </div>
+
+    <div class="tool-card">
+      <h3>Why this word</h3>
+      <div class="story-box">
+        <textarea id="storyInput" placeholder="Bio · inspiration · why this word… this becomes the day's story and seeds the AI for everything else."></textarea>
+        <button class="ai-sparkle" id="aiSparkle" type="button" title="Tune with AI" aria-label="Tune with AI">✨</button>
+      </div>
+      <div class="ai-tune" id="aiTune">
+        <div class="ai-tune-head">⌄ Tune prompt</div>
+        <input id="aiPromptInput" type="text" />
+        <button class="ai-tune-run" type="button" disabled>✨ Tune it <span class="soon">coming soon</span></button>
       </div>
     </div>
 

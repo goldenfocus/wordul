@@ -37,10 +37,15 @@ authoring preview with a local draft.
   day page. Fully isolated from the SPA (`app.js`) — separate document, separate JS, zero risk to
   the live game. (Rejected: embedding in the SPA, iframing the day page — both heavier and
   premature for a shell.)
-- **Board — static themed preview.** Renders a grid of `len` columns × `rows` rows that reflows
-  live as size/guesses change, with one representative sample row coloured green/yellow/gray that
-  re-lights with the palette (green ← `--a1`, yellow ← `--a2`). Tile size is **CSS-derived from
-  column count** (not JS px) per the parent spec's mobile rule. No typing this increment.
+- **Board — static themed preview.** Renders a grid of `cols` columns × `rows` rows that reflows
+  live, with one representative sample row coloured green/yellow/gray that re-lights with the
+  palette (green ← `--a1`, yellow ← `--a2`). Tile size is **CSS-derived from column count** (not JS
+  px) per the parent spec's mobile rule. No typing this increment.
+  - **Columns follow the word** — there is **no separate Length control**; `cols = previewCols(word)`
+    (the typed word's length, capped 12; falls back to 5 when empty so the matrix still reads as a
+    board). The word — real or invented — defines its own length.
+  - **Guesses live ON the matrix** — a spreadsheet-style **+/− rows control** sits directly under
+    the grid (3–10, default 6), not in a form field.
 - **Persistence — localStorage draft.** The working vibe auto-saves to
   `localStorage["wordul.vibeStudio.draft"]` and restores on load. No server.
 - **Route — `/vibe-studio`, no auth gate this increment.** Nothing server-side is mutated, so
@@ -59,11 +64,19 @@ A single page reading top-to-bottom as the day itself:
 
 1. **Header** — editable **title** input (`vibeTitle`) rendered as the gradient hero (the
    `.daily-vibe-title` treatment Increment 2 shipped), plus a quiet "Vibe Studio · draft" role line.
-2. **Board zone** — a live **word label** above the static themed preview board (reflows to
-   `len × rows`; sample coloured row re-lights with the palette).
-3. **Tool rail** (floating glass, non-pill) with two tools:
-   - **Word & size** — word input (4–12, forced uppercase, `^[A-Z]*$`), a length read-out, a
-     **rows 3–10** control, and the **real/invented badge**.
+2. **Board zone** — a live **word label** above the static themed preview board (columns follow the
+   word; sample coloured row re-lights with the palette), with the **+/− guesses control** attached
+   directly under the matrix (spreadsheet-style, 3–10).
+3. **Tool cards** (glass, non-pill):
+   - **The word** — word input (forced uppercase, `^[A-Z]*$`, max 12) + the **real/invented badge**.
+     No length/guesses fields (length is the word; guesses are on the matrix).
+   - **Why this word** — a freeform **story seed** textarea. It **becomes the day's published
+     story** *and* seeds the AI for everything else (metadata, wiki, voice tone, etc). A **✨
+     sparkle inside the box (bottom-right)** opens an AI-tune panel; a **chevron** reveals the
+     editable tune prompt (default: "Make this text legendary — vivid, cool, unforgettable.",
+     persisted). The actual "Tune it" action is an **inert seam** ("coming soon") this increment —
+     the real model call lands when the AI backend does (parent spec's deferred AI work). Story +
+     prompt persist in the draft.
    - **Palette** — three swatch pickers + **🎲 Random harmony**; every change re-lights the page.
 4. **Schedule bar** — an **inert** non-pill "Submit my day →" seam (disabled, "coming soon").
 
@@ -72,8 +85,10 @@ A single page reading top-to-bottom as the day itself:
 In-memory working object, persisted to localStorage:
 
 ```js
-vibe = { vibeTitle, word, len, rows, colorScheme: { a1, a2, a3 } }
+vibe = { vibeTitle, word, rows, story, aiPrompt, colorScheme: { a1, a2, a3 } }
 ```
+(`len` is not stored — columns derive from `word` via `previewCols`. `story` is the seed that
+becomes `World.story.body`; `aiPrompt` is the editable AI-tune seed.)
 
 Pure, testable helpers in a new **`public/vibe-studio-core.js`** (ESM, no DOM), unit-tested under
 `test/`:

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   reflowDims, randomHarmony, classifyWord, serializeDraft, restoreDraft,
+  previewCols, DEFAULT_AI_PROMPT,
 } from "/vibe-studio-core.js";
 
 describe("reflowDims", () => {
@@ -61,24 +62,46 @@ describe("classifyWord", () => {
   });
 });
 
+describe("previewCols", () => {
+  it("returns 5 for an empty word (board still reads as a board)", () => {
+    expect(previewCols("")).toBe(5);
+    expect(previewCols(null)).toBe(5);
+  });
+  it("follows the typed word length, growing letter-by-letter", () => {
+    expect(previewCols("PE")).toBe(2);
+    expect(previewCols("EMBER")).toBe(5);
+  });
+  it("caps at 12", () => {
+    expect(previewCols("SUPERCALIFRAGILISTIC")).toBe(12);
+  });
+});
+
 describe("draft round-trip", () => {
-  const vibe = { vibeTitle: "Embers", word: "EMBER", len: 5, rows: 6,
+  const vibe = { vibeTitle: "Embers", word: "EMBER", rows: 6,
+                 story: "the quiet heat after the fire", aiPrompt: "make it glow",
                  colorScheme: { a1: "#d98a3a", a2: "#3a7fd9", a3: "#7f3ad9" } };
   it("round-trips a full vibe", () => {
     expect(restoreDraft(serializeDraft(vibe))).toEqual(vibe);
   });
-  it("returns defaults for null/garbage input", () => {
+  it("returns defaults for null/garbage input (no len field anymore)", () => {
     const d = restoreDraft(null);
-    expect(d.len).toBe(5);
     expect(d.rows).toBe(6);
     expect(d.word).toBe("");
+    expect(d.story).toBe("");
+    expect(d.aiPrompt).toBe(DEFAULT_AI_PROMPT);
+    expect(d).not.toHaveProperty("len");
     expect(d.colorScheme).toEqual({ a1: "#5ee27a", a2: "#f2c94c", a3: "#ff8a5c" });
     expect(restoreDraft("{not json")).toEqual(d);
   });
-  it("fills missing fields and clamps dims from a partial draft", () => {
-    const d = restoreDraft(JSON.stringify({ word: "sky", len: 99 }));
+  it("fills missing fields and clamps rows from a partial draft", () => {
+    const d = restoreDraft(JSON.stringify({ word: "sky", rows: 99 }));
     expect(d.word).toBe("SKY");
-    expect(d.len).toBe(12);
-    expect(d.rows).toBe(6);
+    expect(d.rows).toBe(10);
+    expect(d.story).toBe("");
+    expect(d.aiPrompt).toBe(DEFAULT_AI_PROMPT);
+  });
+  it("keeps a curator's edited aiPrompt but falls back when blank", () => {
+    expect(restoreDraft(JSON.stringify({ aiPrompt: "" })).aiPrompt).toBe(DEFAULT_AI_PROMPT);
+    expect(restoreDraft(JSON.stringify({ aiPrompt: "x" })).aiPrompt).toBe("x");
   });
 });

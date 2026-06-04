@@ -57,8 +57,25 @@ export async function classifyWord(word, lookup) {
 
 const DEFAULT_SCHEME = { a1: "#5ee27a", a2: "#f2c94c", a3: "#ff8a5c" };
 
+// The seed prompt the ✨ AI-tune affordance would send. Editable by the curator
+// (revealed via the chevron); persisted in the draft. The real model call is a
+// later increment — v1 ships the affordance as a seam.
+export const DEFAULT_AI_PROMPT = "Make this text legendary — vivid, cool, unforgettable.";
+
+// Board columns follow the typed word (real or invented) — no separate length
+// control. Empty word falls back to 5 so the matrix still reads as a board; a
+// typed word grows it letter-by-letter, capped at 12.
+export function previewCols(word) {
+  const n = String(word || "").length;
+  if (n === 0) return 5;
+  return Math.min(n, 12);
+}
+
 export function defaultVibe() {
-  return { vibeTitle: "", word: "", len: 5, rows: 6, colorScheme: { ...DEFAULT_SCHEME } };
+  return {
+    vibeTitle: "", word: "", rows: 6, story: "", aiPrompt: DEFAULT_AI_PROMPT,
+    colorScheme: { ...DEFAULT_SCHEME },
+  };
 }
 
 export function serializeDraft(vibe) {
@@ -71,12 +88,14 @@ export function restoreDraft(raw) {
   try { obj = raw ? JSON.parse(raw) : {}; } catch { obj = {}; }
   if (!obj || typeof obj !== "object") obj = {};
   const base = defaultVibe();
-  const { len, rows } = reflowDims(obj.len ?? base.len, obj.rows ?? base.rows);
+  const { rows } = reflowDims(5, obj.rows ?? base.rows);
   const cs = obj.colorScheme && typeof obj.colorScheme === "object" ? obj.colorScheme : {};
   return {
     vibeTitle: typeof obj.vibeTitle === "string" ? obj.vibeTitle : base.vibeTitle,
     word: String(obj.word ?? base.word).toUpperCase().replace(/[^A-Z]/g, ""),
-    len, rows,
+    rows,
+    story: typeof obj.story === "string" ? obj.story : base.story,
+    aiPrompt: typeof obj.aiPrompt === "string" && obj.aiPrompt ? obj.aiPrompt : base.aiPrompt,
     colorScheme: {
       a1: cs.a1 || DEFAULT_SCHEME.a1,
       a2: cs.a2 || DEFAULT_SCHEME.a2,
