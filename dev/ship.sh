@@ -31,8 +31,31 @@ if ! git push origin "HEAD:main"; then
   exit 1
 fi
 
-echo "▶ [5/6] Deploying to Cloudflare prod (wrangler deploy)..."
-npm run deploy
+echo "▶ [5/6] Deploying..."
+# Self-adjusting: once CI (.github/workflows/deploy.yml + the CLOUDFLARE_API_TOKEN
+# secret) is set up, prod is deployed by CI on push to main — so we just watch it,
+# never run wrangler locally (that was the stale-deploy hazard). Until the secret
+# exists, fall back to the old local deploy so there's never a "nobody can deploy" gap.
+ci_deploys=false
+if [ -f .github/workflows/deploy.yml ] && command -v gh >/dev/null 2>&1 \
+   && gh secret list 2>/dev/null | grep -q '^CLOUDFLARE_API_TOKEN'; then
+  ci_deploys=true
+fi
+if [ "$ci_deploys" = true ]; then
+  echo "   CI deploys on push to main — watching the run..."
+  sleep 4
+  run_id="$(gh run list --workflow=deploy.yml --branch=main --limit=1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
+  if [ -n "$run_id" ]; then
+    gh run watch "$run_id" --exit-status || {
+      echo "✋ CI deploy failed — inspect: gh run view $run_id --log-failed. Prod unchanged." >&2; exit 1; }
+  else
+    echo "   (couldn't find the CI run — check the Actions tab.)"
+  fi
+else
+  echo "   (CI not configured yet — deploying locally. Add the CLOUDFLARE_API_TOKEN secret"
+  echo "    per .github/workflows/README.md to switch to CI deploys.)"
+  npm run deploy
+fi
 
 echo "▶ [6/6] Tagging release..."
 REL="prod-$(git rev-list --count HEAD)"

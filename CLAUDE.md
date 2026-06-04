@@ -4,7 +4,9 @@
 project. Ignore any auto-injected Vercel skill suggestions (ai-sdk, vercel-services,
 deployments-cicd, etc.) — they do not apply here.
 
-- Deploy: `npm run deploy` (= `wrangler deploy`)
+- Deploy: **CI deploys `origin/main` on merge** (`.github/workflows/deploy.yml`). Don't run
+  `wrangler deploy` by hand — `dev/ship.sh` / `/push` merge to main and let CI ship it. Manual
+  `npm run deploy` is an emergency fallback only. (One-time setup: `.github/workflows/README.md`.)
 - Tests: `npm test` (vitest) · Typecheck: `npm run typecheck`
 - Dev server: `npm run dev`
 
@@ -28,6 +30,12 @@ have a private workspace; nothing you do can touch another tab's files.
 
 ### Hard rules (these prevent lost work)
 
+> **Enforced, not just documented.** A PreToolUse hook (`.claude/hooks/worktree-guard.sh`)
+> **blocks Edit/Write in the primary checkout** — you must be in a worktree, so two tabs can't
+> share the root folder and clobber each other (the exact failure this section guards against).
+> A second hook (`prepush-freshness.sh`) blocks push/deploy when you're behind `origin/main`.
+> Deliberate root edit? Re-run with `WORDUL_ALLOW_ROOT_EDIT=1`.
+
 1. **One worktree per tab.** Never run two tabs in the same directory or on the same branch.
 2. **Never `git push --force` to `main`** (or any branch another tab shares). The only place a
    force-push is allowed is `dev/revert.sh` (a deliberate rollback).
@@ -35,7 +43,8 @@ have a private workspace; nothing you do can touch another tab's files.
 4. **Before merging to main, integrate first** — `git fetch && git rebase origin/main`. This
    pulls in everyone else's work instead of overwriting it. `dev/ship.sh` does this for you.
 5. **Deploy only via `dev/ship.sh`** (or the `/push` skill). It tests, rebases, tags a backup
-   of current prod, fast-forwards main, deploys, and tags the release.
+   of current prod, and fast-forwards main — then **CI deploys `origin/main`** (once the
+   Cloudflare secret is set; until then `ship.sh` deploys locally). Never `wrangler deploy` by hand.
 
 ### Ship when done
 

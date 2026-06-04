@@ -1,0 +1,60 @@
+name: deploy
+
+# Single deploy authority: prod is whatever is on origin/main. No agent runs
+# `wrangler deploy` by hand anymore — that was the "stale deploy ships old local
+# files over newer prod" hazard (see COLONY.md). CI always deploys exactly
+# origin/main, so prod can never silently diverge from main.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {} # manual re-deploy of current main from the Actions tab
+
+# Serialize deploys: if two merges land close together, the second waits for the
+# first to finish instead of racing it. Never cancel an in-flight deploy.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Surfaced to step `if:` so we can skip the deploy (not hard-fail) until the
+      # repo secret is configured. Set it: see .github/workflows/README.md.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Gauntlet (same as dev/ship.sh + /push)
+        run: npm run check-graph && npm run typecheck && npm test
+
+      - name: Deploy to Cloudflare
+        id: deploy
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        run: npx wrangler deploy
+
+      - name: Skipped deploy (no Cloudflare secret yet)
+        if: ${{ env.CLOUDFLARE_API_TOKEN == '' }}
+        run: |
+          echo "::warning title=Deploy skipped::CLOUDFLARE_API_TOKEN is not set, so prod was NOT deployed (tests still ran)."
+          echo "Add the secret to enable auto-deploy — see .github/workflows/README.md."
+
+      - name: Smoke prod
+        if: ${{ steps.deploy.outcome == 'success' }}
+        run: |
+          set -e
+          home=$(curl -s -o /dev/null -w '%{http_code}' https://wordul.com/)
+          room=$(curl -s -o /dev/null -w '%{http_code}' https://wordul.com/@bingo/perky-ocelot)
+          echo "home=$home room=$room"
+          test "$home" = "200" && test "$room" = "200"
