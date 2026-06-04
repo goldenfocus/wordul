@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { outpacedLosers } from "../src/room-core.ts";
 import type { PlayerState } from "../src/types.ts";
-import { rematchReduce, botAccepts, nextAlarmAt, REMATCH_TIMEOUT_MS } from "../src/room-core.ts";
+import { rematchReduce, botAccepts, nextAlarmAt, REMATCH_TIMEOUT_MS, botDelay, dueBots, nextBotAlarmAt } from "../src/room-core.ts";
 
 function player(username: string, status: PlayerState["status"], isBot = false): PlayerState {
   return { username, connected: true, guesses: [], status, isBot, points: 0, pointsSpent: 0 };
@@ -135,5 +135,62 @@ describe("snapshot strips internal rematch fields (matrix #11)", () => {
     for (const field of ["rematch: undefined", "botRematchAt: undefined", "rematchTimeoutAt: undefined"]) {
       expect(src).toContain(field);
     }
+  });
+});
+
+function bot(over: Partial<PlayerState> = {}): PlayerState {
+  return { username: "maya", connected: true, guesses: [], status: "playing", isBot: true, scienceOptOut: true, points: 0, pointsSpent: 0, ...over };
+}
+
+describe("botDelay", () => {
+  it("seeded opener is 10–20s; subsequent is 7–17s", () => {
+    for (const roll of [0, 0.5, 0.999]) {
+      const open = botDelay(true, true, roll);
+      expect(open).toBeGreaterThanOrEqual(10_000);
+      expect(open).toBeLessThanOrEqual(20_000);
+      const next = botDelay(false, true, roll);
+      expect(next).toBeGreaterThanOrEqual(7_000);
+      expect(next).toBeLessThanOrEqual(17_000);
+    }
+  });
+
+  it("robot (/robots) opener is 6–12s; subsequent is 4–10s", () => {
+    for (const roll of [0, 0.5, 0.999]) {
+      const open = botDelay(true, false, roll);
+      expect(open).toBeGreaterThanOrEqual(6_000);
+      expect(open).toBeLessThanOrEqual(12_000);
+      const next = botDelay(false, false, roll);
+      expect(next).toBeGreaterThanOrEqual(4_000);
+      expect(next).toBeLessThanOrEqual(10_000);
+    }
+  });
+});
+
+describe("dueBots", () => {
+  it("returns only playing bots whose nextGuessAt has passed", () => {
+    const players = [
+      bot({ username: "a", nextGuessAt: 100 }),               // due
+      bot({ username: "b", nextGuessAt: 5000 }),              // not yet
+      bot({ username: "c", nextGuessAt: 50, status: "won" }), // done
+      bot({ username: "h", isBot: false, nextGuessAt: 0 }),   // human
+      bot({ username: "d", nextGuessAt: undefined }),         // unset → due (>= now via ?? 0)
+    ];
+    const due = dueBots(players, 1000).map((p) => p.username);
+    expect(due).toEqual(["a", "d"]);
+  });
+});
+
+describe("nextBotAlarmAt", () => {
+  it("is the soonest nextGuessAt across still-playing bots", () => {
+    const players = [
+      bot({ username: "a", nextGuessAt: 9000 }),
+      bot({ username: "b", nextGuessAt: 3000 }),
+      bot({ username: "c", nextGuessAt: 1000, status: "lost" }), // excluded
+    ];
+    expect(nextBotAlarmAt(players)).toBe(3000);
+  });
+
+  it("is null when no bot is still playing", () => {
+    expect(nextBotAlarmAt([bot({ status: "won" }), bot({ isBot: false })])).toBeNull();
   });
 });

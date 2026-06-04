@@ -50,6 +50,7 @@ export type PlayerState = {
   scored?: boolean;        // daily: this player's one result has been recorded (mint once)
   goldAwarded?: number;    // daily: gold actually minted on a confirmed (res.ok) ledger write
   resigned?: boolean;      // gave up (vs ran out of guesses) — both land status "lost"
+  nextGuessAt?: number;    // bot-only: epoch ms this bot is next due to guess (per-bot heartbeat, Inc.2)
 };
 
 export type RoomPhase = "lobby" | "playing" | "finished";
