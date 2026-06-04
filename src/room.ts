@@ -47,11 +47,14 @@ const CHAT_THROTTLE_MS = 800;
 const ROBOT_SLUG = "robots";
 const BOT_NAME = "clanker";
 
-// ARENA → ROOM POST /seed body (canonical contract). `path` is the DO-key form
-// "arena/<personaId>-<seedCount>"; the persona is injected with a human-looking username.
+// ARENA → ROOM POST /seed body (canonical contract). `path` is the DO-key form. `personas`
+// is the full roster (capacity−1 distinct personas, human-looking usernames); `botCount` are
+// injected into the lobby at seed and the rest fill on the human's join.
 type SeedBody = {
   path: string;
-  persona: { id: string; name: string; avatar: string };
+  personas: { id: string; name: string; avatar: string }[];
+  capacity: number;
+  botCount: number;
   profile: "noob";
   edition: string;
   wordLength: number;
@@ -181,7 +184,7 @@ export class Room extends DurableObject<Env> {
   // re-seed of an already-seeded room just acks. The room auto-starts when a human joins.
   private async handleSeed(req: Request): Promise<Response> {
     const b = (await req.json().catch(() => null)) as SeedBody | null;
-    if (!b?.path || !b.persona?.id || b.profile !== "noob") {
+    if (!b?.path || !Array.isArray(b.personas) || b.personas.length === 0 || b.profile !== "noob") {
       return new Response("bad request", { status: 400 });
     }
     if (this.state.seed) return Response.json({ ok: true }); // already seeded
@@ -190,15 +193,19 @@ export class Room extends DurableObject<Env> {
       const [owner, slug] = b.path.split("/");
       this.state.owner = owner ?? "";
       this.state.slug = slug ?? "";
-      this.state.name = `${b.persona.name}'s room`;
+      this.state.name = `${b.personas[0].name}'s room`;
     }
-    this.state.seed = { personaId: b.persona.id, profile: b.profile };
+    // Clamp to a sane multi-bot range: capacity ≤ MAX_PLAYERS, and never more bots than the
+    // roster supplies or seats allow (botCount ≤ personas.length and ≤ capacity−1).
+    const capacity = Math.max(2, Math.min(MAX_PLAYERS, b.capacity || b.personas.length + 1));
+    const botCount = Math.max(1, Math.min(b.botCount || 1, b.personas.length, capacity - 1));
+    this.state.seed = { profile: b.profile, personaIds: b.personas.map((p) => p.id), capacity };
     this.state.edition = sanitizeEdition(b.edition);
     if (isSupportedSize(b.wordLength)) {
       this.state.wordLength = b.wordLength;
       this.state.maxGuesses = guessesFor(b.wordLength);
     }
-    this.ensureBots(b.persona);
+    this.ensureBots(botCount); // inject the botCount bots that wait in the lobby
     await this.persistAndBroadcast();
     return Response.json({ ok: true });
   }
@@ -322,10 +329,10 @@ export class Room extends DurableObject<Env> {
       this.send(ws, { type: "error", message: "bad username" });
       return;
     }
-    // Seeded room: a human must not claim the persona's username (it === seed.personaId),
+    // Seeded room: a human must not claim ANY persona's username (each === a persona id),
     // else the `existing` lookup below would treat them as the bot reconnecting. Reject
     // before that lookup. (Review fix, defect 19.)
-    if (this.state.seed && this.state.seed.personaId === username) {
+    if (this.state.seed && this.state.seed.personaIds.includes(username)) {
       this.send(ws, { type: "error", message: "room full" });
       return;
     }
@@ -422,16 +429,16 @@ export class Room extends DurableObject<Env> {
       if (p && p.status !== "playing" && !p.scored) await this.afterPlayerStatus(p);
     }
     this.ensureBots();
-    // Seeded Arena room: auto-start the instant the first human is connected (no host
-    // "start" click). runStart closes the room out of the open index (a human committed;
-    // the 2-cap already rejects a 2nd human).
+    // Seeded Arena room: the instant a human is connected, FILL the remaining seats with bots
+    // (to capacity) and start the N-player race — no host "start" click, instant GO!. runStart
+    // closes the room out of the open index (a human committed; the 1-human cap rejects a 2nd).
     if (
       this.state.seed &&
       this.state.phase === "lobby" &&
       this.state.players.some((p) => !p.isBot && p.connected)
     ) {
-      const persona = this.state.players.find((p) => p.isBot);
-      await this.runStart(persona?.username ?? "arena");
+      this.ensureBots(this.state.seed.capacity);
+      await this.runStart("arena");
     }
     // Public human Arena room: list it in the open index while it waits in the lobby.
     // runStart/finishGame close it. Best-effort; a refresh just re-asserts the listing.
@@ -758,15 +765,39 @@ export class Room extends DurableObject<Env> {
     return this.state.slug === ROBOT_SLUG;
   }
 
-  private ensureBots(persona?: { id: string; name: string; avatar: string }): void {
+  // Seeded Arena room: inject DISTINCT persona bots (username = persona id) until the room has
+  // `target` players total (capped at MAX_PLAYERS), pulling ids from the seeded roster in order
+  // and skipping any already present. /robots (not seeded) keeps its single labeled clanker.
+  // `target` defaults to the current player count → a no-arg call is a safe no-op for seeded
+  // rooms (used by the generic onHello/runStart hooks).
+  private ensureBots(target?: number): void {
     if (this.state.isDaily) return; // no worduler in the daily room
-    // Fires for the labeled /robots room OR a seeded Arena room. A seeded room injects its
-    // persona (human-looking username); the /robots room uses BOT_NAME (clanker).
     if (!this.isRobotRoom() && !this.state.seed) return;
+    if (this.state.seed) {
+      const want = Math.min(target ?? this.state.players.length, MAX_PLAYERS);
+      for (const id of this.state.seed.personaIds) {
+        if (this.state.players.length >= want) break;
+        if (this.state.players.some((p) => p.username === id)) continue;
+        this.state.players.push({
+          username: id,
+          connected: true,
+          guesses: [],
+          status: "playing",
+          isBot: true,
+          scienceOptOut: true,
+          revealHints: 0,
+          vowelHints: 0,
+          points: 0,
+          pointsSpent: 0,
+        });
+      }
+      return;
+    }
+    // /robots: exactly one labeled clanker (unchanged).
     if (this.state.players.some((p) => p.isBot)) return;
     if (this.state.players.length >= MAX_PLAYERS) return;
     this.state.players.push({
-      username: persona ? persona.id : BOT_NAME,
+      username: BOT_NAME,
       connected: true,
       guesses: [],
       status: "playing",
@@ -777,11 +808,7 @@ export class Room extends DurableObject<Env> {
       points: 0,
       pointsSpent: 0,
     });
-    // Only the labeled /robots room announces the worduler. Seeded Arena rooms (Slice D)
-    // inject their persona silently — no system line, no disguise tell.
-    if (this.isRobotRoom()) {
-      this.pushSystem(`🤖 ${BOT_NAME} powered on — knows the basics, holds no grudges.`);
-    }
+    this.pushSystem(`🤖 ${BOT_NAME} powered on — knows the basics, holds no grudges.`);
   }
 
   // Arm every playing bot's next guess time, then set the single DO alarm to the soonest.
@@ -1114,14 +1141,15 @@ export class Room extends DurableObject<Env> {
       );
     }
 
-    // Seeded room: record the head-to-head for each human against the persona. Reads
-    // this.state.players (internal, un-stripped) — the !isBot guard keeps the persona out
-    // of any USER DO (defect 21). Win = the human is the winner, else loss (defect 20).
+    // Seeded room: record each human's head-to-head against EVERY persona they raced (each
+    // bot's username === its persona id). Reads internal players (un-stripped); the !isBot
+    // guard keeps personas out of any USER DO. Win = the human is the room winner.
     if (this.state.seed) {
-      const personaId = this.state.seed.personaId;
+      const personaIds = this.state.players.filter((p) => p.isBot).map((p) => p.username);
       for (const p of this.state.players) {
         if (p.isBot) continue;
-        this.writeH2H(p.username, personaId, this.state.winner === p.username ? "w" : "l");
+        const result = this.state.winner === p.username ? "w" : "l";
+        for (const personaId of personaIds) this.writeH2H(p.username, personaId, result);
       }
     }
     // Backstop: ensure a finished seeded room is gone from the open index (close-on-join

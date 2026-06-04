@@ -61,7 +61,7 @@ export type ChatEntry =
 
 // Server-only marker stamped on a seeded (bot-hosted) room. NEVER reaches a client:
 // snapshotFor (Slice C) shadows it with `seed: undefined` on the outbound projection.
-export type SeedMarker = { personaId: string; profile: "noob" };
+export type SeedMarker = { profile: "noob"; personaIds: string[]; capacity: number };
 
 export type RoomSnapshot = {
   path: string;            // "<owner>/<slug>" — immutable canonical DO key
