@@ -300,6 +300,17 @@ export default {
       });
     }
 
+    // Hero / supporting word imagery also lives in the wordul-og R2 bucket (env.OG —
+    // no new binding). Served as webp; a missing key 404s rather than throwing.
+    if (url.pathname.startsWith("/word/img/")) {
+      const key = url.pathname.slice("/word/img/".length);
+      const obj = await env.OG.get(key);
+      if (!obj) return new Response("not found", { status: 404 });
+      return new Response(obj.body, {
+        headers: { "content-type": "image/webp", "cache-control": "public, max-age=86400" },
+      });
+    }
+
     // Word wiki. Note: wrangler serves matching static assets BEFORE the worker, so a
     // word page like /word/ocean is served straight from public/word/ocean.html; the
     // /word/ branch below only runs on asset misses (uppercase → lowercase redirect,
@@ -353,9 +364,19 @@ async function sitemap(env: Env, origin: string): Promise<Response> {
   } while (cursor);
 
   urls.push(origin + "/words");
-  for (const w of ANSWER_WORDS) {
-    if (isWordPage(w)) urls.push(`${origin}/word/${slugFor(w)}`);
-  }
+  // Word-wiki pages. Emit ALPHABETICALLY — iterating ANSWER_WORDS in pool order would
+  // leak the secret answer-pool ordering (the daily answer is answers[fnv1a(date)%len]
+  // over that exact order), letting a cheater reconstruct it from the sitemap. Sorting
+  // by slug severs any link between sitemap order and pool order. Each word page also
+  // advertises its existing OG card via a Google image-sitemap child.
+  const wordEntries = [...ANSWER_WORDS]
+    .filter(isWordPage)
+    .map(slugFor)
+    .sort()
+    .map((slug) =>
+      `  <url><loc>${origin}/word/${slug}</loc>` +
+      `<image:image><image:loc>${origin}/word/og/${slug}.png</image:loc></image:image></url>`,
+    );
 
   // Daily surface: home, archive, and every known date (best-effort — a DAILY hiccup
   // must not 500 the sitemap).
@@ -374,9 +395,12 @@ async function sitemap(env: Env, origin: string): Promise<Response> {
     for (const p of posts) urls.push(`${origin}/feed/${p.slug}`);
   } catch { /* skip feed urls */ }
 
+  const plainEntries = urls.map((u) => `  <url><loc>${u}</loc></url>`);
   const body =
-    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-    urls.map((u) => `  <url><loc>${u}</loc></url>`).join("\n") +
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" ` +
+    `xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n` +
+    [...plainEntries, ...wordEntries].join("\n") +
     `\n</urlset>\n`;
   return new Response(body, { headers: { "content-type": "application/xml" } });
 }
