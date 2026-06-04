@@ -1642,3 +1642,36 @@ body.playing .room-tabs { display: none; }
   font-size: .72rem; padding: 2px 8px; border-radius: 999px;
   background: var(--border, #2a2a2e); color: var(--muted, #8a8a8f);
 }
+
+/* --- Duel 3-2-1 countdown overlay --- */
+.countdown-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  pointer-events: none;
+  font-weight: 900;
+  font-size: clamp(6rem, 30vw, 18rem);
+  line-height: 1;
+  color: var(--accent, #9d4edd);
+  text-shadow: 0 0 32px var(--accent, #9d4edd);
+}
+.countdown-overlay.pulse {
+  animation: countdown-pop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+@keyframes countdown-pop {
+  0%   { transform: scale(0.3); opacity: 0; }
+  40%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.85; }
+}
+/* Ready toggle: lit state when you've readied up. */
+.btn.ready-on {
+  background: var(--green, #538d4e);
+  border-color: var(--green, #538d4e);
+  color: #fff;
+}
+@media (prefers-reduced-motion: reduce) {
+  .countdown-overlay.pulse { animation: none; }
+}
