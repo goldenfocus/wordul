@@ -566,6 +566,22 @@ export class Room extends DurableObject<Env> {
           .catch((e) => console.error("report failed", username, (e as Error).message)),
       ),
     );
+    // Also accumulate public, per-word solve stats (one DO per word, sharded by name).
+    // Skip bots — only real players move a word's public stats. Best-effort.
+    const word = (this.state.word ?? "").toUpperCase();
+    if (word) {
+      const humans = this.state.players.filter((p) => !p.isBot);
+      await Promise.allSettled(
+        humans.map((p) =>
+          this.env.WORDSTATS.get(this.env.WORDSTATS.idFromName(word))
+            .fetch("https://do/bump", {
+              method: "POST",
+              body: JSON.stringify({ result: p.status === "won" ? "won" : "lost", guesses: p.guesses.length }),
+            })
+            .catch((e) => console.error("wordstats bump failed", word, (e as Error).message)),
+        ),
+      );
+    }
   }
 
   private async onRematch(ws: WebSocket): Promise<void> {
