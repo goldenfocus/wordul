@@ -58,6 +58,8 @@ export type PlayerState = {
   scored?: boolean;        // daily: this player's one result has been recorded (mint once)
   goldAwarded?: number;    // daily: gold actually minted on a confirmed (res.ok) ledger write
   resigned?: boolean;      // gave up (vs ran out of guesses) — both land status "lost"
+  firstGuessAt?: number;   // daily: epoch ms of this player's first guess (start of solve clock)
+  finishedAt?: number;     // daily: epoch ms this player finished (won/lost/resigned) — solve clock end
   nextGuessAt?: number;    // bot-only: epoch ms this bot is next due to guess (per-bot heartbeat, Inc.2)
   pendingWord?: string;    // bot-only: word decided this turn, "typed out" then committed next alarm; stripped outbound like nextGuessAt
 };
