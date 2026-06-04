@@ -68,4 +68,19 @@ describe("topDaily", () => {
     expect(topDaily(players, "a", 99).top).toHaveLength(4);  // clamp ≤10, but only 4 exist
     expect(topDaily(players, "a", 2).top).toHaveLength(2);
   });
+
+  it("carries grid and durationMs through into top entries", () => {
+    const players: RankablePlayer[] = [
+      { username: "ava", guessCount: 2, won: true, goldAwarded: 1240, grid: ["ggggg"], durationMs: 134000 },
+    ];
+    const { top } = topDaily(players, "ava", 3);
+    expect(top[0].grid).toEqual(["ggggg"]);
+    expect(top[0].durationMs).toBe(134000);
+  });
+
+  it("leaves grid/durationMs undefined when not provided", () => {
+    const { top } = topDaily([p("ava", 1240, 2)], "ava", 3);
+    expect(top[0].grid).toBeUndefined();
+    expect(top[0].durationMs).toBeUndefined();
+  });
 });

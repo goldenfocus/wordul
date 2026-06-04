@@ -12,9 +12,14 @@ export type RankablePlayer = {
   resigned?: boolean;   // gave up (vs ran out of guesses) — drives the 💀 board marker
   isBot?: boolean;
   goldAwarded?: number | null;
+  grid?: string[];      // letterless color rows ("g"/"y"/"x") — home card's swappable card
+  durationMs?: number;  // first guess → finish; omitted when unknown
 };
 
-export type LeaderEntry = { username: string; gold: number; guesses: number; won: boolean; resigned?: boolean };
+export type LeaderEntry = {
+  username: string; gold: number; guesses: number; won: boolean;
+  resigned?: boolean; grid?: string[]; durationMs?: number;
+};
 export type LeaderboardView = {
   top: LeaderEntry[];                            // top N by gold desc, then fewer guesses
   you: (LeaderEntry & { rank: number }) | null;  // caller's row + 1-based rank, ONLY when outside top N
@@ -27,15 +32,23 @@ function clampN(n: number): number {
   return Math.min(10, v);
 }
 
-export function topDaily(players: RankablePlayer[], username: string, n: number): LeaderboardView {
-  const ranked: LeaderEntry[] = (players ?? [])
-    .filter((p) => p && !p.isBot && typeof p.goldAwarded === "number")
-    .map((p) => ({ username: p.username, gold: p.goldAwarded as number, guesses: p.guessCount, won: p.won, resigned: p.resigned }))
+// Shared filter + sort + map. A player is RANKED iff non-bot with a confirmed mint
+// (goldAwarded is a number). Sort: gold desc → fewer guesses → username asc.
+function rankedEntries(players: RankablePlayer[]): LeaderEntry[] {
+  return (players ?? [])
+    .filter((pl) => pl && !pl.isBot && typeof pl.goldAwarded === "number")
+    .map((pl) => ({
+      username: pl.username, gold: pl.goldAwarded as number, guesses: pl.guessCount,
+      won: pl.won, resigned: pl.resigned, grid: pl.grid, durationMs: pl.durationMs,
+    }))
     .sort((a, b) =>
       b.gold - a.gold ||
       a.guesses - b.guesses ||
       (a.username < b.username ? -1 : a.username > b.username ? 1 : 0));
+}
 
+export function topDaily(players: RankablePlayer[], username: string, n: number): LeaderboardView {
+  const ranked = rankedEntries(players);
   const size = clampN(n);
   const top = ranked.slice(0, size);
   const meIdx = ranked.findIndex((e) => e.username === username);
