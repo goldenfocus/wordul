@@ -21,6 +21,7 @@ export { Room, User, WordStats, Challenge, Daily, Science, Arena };
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;
 const CHALLENGE_RE = /^\/c\/([0-9A-Za-z]{5})$/;
+const WORLD_RE = /^\/w\/([a-z0-9-]{1,40})$/;
 const SCIENCE_DAILY_RE = /^\/api\/science\/daily\/(\d{4}-\d{2}-\d{2})(?:\.json)?$/;
 const FEED_DATE_RE = /^\/feed\/(\d{4}-\d{2}-\d{2})(?:\.json)?$/;
 
@@ -336,6 +337,13 @@ export default {
     }
     if (url.pathname === "/words") {
       return env.ASSETS.fetch(new Request(`${url.origin}/words.html`));
+    }
+
+    // World pages (/w/<slug>): serve the SPA shell; the client router renders the
+    // World and applies its skin. (No wrangler SPA fallback — see wrangler.jsonc.)
+    // SEO meta injection is added in Plan 2.
+    if (WORLD_RE.test(url.pathname)) {
+      return env.ASSETS.fetch(new Request(url.origin + "/index.html"));
     }
 
     // Profile + room + challenge pages: serve SPA shell with per-route meta injected.
