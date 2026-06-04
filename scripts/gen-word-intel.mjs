@@ -7,31 +7,30 @@
 // to re-run and resume — only missing words are generated.
 //
 // Usage:
+//   # Cloud (Claude) — needs the vault key:
 //   export ANTHROPIC_API_KEY=...        # from: sops -d ~/golden-vault/secrets/<file>
 //   node scripts/gen-word-intel.mjs            # generate everything still missing
 //   node scripts/gen-word-intel.mjs --limit 50 # cap this run (batch in chunks)
 //   node scripts/gen-word-intel.mjs WORD WORD2 # just these words
+//   # Local (Ollama) — free, no key:
+//   node scripts/gen-word-intel.mjs --local                    # default model
+//   node scripts/gen-word-intel.mjs --local --model qwen3:14b  # higher quality, slower
 //
-// Quotes must be REAL and correctly attributed; the prompt tells the model to omit the
-// quote rather than invent one. Spot-check a sample before shipping a big batch.
+// Quotes: in cloud mode the prompt demands REAL, correctly-attributed quotes (omit if
+// unsure). In --local mode quotes are NEVER generated and are hard-blanked — a local
+// model's invented/misattributed quote on a public indexed page is a real trust risk.
+// Either way, spot-check a sample before shipping a big batch.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import Anthropic from "@anthropic-ai/sdk";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const INTEL_PATH = join(ROOT, "public/data/word-intel.js");
 const WORDS_PATH = join(ROOT, "src/wordsbysize.ts");
-const MODEL = "claude-opus-4-8";
 
 function die(msg) { console.error(msg); process.exit(1); }
-
-if (!process.env.ANTHROPIC_API_KEY) {
-  die("ANTHROPIC_API_KEY not set. Decrypt it from the vault first:\n" +
-      "  export ANTHROPIC_API_KEY=$(sops -d ~/golden-vault/secrets/<file>.env | grep ANTHROPIC_API_KEY | cut -d= -f2-)");
-}
 
 // Pull the answer pools (the words that can actually be the solution) out of the TS
 // module: each `const A<len> = "WORD,WORD,..."` literal is an answers list.
@@ -52,27 +51,75 @@ function existingWords() {
   return out;
 }
 
-const client = new Anthropic();
+const ANTHROPIC_MODEL = "claude-opus-4-8";
+const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 
-async function intelFor(word) {
-  const msg = await client.messages.create({
-    model: MODEL,
+const SYSTEM_API =
+  "You write tiny, accurate, delightful 'word intel' cards for a word game. " +
+  "Return ONLY JSON: {\"def\":\"\",\"fact\":\"\",\"quote\":\"\",\"author\":\"\"," +
+  "\"etymology\":\"\",\"pos\":\"\",\"syllables\":0}. " +
+  "def: one crisp sentence. fact: one surprising, TRUE philosophical or scientific " +
+  "fact connected to the word. quote: a short, REAL, correctly-attributed quote from " +
+  "a great mind that resonates with the word — if you are not certain it is genuine, " +
+  "set quote and author to empty strings. etymology: one short sentence on the word's " +
+  "origin (empty string if unsure). pos: the primary part of speech (e.g. 'noun'). " +
+  "syllables: integer syllable count. No markdown.";
+
+// Local prompt never asks for a quote (see header note); intelForLocal also hard-blanks it.
+const SYSTEM_LOCAL =
+  "You write tiny, accurate 'word intel' cards for a word game. " +
+  "Return ONLY JSON: {\"def\":\"\",\"fact\":\"\",\"etymology\":\"\",\"pos\":\"\",\"syllables\":0}. " +
+  "def: one crisp, accurate sentence defining the word. fact: one genuinely TRUE fact " +
+  "connected to the word — prefer a plainly-true detail over a dramatic one, and AVOID " +
+  "superlatives like 'only/first/most/largest' unless you are certain; empty string if " +
+  "unsure. etymology: one short sentence on the word's origin, empty string unless you are " +
+  "confident (do NOT guess). pos: primary part of speech (e.g. 'noun'). syllables: integer " +
+  "syllable count of the word. Accuracy matters more than flair; never invent. No markdown.";
+
+const extractJson = (text) => JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+
+let _anthropic = null;
+async function intelForAnthropic(word) {
+  if (!_anthropic) {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      die("ANTHROPIC_API_KEY not set. Decrypt it from the vault, or use --local:\n" +
+          "  export ANTHROPIC_API_KEY=$(sops -d ~/golden-vault/secrets/<file>.env | grep ANTHROPIC_API_KEY | cut -d= -f2-)");
+    }
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    _anthropic = new Anthropic();
+  }
+  const msg = await _anthropic.messages.create({
+    model: ANTHROPIC_MODEL,
     max_tokens: 400,
-    system:
-      "You write tiny, accurate, delightful 'word intel' cards for a word game. " +
-      "Return ONLY JSON: {\"def\":\"\",\"fact\":\"\",\"quote\":\"\",\"author\":\"\"," +
-      "\"etymology\":\"\",\"pos\":\"\",\"syllables\":0}. " +
-      "def: one crisp sentence. fact: one surprising, TRUE philosophical or scientific " +
-      "fact connected to the word. quote: a short, REAL, correctly-attributed quote from " +
-      "a great mind that resonates with the word — if you are not certain it is genuine, " +
-      "set quote and author to empty strings. etymology: one short sentence on the word's " +
-      "origin (empty string if unsure). pos: the primary part of speech (e.g. 'noun'). " +
-      "syllables: integer syllable count. No markdown.",
+    system: SYSTEM_API,
     messages: [{ role: "user", content: `Word: ${word}` }],
   });
   const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
-  const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
-  return JSON.parse(json);
+  return extractJson(text);
+}
+
+async function intelForLocal(word, model) {
+  const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model,
+      stream: false,
+      format: "json",
+      think: false, // suppress reasoning preamble on thinking models so JSON is clean
+      options: { temperature: 0.3 },
+      messages: [
+        { role: "system", content: SYSTEM_LOCAL },
+        { role: "user", content: `Word: ${word}` },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`ollama ${res.status} ${await res.text().catch(() => "")}`);
+  const data = await res.json();
+  const obj = extractJson(data.message?.content ?? "");
+  obj.quote = ""; // never publish a quote a local model may have invented or misattributed
+  obj.author = "";
+  return obj;
 }
 
 // Re-serialize the whole map as a clean ES module (stable key order).
@@ -109,7 +156,13 @@ async function main() {
   let limit = Infinity;
   const li = args.indexOf("--limit");
   if (li >= 0) { limit = parseInt(args[li + 1], 10) || Infinity; args.splice(li, 2); }
+  const local = args.includes("--local");
+  if (local) args.splice(args.indexOf("--local"), 1);
+  let model = process.env.OLLAMA_MODEL || "qwen2.5:7b-instruct";
+  const mi = args.indexOf("--model");
+  if (mi >= 0) { model = args[mi + 1]; args.splice(mi, 2); }
   const explicit = args.filter((a) => /^[A-Za-z]+$/.test(a)).map((a) => a.toUpperCase());
+  const intelFor = local ? (w) => intelForLocal(w, model) : intelForAnthropic;
 
   const have = existingWords();
   const todo = (explicit.length ? explicit : answerWords())
@@ -117,7 +170,7 @@ async function main() {
     .slice(0, limit);
 
   if (!todo.length) return console.log("Nothing to generate — all answers covered.");
-  console.log(`Generating intel for ${todo.length} words…`);
+  console.log(`Generating intel for ${todo.length} words via ${local ? `Ollama (${model})` : `Claude (${ANTHROPIC_MODEL})`}…`);
 
   const map = await loadMap();
   let done = 0;
