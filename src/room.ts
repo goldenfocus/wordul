@@ -1182,13 +1182,18 @@ export class Room extends DurableObject<Env> {
     const me = this.state.players.find((p) => p.username === username);
     if (!me) return;
     const opponent = this.state.players.find((p) => p.username !== username);
-    // Opponent already gone (e.g. a bot that declined a prior proposal) ⇒ settle Home.
-    if (!opponent) {
+    // A plain solo room (no opponent, not a pinned-word challenge, not a seeded Arena)
+    // has nobody to handshake with — "Play again" should just start a fresh game,
+    // smoothly, in place. Mirrors a mutual accept (accepted + start).
+    const soloRestart = !opponent && !this.state.challengeId && !this.state.seed;
+    if (!opponent && !soloRestart) {
+      // Challenge / seeded Arena with the opponent already gone (e.g. a bot that
+      // declined a prior proposal) ⇒ settle Home.
       this.broadcastAll({ type: "rematch_cancelled", reason: "left" });
       return;
     }
     const { rematch, effects } = rematchReduce(this.state.rematch ?? null, {
-      kind: "propose", from: username, opponentIsBot: !!opponent.isBot, now: Date.now(),
+      kind: "propose", from: username, opponentIsBot: !!opponent?.isBot, solo: soloRestart, now: Date.now(),
     });
     this.state.rematch = rematch;
     const started = await this.applyRematchEffects(effects);

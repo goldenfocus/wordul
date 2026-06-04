@@ -3033,6 +3033,10 @@ function rematchLabel() {
 // no visible "Waiting…" feedback).
 function proposeRematch() {
   send({ type: "rematch_propose" });
+  // Solo room: there's no opponent to wait on. The server starts a fresh game at
+  // once and the round-start snapshot (plus rematch_accepted → closeStats) resets the
+  // board — so skip the "Waiting for your opponent" state entirely and keep replay smooth.
+  if ((game.snapshot?.players?.length ?? 1) <= 1) return;
   const modal = document.getElementById("statsModal");
   if (modal && modal.hidden) openStats();
   renderRematchWaiting(opponentName());

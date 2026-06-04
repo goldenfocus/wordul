@@ -43,6 +43,14 @@ describe("rematchReduce", () => {
     expect(r.effects).toContainEqual({ kind: "schedule_bot" });
   });
 
+  it("propose in a solo room (no opponent) ⇒ accepted + start immediately, no waiting", () => {
+    // Solo: there is no second party to handshake with, so a "Play again" must just
+    // restart the game — never arm a timeout or show "Waiting for your opponent".
+    const r = rematchReduce(null, { kind: "propose", from: "yan", opponentIsBot: false, solo: true, now: NOW });
+    expect(r.rematch).toBe(null);
+    expect(r.effects).toEqual([{ kind: "accepted", by: "yan" }, { kind: "start" }]);
+  });
+
   it("mutual propose (other side already pending) ⇒ accept + start, once", () => {
     const r = rematchReduce({ proposer: "alex", deadline: NOW }, { kind: "propose", from: "yan", opponentIsBot: false, now: NOW });
     expect(r.rematch).toBe(null);

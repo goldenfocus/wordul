@@ -24,7 +24,7 @@ export function outpacedLosers(players: PlayerState[], winner: string): string[]
 export type RematchState = { proposer: string; deadline: number } | null; // deadline: DO alarm enforces expiry; reducer never re-reads it
 
 export type RematchInput =
-  | { kind: "propose"; from: string; opponentIsBot: boolean; now: number }
+  | { kind: "propose"; from: string; opponentIsBot: boolean; solo?: boolean; now: number }
   | { kind: "accept"; from: string }
   | { kind: "decline" }
   | { kind: "left" }
@@ -48,6 +48,12 @@ export type RematchResult = { rematch: RematchState; effects: RematchEffect[] };
 export function rematchReduce(state: RematchState, input: RematchInput): RematchResult {
   switch (input.kind) {
     case "propose": {
+      // Solo room: no opponent to handshake with. "Play again" just restarts the
+      // game at once — same effects as a mutual accept, so no timeout is armed and
+      // the client never shows a phantom "Waiting for your opponent".
+      if (input.solo) {
+        return { rematch: null, effects: [{ kind: "accepted", by: input.from }, { kind: "start" }] };
+      }
       if (state) {
         // A proposal already pending from the OTHER side ⇒ mutual want ⇒ start once.
         if (state.proposer !== input.from) {
