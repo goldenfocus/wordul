@@ -30,9 +30,10 @@ export type PlayerState = {
   guesses: GuessRow[];
   status: "playing" | "won" | "lost";
   isBot?: boolean;         // a worduler — born in Wordul, plays from public masks only
+  ready: boolean;          // duel readiness — gates the countdown (set false on join/rematch)
 };
 
-export type RoomPhase = "lobby" | "playing" | "finished";
+export type RoomPhase = "lobby" | "countdown" | "playing" | "finished";
 
 export type ChatEntry =
   | { kind: "user"; from: string; text: string; t: number }
@@ -48,6 +49,7 @@ export type RoomSnapshot = {
   word: string | null;
   winner: string | null;   // winner username
   startedAt: number | null;
+  goAt: number | null;     // epoch ms the countdown ends and the round goes live (null off-countdown)
   finishedAt: number | null;
   round: number;
   chat: ChatEntry[];
@@ -62,6 +64,7 @@ export type RoomSnapshot = {
 export type ClientMessage =
   | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string }
   | { type: "start" }
+  | { type: "ready"; ready: boolean }
   | { type: "guess"; word: string }
   | { type: "rematch" }
   | { type: "chat"; text: string }
