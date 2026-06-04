@@ -10,20 +10,27 @@ import {
   driftTarget,
   rollWordLength,
   rollLifetime,
+  rollSpawn,
+  hydrateSeedRec,
   TARGET_OPEN,
   MAX_SEEDED,
   type ArenaState,
   type SeedRec,
   type OpenGame,
 } from "./arena-core.ts";
-import { pickPersona } from "./bots.ts";
+import { pickPersonas } from "./bots.ts";
 
 // Singleton coordinator DO (idFromName("arena")). Owns the authoritative Open-Games index.
-// SLICE A: the alarm() seed loop is a VERIFIED no-op — there is no bots.ts and no Room /seed
-// route yet, so it only prunes. Slice D wires the real pickPersona → /seed → register loop.
+// The alarm() seed loop mints varied multi-bot rooms: rollSpawn picks capacity/botCount,
+// pickPersonas picks the distinct roster (deduped across all open rooms), then it seeds the
+// Room DO with the full roster and registers on 2xx.
 export class Arena extends DurableObject<Env> {
   private async load(): Promise<ArenaState> {
-    return (await this.ctx.storage.get<ArenaState>("state")) ?? emptyArenaState();
+    const s = (await this.ctx.storage.get<ArenaState>("state")) ?? emptyArenaState();
+    // Backfill pre-Inc2 recs (no capacity/botCount/personaIds) so they typecheck + render.
+    const seeded: Record<string, SeedRec> = {};
+    for (const [path, r] of Object.entries(s.seeded)) seeded[path] = hydrateSeedRec(r);
+    return { ...s, seeded };
   }
   private async save(s: ArenaState) {
     await this.ctx.storage.put("state", s);
@@ -79,34 +86,45 @@ export class Arena extends DurableObject<Env> {
       // of snapping in as a batch. The jittered reschedule below paces the trickle.
       const target = s.desiredOpen ?? TARGET_OPEN;
       if (liveCount(s) < target && Object.keys(s.seeded).length < MAX_SEEDED) {
+        // Cross-room dedup: every persona currently in use across all live rooms (full
+        // rosters, not just the face). pickPersonas skips these so two open rooms never
+        // share a persona.
         const openIds = new Set(
-          Object.values(s.seeded).filter((r) => r.status !== "closed").map((r) => r.personaId),
+          Object.values(s.seeded)
+            .filter((r) => r.status !== "closed")
+            .flatMap((r) => r.personaIds ?? [r.personaId]),
         );
-        const persona = pickPersona(s.seedCount, openIds);
-        if (persona) {
+        const { capacity, botCount } = rollSpawn(Math.random(), Math.random());
+        const roster = pickPersonas(s.seedCount, capacity - 1, openIds);
+        if (roster.length > 0) {
+          // Graceful degrade when the roster is thin: a 4/5 with only 2 free personas
+          // becomes a 2/3 — still valid (botCount ≤ capacity−1 ≤ roster.length).
+          const realCapacity = Math.min(capacity, roster.length + 1);
+          const realBotCount = Math.min(botCount, roster.length, realCapacity - 1);
+          const face = roster[0];
           const wordLength = rollWordLength(Math.random());
           const lifetimeMs = rollLifetime(Math.random());
-          const { path, routePath } = seedPaths(persona.id, s.seedCount);
+          const { path, routePath } = seedPaths(face.id, s.seedCount);
           const rec: SeedRec = {
             path,
             routePath,
-            name: `${persona.name}'s room`,
-            host: persona.name,
-            personaId: persona.id,
-            personaIcon: persona.avatar,
-            edition: persona.edition,
+            name: `${face.name}'s room`,
+            host: face.name,
+            personaId: face.id,
+            personaIcon: face.avatar,
+            edition: face.edition,
             wordLength,
-            seats: "1/2",
-            capacity: 2,
-            botCount: 1,
-            personaIds: [persona.id],
+            seats: `${realBotCount}/${realCapacity}`,
+            capacity: realCapacity,
+            botCount: realBotCount,
+            personaIds: roster.map((p) => p.id),
             mintedAt: Date.now(),
             lifetimeMs,
             status: "minted",
           };
           s = apply(s, { type: "mint", rec });
           await this.save(s);
-          // Seed the ROOM DO (byte-identical key to what /ws?room=<path> resolves).
+          // Seed the ROOM DO with the FULL roster + capacity/botCount (byte-identical key).
           let ok = false;
           try {
             const room = this.env.ROOM.get(this.env.ROOM.idFromName(path));
@@ -114,9 +132,11 @@ export class Arena extends DurableObject<Env> {
               method: "POST",
               body: JSON.stringify({
                 path,
-                persona: { id: persona.id, name: persona.name, avatar: persona.avatar },
+                personas: roster.map((p) => ({ id: p.id, name: p.name, avatar: p.avatar })),
+                capacity: realCapacity,
+                botCount: realBotCount,
                 profile: "noob",
-                edition: persona.edition,
+                edition: face.edition,
                 wordLength,
               }),
               headers: { "content-type": "application/json" },
