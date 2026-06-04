@@ -569,6 +569,21 @@ Each phase is independently shippable and leaves the site in a working state.
 - **R9 — Phase ordering discipline.** Translating an unverified English fact 11× multiplies the error. Mitigation: Phase 1 (English) is a hard gate — fully verified + human-spot-checked before any Phase 2 fan-out.
 - **Note — Tiered auto-merge:** content/copy/UI changes here are Tier C (auto-mergeable after the gauntlet); none touch money-path code. Migrations/CI/CLAUDE.md are out of scope for this feature.
 
+## Late refinements (folded in from the bonus-angles review)
+
+See `docs/superpowers/specs/2026-06-04-legendary-word-wiki-bonus-angles.md` for the full list. These **amend the sections above** — apply before the noted phase.
+
+- **A1 — Exclusions are PER-LOCALE, not global (apply before Phase 2; safety/correctness).** A 5-letter English word can be innocuous in English yet a slur/taboo in another language. Replace the single global `WORD_EXCLUSIONS` with `EXCLUDED_EN` (gates the English page) + `EXCLUDED[lang]` (gates each locale page). `isWordPage(word, lang)` and `availableLangs[word]` consult the per-locale set; an excluded locale is simply absent from the hreflang cluster (D7/D8 already make a missing cell a redirect, not a 404). **Distinct from R7** (the creative judge nulls a poem/joke) — A1 decides whether the PAGE exists in that locale at all.
+- **A2 — `facts[].culturallyPortable: boolean`.** The Fact judge verifies TRUTH, not portability; a culture-bound fact shouldn't auto-translate into all 11 locales. Non-portable facts are dropped or re-sourced per target locale, not translated verbatim.
+- **A3 — Minimum-richness floor (anti-duplicate-content at ~27,780× scale).** A locale page with only a translated `def` and every creative field null is thin and risks duplicate-content suppression. Define a floor (e.g. ≥ `def` + 1 fact + ≥1 of {poem|jokes|mnemonic}); below it, redirect that locale cell to English (D8) and omit it from the cluster rather than emit a thin page.
+- **A4 — Per-(lang,field) reject-rate circuit breaker (cost guard, complements R6).** If a language×field verification reject-rate exceeds a threshold over a window, pause that stream and surface it, so a systematically-failing locale/field doesn't burn Opus budget retrying.
+- **A5 — Gate `solveRate`/`avgGuesses` display behind a minimum N.** Below a sample threshold the panel keeps the "be the first" state (avoids noisy/deanonymizing stats on rarely-played words). Pure render-side guard on the existing `WordStats` view.
+
+### High-leverage feature angles (roadmap — not v1 blockers)
+- **Biggest unlock — close the solve-stats → content-priority loop.** Use the existing `WordStats` per-word `solveRate`/`avgGuesses` to ORDER the generation queue so Opus budget lands first on words people actually play and struggle with (the post-loss "Look it up" funnel is already built). A self-prioritizing living system, not a static batch.
+- **Native TTS audio (nearly free):** `public/voice.js` already wraps `speechSynthesis`; a "pronounce" + "poem read aloud" button works in all 12 languages via `utterance.lang`, zero new infra.
+- **Other fast-follows:** per-language word-of-day RSS/JSON feed + a `/word/<slug>.json` endpoint (turn "indexed" into "cited" by AI engines); a localized poem/quote SHARE-card OG template (virality); a spaced-repetition `/learn` mode + auto-quizzes from `facts[]` riding the existing gold wallet/editions; browsable etymology/anagram "word constellations."
+
 ---
 
 *Relevant absolute paths (extend, don't rebuild):*
