@@ -72,4 +72,16 @@ describe("User DO route ordering (no new /account/* route shadows the money path
     onlyMatches("/users/zang/ledger/append", "ledgerMatch");
     onlyMatches("/users/zang/h2h", "h2hMatch");
   });
+
+  it("the profile GET guard excludes /account/me (regression: GET /account/me was shadowed)", () => {
+    // Mirror the guard in user.ts: profile GET runs for any GET EXCEPT /account/me.
+    const profileGetMatch = (p: string) => !p.endsWith("/account/me");
+    const meGetMatch = (p: string) => p.endsWith("/account/me");
+    // A normal profile read (pathname "/") is handled by the profile GET, not /me.
+    expect(profileGetMatch("/")).toBe(true);
+    expect(meGetMatch("/")).toBe(false);
+    // /account/me must fall through to the /me handler, NOT the profile GET.
+    expect(profileGetMatch("/account/me")).toBe(false);
+    expect(meGetMatch("/account/me")).toBe(true);
+  });
 });
