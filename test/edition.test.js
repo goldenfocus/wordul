@@ -103,3 +103,23 @@ describe("applyEdition", () => {
     expect(document.documentElement.dataset.edition).toBe("default");
   });
 });
+
+import { colorSchemeVars } from "/edition.js";
+
+describe("colorSchemeVars", () => {
+  it("maps a valid trio to accent + atom vars (a1 drives --accent)", () => {
+    expect(colorSchemeVars({ a1: "#f0c14b", a2: "#6f9e7a", a3: "#0b0a0c" })).toEqual({
+      "--accent": "#f0c14b", "--a1": "#f0c14b", "--a2": "#6f9e7a", "--a3": "#0b0a0c",
+    });
+  });
+  it("returns null for absent or non-object input", () => {
+    expect(colorSchemeVars(null)).toBeNull();
+    expect(colorSchemeVars(undefined)).toBeNull();
+    expect(colorSchemeVars("nope")).toBeNull();
+  });
+  it("returns null when any member is missing, non-string, or empty", () => {
+    expect(colorSchemeVars({ a1: "#fff", a2: "#000" })).toBeNull();
+    expect(colorSchemeVars({ a1: "#fff", a2: 5, a3: "#000" })).toBeNull();
+    expect(colorSchemeVars({ a1: "#fff", a2: "", a3: "#000" })).toBeNull();
+  });
+});

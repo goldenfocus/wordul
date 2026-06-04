@@ -108,6 +108,18 @@ const VAR_MAP = {
   accent: "--accent", bgCard: "--bg-card", error: "--error",
 };
 
+// Vibe Studio — a curated day ships a 3-color palette {a1,a2,a3}. Map it to the CSS custom
+// properties the day page re-themes from: a1 drives --accent (re-lighting every existing
+// color-mix(var(--accent)) chrome for free), and a1/a2/a3 are exposed as atoms for the
+// bespoke palette layers (atmosphere glow, gradient title). Returns null for an absent or
+// malformed palette so callers fall straight back to the active edition's own accent.
+export function colorSchemeVars(cs) {
+  if (!cs || typeof cs !== "object") return null;
+  const { a1, a2, a3 } = cs;
+  for (const v of [a1, a2, a3]) if (typeof v !== "string" || !v) return null;
+  return { "--accent": a1, "--a1": a1, "--a2": a2, "--a3": a3 };
+}
+
 export function applyEdition(id) {
   const ed = getEdition(id);
   activeId = ed.id;
