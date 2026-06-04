@@ -2813,3 +2813,15 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .world-title { font-family: var(--font-display); font-size: 2.5rem; line-height: 1.05; margin: 0.25rem 0 0.5rem; }
 .world-blurb { font-size: 1.05rem; margin: 0; }
 .world-actions { display: flex; flex-direction: column; gap: 0.75rem; }
+/* --- Accounts P0: secure-account sheet + claimed badge --- */
+.acct-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 1000; padding: 1rem; }
+.acct-sheet { background: var(--bg, #fff); color: var(--fg, #111); max-width: 28rem; width: 100%; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 12px 40px rgba(0,0,0,.3); }
+.acct-sheet h2 { margin: 0 0 .5rem; }
+.acct-lede { font-size: .9rem; opacity: .85; line-height: 1.45; }
+.acct-phrase { font-family: ui-monospace, monospace; font-size: 1.15rem; letter-spacing: .02em; background: rgba(127,127,127,.12); border-radius: .6rem; padding: .8rem 1rem; word-spacing: .25em; text-align: center; margin: .75rem 0; min-height: 1.4em; }
+.acct-actions { display: flex; gap: .5rem; justify-content: flex-end; margin-top: .5rem; }
+.acct-actions button { padding: .5rem .9rem; border-radius: .5rem; border: 1px solid rgba(127,127,127,.4); background: transparent; cursor: pointer; }
+.acct-confirm:not(:disabled) { background: var(--accent, #4c8bf5); color: #fff; border-color: transparent; }
+.acct-confirm:disabled { opacity: .5; cursor: not-allowed; }
+.acct-ack { display: flex; gap: .5rem; align-items: center; font-size: .85rem; margin: .75rem 0; }
+.claimed-badge, .verified-badge { font-size: .8em; vertical-align: middle; }

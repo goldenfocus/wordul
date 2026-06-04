@@ -216,6 +216,8 @@ export function openHub(opts = {}) {
   addItem("🎨", "Theme", opts.onTheme);
   addItem(isMuted ? "🔇" : "🔊", isMuted ? "Sound off" : "Sound on", opts.onMute, { keepOpen: false });
   addItem("📊", "Stats", opts.onStats);
+  // Accounts P0: show "Secure this account" only when name is set but not yet claimed.
+  addItem("🔒", "Secure this account", opts.onSecure);
 
   // Room-only — these are the chrome we hide mid-play, surfaced here so nothing is orphaned.
   if (inRoom) {

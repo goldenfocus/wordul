@@ -46,7 +46,7 @@ export async function renderProfile(username, mountEl) {
     .join("");
 
   mountEl.innerHTML = `
-    <h1 class="profile-name">@${escapeHtml(username)}</h1>
+    <h1 class="profile-name">@${escapeHtml(username)}${p.claimed ? ' <span class="claimed-badge" title="Secured account">🔒</span>' : ""}${p.verified ? ' <span class="verified-badge" title="Verified">✔</span>' : ""}</h1>
     <div class="profile-stats">
       <div class="pstat"><span class="pstat-num">${games}</span><span class="pstat-label">Games</span></div>
       <div class="pstat"><span class="pstat-num">${wins}</span><span class="pstat-label">Wins</span></div>

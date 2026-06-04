@@ -1,5 +1,6 @@
 // Wordul — client
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
+import { getSessionToken } from "/account.js";
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
 import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
@@ -31,6 +32,7 @@ applyEdition(getActiveEditionId());
 
 const LS = {
   username: "wr.username",
+  session: "wr.session", // raw account session token (bearer) — present only for a secured name
   preferredLength: "wr.length",
   replay: "wr.replay", // structured per-guess payout log, keyed per game (slug:round)
   clearHint: "wr.clearHint", // one-time "press Esc / hold ⌫ to clear the row" nudge
@@ -1443,6 +1445,7 @@ function openSocket(url) {
       mode: "race", // only valid selectable mode today
       scienceOptOut: !getSettings().communityScience,
       public: game.publicArena === true, // host opted into the public Arena open-games list
+      sessionToken: getSessionToken() || undefined, // P0 auth seam; absent for unsecured names
     });
     refreshGold(); // sync server-authoritative balance into HUD cache on join
     // Kick off heartbeat so the path stays warm.
@@ -3795,6 +3798,8 @@ function showSettings() {
 // builds + positions the menu; app.js wires every action since they touch app state.
 function showHub(anchor) {
   const inRoom = !!game.snapshot;
+  // Accounts P0: show "Secure this account" only when a name is set but not yet claimed.
+  const needsSecure = getUsername() && !getSessionToken();
   openHub({
     anchor,
     inRoom,
@@ -3806,6 +3811,9 @@ function showHub(anchor) {
     onShare: inRoom ? () => shareRoomInvite() : null,
     onRename: inRoom ? () => renameRoom() : null,
     onScoreboard: inRoom ? () => scrollToScoreboard() : null,
+    onSecure: needsSecure
+      ? () => import("/account.js").then((m) => m.openSecureSheet(getUsername(), () => location.reload()))
+      : null,
   });
 }
 
