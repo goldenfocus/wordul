@@ -35,7 +35,7 @@ export class User extends DurableObject<Env> {
     const url = new URL(req.url);
     const username = url.searchParams.get("username") ?? "";
 
-    if (req.method === "GET") {
+    if (req.method === "GET" && !url.pathname.endsWith("/account/me")) {
       const profile = await this.load(username);
       // SECURITY: never spread the raw profile — publicProfile() drops auth + pendingClaim
       // (salt/phraseHash/session hashes) and surfaces only the claimed/verified flags.
