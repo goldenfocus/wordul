@@ -69,3 +69,26 @@ describe("mistakeRateFor", () => {
     }
   });
 });
+
+describe("mistakeRateFor(length, opponents)", () => {
+  it("defaults to the single-opponent rate when opponents is omitted", () => {
+    expect(mistakeRateFor(5)).toBe(mistakeRateFor(5, 1));
+  });
+
+  it("is non-decreasing in length", () => {
+    for (let len = 4; len < 12; len++) {
+      expect(mistakeRateFor(len + 1, 1)).toBeGreaterThanOrEqual(mistakeRateFor(len, 1));
+    }
+  });
+
+  it("is non-decreasing in opponents (more bots → each fumbles a bit more)", () => {
+    for (let opp = 1; opp < 6; opp++) {
+      expect(mistakeRateFor(6, opp + 1)).toBeGreaterThanOrEqual(mistakeRateFor(6, opp));
+    }
+  });
+
+  it("stays strictly below 1 even at the extremes", () => {
+    expect(mistakeRateFor(12, 8)).toBeLessThan(1);
+    expect(mistakeRateFor(12, 8)).toBeGreaterThanOrEqual(0);
+  });
+});

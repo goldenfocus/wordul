@@ -10,13 +10,15 @@ import { WORDS_BY_SIZE } from "./wordsbysize.ts";
 export type NoobProfile = { mistakeRate: number }; // [0,1)
 export const NOOB: NoobProfile = { mistakeRate: 0.4 };
 
-// Longer words are genuinely harder, so a single fixed mistakeRate would make a long-word
-// room unwinnable for a human. Scale fallibility UP with length: base rate at ≤5 letters,
-// +0.06 per extra letter, capped below certainty. Still 100% blind — this only changes how
-// often noobGuess takes the believable-slip branch, never what it can see.
-export function mistakeRateFor(length: number): number {
-  const over = Math.max(0, length - 5);
-  return Math.min(0.7, NOOB.mistakeRate + 0.06 * over);
+// Longer words AND bigger fields are harder, so a fixed rate would make either unwinnable.
+// Scale fallibility UP with length (+0.06/letter over 5) and with field size (+0.05 per extra
+// opponent over 1), capped strictly below certainty. Still 100% blind — this only changes how
+// often noobGuess takes the believable-slip branch, never what it can see. `opponents` = the
+// number of OTHER players the bot races (players.length − 1); defaults to 1 (single-bot parity).
+export function mistakeRateFor(length: number, opponents = 1): number {
+  const lengthRate = NOOB.mistakeRate + 0.06 * Math.max(0, length - 5);
+  const fieldBump = 0.05 * Math.max(0, opponents - 1);
+  return Math.min(0.85, lengthRate + fieldBump);
 }
 
 // Confirmed greens: position -> required uppercase letter, derived from masks only.
