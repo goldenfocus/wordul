@@ -2,7 +2,7 @@
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
-import { applyEdition, applyColorScheme, getActiveEditionId, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
+import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
 import { pickGuessEvent } from "/roomConfig.js";
 import { speakLine, speakTemplated } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
@@ -18,6 +18,7 @@ import { computeDailyStatsView } from "/daily-stats.js";
 import { computeFeedStreamView, computeFeedPostView } from "/feed.js";
 import { EDITIONS, getEdition } from "/editions/index.js";
 import { MODES, isAvailableMode } from "/modes.js";
+import { getWorld, worldSlugFromPath } from "/worlds.js";
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
 import { pickInspire } from "/inspire.js";
@@ -107,6 +108,8 @@ function parseRoute() {
   if (location.pathname === "/feed") return { kind: "feed" };
   const feedPost = location.pathname.match(/^\/feed\/(\d{4}-\d{2}-\d{2})$/);
   if (feedPost) return { kind: "feed-post", date: feedPost[1] };
+  const worldSlug = worldSlugFromPath(location.pathname);
+  if (worldSlug) return { kind: "world", slug: worldSlug };
   const room = location.pathname.match(ROOM_RE);
   if (room) return { kind: "room", owner: room[1], slug: room[2] };
   const prof = location.pathname.match(PROFILE_RE);
@@ -3855,6 +3858,7 @@ function renderCrumbs(r) {
     : r.kind === "daily-archive" ? "Archive"
     : r.kind === "feed" ? "Lab"
     : r.kind === "feed-post" ? "Lab · " + r.date
+    : r.kind === "world" ? (getWorld(r.slug)?.name ?? "World")
     : `@${r.username}`;
   nav.hidden = false;
   nav.innerHTML = "";
@@ -3874,6 +3878,62 @@ function renderCrumbs(r) {
   nav.append(home, sep, cur);
 }
 
+// A World page (/w/<slug>): a themed place you can visit, share, and play in. Landing
+// here is a TRY-ON — the skin is applied for this visit only (persist:false), never
+// silently saved as the default. "Make this my default" is the only thing that commits.
+// Live counts + "Join the live race" + SEO meta arrive in Plan 2; an unknown slug here
+// goes Home (Plan 2 redirects to /worlds instead).
+function showWorld(slug) {
+  const world = getWorld(slug);
+  if (!world) { navigate("/"); return; }
+  document.title = `${world.name} — Wordul`;
+  // Try-on: preview the skin without changing the saved default.
+  applyEdition(world.editionId, { persist: false });
+
+  const app = $("#app");
+  app.innerHTML = "";
+  document.body.classList.remove("hub-home");
+
+  const screen = document.createElement("section");
+  screen.className = "screen world-screen";
+
+  const back = document.createElement("a");
+  back.href = "/"; back.className = "link world-back"; back.textContent = "← Home";
+  back.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); });
+
+  const head = document.createElement("header");
+  head.className = "world-head";
+  const kicker = document.createElement("span");
+  kicker.className = "daily-kicker"; kicker.textContent = "World";
+  const h1 = document.createElement("h1");
+  h1.className = "world-title"; h1.textContent = world.name;
+  const blurb = document.createElement("p");
+  blurb.className = "world-blurb muted"; blurb.textContent = world.blurb;
+  head.append(kicker, h1, blurb);
+
+  const actions = document.createElement("div");
+  actions.className = "world-actions";
+
+  const play = document.createElement("button");
+  play.type = "button"; play.className = "btn block"; play.textContent = "Play solo →";
+  play.addEventListener("click", () => {
+    if (!getUsername()) { navigate("/"); return; } // no identity yet — register on Home first
+    enterNewRoom({ autoStart: true });
+  });
+
+  const makeDefault = document.createElement("button");
+  makeDefault.type = "button"; makeDefault.className = "btn block ghost";
+  makeDefault.textContent = "Make this my default theme";
+  makeDefault.addEventListener("click", () => {
+    setDefaultEdition(world.editionId);
+    toast("Saved — this World is your default look now", { duration: 1600 });
+  });
+
+  actions.append(play, makeDefault);
+  screen.append(back, head, actions);
+  app.appendChild(screen);
+}
+
 function route() {
   stopArenaPoll(); // leaving the in-place Arena view (incl. browser Back / popstate) kills its poll
   const r = parseRoute();
@@ -3887,6 +3947,7 @@ function route() {
   if (r.kind === "daily-archive") { showDailyArchive(); return; }
   if (r.kind === "feed") { showFeed(); return; }
   if (r.kind === "feed-post") { showFeedPost(r.date); return; }
+  if (r.kind === "world") { showWorld(r.slug); return; }
   if (r.kind === "room") {
     if (getUsername()) {
       showRoom(r.owner, r.slug);
