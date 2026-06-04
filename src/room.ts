@@ -159,7 +159,7 @@ export class Room extends DurableObject<Env> {
         if (restored.phase === "countdown") {
           restored.phase = "lobby";
           restored.goAt = null;
-          for (const p of restored.players) p.ready = false;
+          for (const p of restored.players) p.ready = !!p.isBot;
         }
         this.state = restored;
       }
@@ -703,6 +703,12 @@ export class Room extends DurableObject<Env> {
     return this.state.players.filter((p) => p.role === "duelist");
   }
 
+  /** Reset readiness for the next ready-gate. Wordulers stay ready (they never tap Ready),
+   *  so a human-vs-worduler duel advances round to round on the human's single tap. */
+  private resetReady(): void {
+    for (const p of this.state.players) p.ready = !!p.isBot;
+  }
+
   /** Players whose results count this round: duelists in a duel room, else everyone.
    *  Falls back to all players if seats were never assigned (legacy/hand-built state) —
    *  in real runtime isGameOver requires a live duelist, so this only guards edge cases. */
@@ -721,7 +727,8 @@ export class Room extends DurableObject<Env> {
     const player = username ? this.state.players.find((p) => p.username === username) : null;
     if (!player || player.role !== "duelist") return; // only duelists ready up; spectators wait in the queue
     player.ready = !!ready;
-    this.ensureBot(); // a worduler in the room is born ready (pushed ready:true) and counts toward the gate
+    this.ensureBots(); // a worduler in the room counts toward the gate
+    for (const p of this.state.players) if (p.isBot) p.ready = true; // wordulers are always ready
     if (everyoneReady(this.duelists())) { await this.beginCountdown(); return; }
     await this.persistAndBroadcast();
   }
@@ -733,7 +740,7 @@ export class Room extends DurableObject<Env> {
   private async beginCountdown(): Promise<void> {
     this.state.phase = "countdown";
     this.state.goAt = Date.now() + COUNTDOWN_MS;
-    for (const p of this.state.players) p.ready = false; // consumed; the next lobby re-readies
+    this.resetReady(); // consumed; humans reset, wordulers stay ready
     this.pushSystem(`Get ready — round ${this.state.round + 1}`);
     void this.ctx.storage.setAlarm(this.state.goAt);
     await this.persistAndBroadcast();
@@ -758,7 +765,7 @@ export class Room extends DurableObject<Env> {
   private async cancelCountdown(): Promise<void> {
     this.state.phase = "lobby";
     this.state.goAt = null;
-    for (const p of this.state.players) p.ready = false;
+    this.resetReady();
     try { await this.ctx.storage.deleteAlarm(); } catch { /* nothing pending */ }
     this.pushSystem("Countdown cancelled — ready up again");
     await this.persistAndBroadcast();
@@ -1068,7 +1075,7 @@ export class Room extends DurableObject<Env> {
       // KOTH: rotate seats for the next matchup, then sit in the finished phase as the
       // between-rounds intermission. Duelists ready up (onReady accepts "finished") → countdown.
       this.applyRotation();
-      for (const p of this.state.players) p.ready = false;
+      this.resetReady();
       this.state.goAt = null;
     }
   }

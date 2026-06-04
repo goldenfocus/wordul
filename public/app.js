@@ -3371,6 +3371,14 @@ function rematchLabel() {
 // (proposing from the lobby #rematchBtn while the modal is closed otherwise gives
 // no visible "Waiting…" feedback).
 function proposeRematch() {
+  const dsnap = game.snapshot;
+  if (dsnap && dsnap.isDuel) {
+    // Duel: "play again" means ready up for the next KOTH round (no rematch handshake).
+    const meP = dsnap.players.find((p) => p.username === getUsername());
+    if (meP && meP.role === "duelist") send({ type: "ready", ready: true });
+    closeStats();
+    return;
+  }
   send({ type: "rematch_propose" });
   // Solo room: there's no opponent to wait on. The server starts a fresh game at
   // once and the round-start snapshot (plus rematch_accepted → closeStats) resets the

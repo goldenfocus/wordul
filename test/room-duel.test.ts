@@ -40,7 +40,7 @@ function mockWs(): WebSocket {
   } as unknown as WebSocket;
 }
 
-function makeRoom() {
+function makeRoom(slug = "duel") {
   const sockets: WebSocket[] = [];
   let alarmAt: number | null = null;
   const ctx = {
@@ -62,10 +62,10 @@ function makeRoom() {
   };
   const room = new Room(ctx as never, env as never) as unknown as AnyRoom;
   // Stamp identity the way fetch()/ws would (a normal room → a duel room).
-  room.state.path = "alice/duel";
+  room.state.path = `alice/${slug}`;
   room.state.owner = "alice";
-  room.state.slug = "duel";
-  room.state.name = "duel";
+  room.state.slug = slug;
+  room.state.name = slug;
   return { room, sockets, getAlarm: () => alarmAt };
 }
 
@@ -147,6 +147,34 @@ describe("duel room — full DO integration (seats → ready → countdown → K
     expect(sb.find((s) => s.username === "alice")?.wins).toBe(1);
     expect(sb.find((s) => s.username === "bob")?.losses).toBe(1);
     expect(sb.find((s) => s.username === "carol")).toBeUndefined();
+  });
+
+  it("human vs worduler advances round to round (the worduler stays ready)", async () => {
+    const { room } = makeRoom("robots"); // slug "robots" → ensureBot seats a worduler duelist
+    const a = mockWs();
+    await join(room, a, "alice");
+
+    const bot = room.state.players.find((p) => p.isBot)!;
+    expect(bot).toBeTruthy();
+    expect(bot.role).toBe("duelist");
+    expect(bot.ready).toBe(true); // born ready
+
+    // Round 1: alice's single tap is enough (the worduler is always ready) → countdown → live.
+    await room.webSocketMessage(a, JSON.stringify({ type: "ready", ready: true }));
+    expect(room.state.phase).toBe("countdown");
+    room.state.goAt = Date.now() - 1;
+    await room.alarm();
+    expect(room.state.phase).toBe("playing");
+
+    // alice solves → round finishes; the worduler must NOT be left un-ready (deadlock).
+    await room.webSocketMessage(a, JSON.stringify({ type: "guess", word: room.state.word as string }));
+    await flush();
+    expect(room.state.phase).toBe("finished");
+    expect(room.state.players.find((p) => p.isBot)!.ready).toBe(true);
+
+    // Round 2: alice's single tap re-fires the countdown — proves no round-2 deadlock.
+    await room.webSocketMessage(a, JSON.stringify({ type: "ready", ready: true }));
+    expect(room.state.phase).toBe("countdown");
   });
 
   it("a spectator in the queue cannot guess (only duelists play)", async () => {
