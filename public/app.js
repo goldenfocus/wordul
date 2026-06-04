@@ -2,7 +2,7 @@
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
-import { applyEdition, getActiveEditionId, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
+import { applyEdition, applyColorScheme, getActiveEditionId, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
 import { pickGuessEvent } from "/roomConfig.js";
 import { speakLine, speakTemplated } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
@@ -210,6 +210,7 @@ function renderHomeIdentity() {
   // hub — it only takes over when you START the WOTD, as a morph (see bloomIntoDaily).
   // This also re-persists "default", so a leftover voice can't leak into a Solo game.
   applyEdition("default");
+  applyColorScheme(null); // drop any curated day palette so the hub never wears yesterday's vibe
   const u = getUsername();
   const greeting = $("#homeGreeting");
   const intro = $("#homeIntro");
@@ -1482,6 +1483,10 @@ function onServerMessage(msg) {
       ? (msg.room.edition && msg.room.edition !== "default" ? msg.room.edition : getActiveEditionId())
       : msg.room.edition;
     if (wantEd && wantEd !== getActiveEditionId()) { applyEdition(wantEd); applySettings(getSettings()); }
+    // Vibe Studio: a curated daily ships a colorScheme — re-theme the whole day page from it
+    // (a1 → --accent re-lights all the chrome; a1/a2/a3 atoms drive the bespoke palette layers).
+    // Non-daily rooms and legacy days pass null → falls back to the active edition's own accent.
+    applyColorScheme(game.isDaily ? msg.room.colorScheme : null);
     // EZ-mode hints belong to a single round — wipe them on any new round (start,
     // rematch, or reconnecting into a different round).
     if (msg.room.phase === "playing" && msg.room.round !== game.ezRound) {
@@ -1876,7 +1881,7 @@ function render() {
   if (game.isDaily) {
     document.body.classList.add("daily");
     const tabs = $("#roomTabs"); if (tabs) tabs.hidden = dailyLocked; // no leaderboard/games until done
-    const nameBtn = $("#roomName"); if (nameBtn) nameBtn.textContent = t("daily.boardTitle", { date: game.dailyDate });
+    const nameBtn = $("#roomName"); if (nameBtn) nameBtn.textContent = snap.vibeTitle || t("daily.boardTitle", { date: game.dailyDate });
     // The lobby bar's controls (choose-mode / start / play-again) are all meaningless for
     // the daily (it auto-starts, never resets) — hide the otherwise-empty bar entirely.
     const lobbyBar = $(".lobby-bar"); if (lobbyBar) lobbyBar.hidden = true;
