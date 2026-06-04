@@ -31,49 +31,51 @@ export function buildKeyboard(root, layoutId, handlers) {
   if (!root) return;
   const rows = KEYBOARD_LAYOUTS[activeLayoutId(layoutId)];
   root.innerHTML = "";
-  // Make every LETTER key the same width across ALL rows (not just within a row): give
-  // each row the same total flex "units" by padding the shorter rows with end spacers.
-  // units = letters (1 each) + a wide key (1.5) on rows 0/1. Deficit vs the widest row is
-  // split as a spacer on each end → all letters render at rowWidth / maxUnits.
-  const WIDE = 1.5;
-  const units = rows.map((letters, idx) => letters.length + (idx <= 1 ? WIDE : 0));
-  const maxUnits = Math.max(...units);
+  // Letters fill a column on the left; the two actions live in a tall right rail. With
+  // ⌫/Return out of the grid, every LETTER key is full-size and identical across rows —
+  // each row is padded to the widest row's unit count with end spacers (deficit split
+  // both ends) so letters render at lettersWidth / maxUnits regardless of row length.
+  const maxUnits = Math.max(...rows.map((r) => r.length));
   const spacer = (flex) => {
     const s = document.createElement("div");
     s.className = "kb-spacer";
     s.style.flex = `${flex} 1 0`;
     return s;
   };
-  rows.forEach((letters, idx) => {
+  const letters = document.createElement("div");
+  letters.className = "kb-letters";
+  rows.forEach((rowLetters) => {
     const row = document.createElement("div");
     row.className = "kb-row";
-    const pad = (maxUnits - units[idx]) / 2; // split the deficit across both ends
+    const pad = (maxUnits - rowLetters.length) / 2; // split the deficit across both ends
     if (pad > 0) row.appendChild(spacer(pad));
-    for (const l of letters) {
+    for (const l of rowLetters) {
       const k = document.createElement("button");
       k.className = "key";
       k.textContent = l;
       k.dataset.key = l;
       row.appendChild(k);
     }
-    // Match a real computer keyboard: ⌫ sits top-right (end of row 1), Enter
-    // mid-right (end of row 2). The bottom row is letters only.
-    if (idx === 0) {
-      const back = document.createElement("button");
-      back.className = "key wide";
-      back.textContent = "⌫";
-      back.dataset.action = "back";
-      row.appendChild(back);
-    } else if (idx === 1) {
-      const enter = document.createElement("button");
-      enter.className = "key wide";
-      enter.textContent = "Enter";
-      enter.dataset.action = "enter";
-      row.appendChild(enter);
-    }
     if (pad > 0) row.appendChild(spacer(pad));
-    root.appendChild(row);
+    letters.appendChild(row);
   });
+  root.appendChild(letters);
+
+  // Right rail: ⌫ stacked on top, the big Return below — both fall under the right thumb.
+  const rail = document.createElement("div");
+  rail.className = "kb-rail";
+  const back = document.createElement("button");
+  back.className = "key rail-key";
+  back.textContent = "⌫";
+  back.dataset.action = "back";
+  back.setAttribute("aria-label", "Backspace");
+  const enter = document.createElement("button");
+  enter.className = "key rail-key enter";
+  enter.textContent = "↵";
+  enter.dataset.action = "enter";
+  enter.setAttribute("aria-label", "Enter");
+  rail.append(back, enter);
+  root.appendChild(rail);
   if (root.dataset.kbWired !== "1") {
     root.dataset.kbWired = "1";
 
@@ -96,8 +98,27 @@ export function buildKeyboard(root, layoutId, handlers) {
     // path below (keeps desktop + tests working).
     let activeKey = null;
     let suppressClick = false;
+    // Long-press ⌫ to wipe the whole row (the mobile twin of desktop's Esc). The
+    // timer arms on press of the back key and disarms the moment you slide off it.
+    let longPressTimer = null;
+    let didLongPress = false;
+    const HOLD_MS = 400;
+    const armHold = (k) => {
+      clearHold();
+      if (k && k.dataset.action === "back" && handlers.onClear) {
+        longPressTimer = setTimeout(() => {
+          didLongPress = true;
+          if (activeKey) { activeKey.classList.remove("pressed"); activeKey = null; }
+          handlers.onClear();
+        }, HOLD_MS);
+      }
+    };
+    const clearHold = () => {
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+    };
     const press = (k) => {
       if (activeKey && activeKey !== k) activeKey.classList.remove("pressed");
+      if (k !== activeKey) { clearHold(); armHold(k); }
       activeKey = k;
       if (k) k.classList.add("pressed");
     };
@@ -106,21 +127,25 @@ export function buildKeyboard(root, layoutId, handlers) {
       const k = e.target.closest && e.target.closest("button.key");
       if (!k) return;
       e.preventDefault();
+      didLongPress = false;
       press(k);
     });
     root.addEventListener("pointermove", (e) => {
-      if (!activeKey) return;
+      if (!activeKey && !longPressTimer) return;
       const k = keyAt(e.clientX, e.clientY);
       press(k); // null when slid into a gap → release there cancels
     });
     function endTouch(e) {
       if (e.pointerType === "mouse") return;
+      clearHold();
       const target = activeKey;
       if (activeKey) { activeKey.classList.remove("pressed"); activeKey = null; }
-      // Commit the key under the lift-off point (slide-to-correct); none → cancel.
-      const k = (e.type === "pointerup") ? (keyAt(e.clientX, e.clientY) || target) : null;
       suppressClick = true;
       setTimeout(() => { suppressClick = false; }, 400);
+      // A long-press already cleared the row on its own — don't also fire a backspace.
+      if (didLongPress) { didLongPress = false; return; }
+      // Commit the key under the lift-off point (slide-to-correct); none → cancel.
+      const k = (e.type === "pointerup") ? (keyAt(e.clientX, e.clientY) || target) : null;
       fire(k);
     }
     root.addEventListener("pointerup", endTouch);

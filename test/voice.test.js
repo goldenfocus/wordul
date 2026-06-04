@@ -63,4 +63,34 @@ describe("speakLine", () => {
     await speakLine("ed_fetchfail", RAW, RAW);
     expect(spoken).toEqual([RAW]);
   });
+
+  // Regression: a transient manifest failure must NOT be cached. In prod every line
+  // reuses the same editionId ("yang") all session, so one bad fetch used to strand the
+  // whole session on TTS — the "voice gone until I hard-refresh" bug. A later line on the
+  // same edition must retry and recover.
+  it("retries the manifest after a rejected fetch (a network blip must not poison the session)", async () => {
+    const plays = mockAudio();
+    const spoken = mockSpeech();
+    const file = `${lineKey(RAW)}.mp3`;
+    global.fetch = vi.fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue({ ok: true, json: async () => ({ [lineKey(RAW)]: file }) });
+    await speakLine("ed_blip", RAW, RAW);
+    expect(spoken).toEqual([RAW]);                       // fell back the first time
+    await speakLine("ed_blip", RAW, RAW);                // same edition → must retry
+    expect(plays).toEqual([`/voice/ed_blip/${file}`]);   // cloned clip now plays
+  });
+
+  it("retries the manifest after a transient non-ok response (a mid-deploy 5xx must not poison the session)", async () => {
+    const plays = mockAudio();
+    const spoken = mockSpeech();
+    const file = `${lineKey(RAW)}.mp3`;
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) })
+      .mockResolvedValue({ ok: true, json: async () => ({ [lineKey(RAW)]: file }) });
+    await speakLine("ed_5xx", RAW, RAW);
+    expect(spoken).toEqual([RAW]);                       // 503 → fell back to speech
+    await speakLine("ed_5xx", RAW, RAW);                 // same edition → must retry
+    expect(plays).toEqual([`/voice/ed_5xx/${file}`]);    // cloned clip now plays
+  });
 });

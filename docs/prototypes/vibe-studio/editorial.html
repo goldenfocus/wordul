@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vibe Studio • Editorial Curator — Wordul</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&amp;family=Instrument+Sans:wght@400;500;600&amp;display=swap">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&amp;family=Instrument+Sans:wght@400;500;600&amp;display=swap');
+    
+    :root {
+      --studio-bg: #f8f5f0;
+      --paper: #f4f0e6;
+      --ink: #2c2522;
+      --gold: #b38b4d;
+      --accent: #8b6f47;
+      --uv: #6b5b4f;
+    }
+    
+    body { font-family: 'Instrument Sans', system_ui, sans-serif; background: #f8f5f0; color: #2c2522; }
+    .display { font-family: 'Fraunces', Georgia, serif; }
+    
+    .editorial-card {
+      background: #f4f0e6;
+      border: 1px solid #d4c9b8;
+      box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.06);
+    }
+    
+    .section-header {
+      font-family: 'Fraunces', Georgia, serif;
+      letter-spacing: -0.01em;
+    }
+
+    .vibe-btn {
+      transition: all 0.1s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .vibe-btn:hover { transform: translateY(-1px); }
+    .vibe-btn:active { transform: scale(0.985); }
+
+    .preset-card {
+      transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .preset-card.selected {
+      border-color: #b38b4d;
+      box-shadow: 0 0 0 3px rgba(179, 139, 77, 0.15);
+    }
+
+    .wordle-board {
+      display: grid;
+      grid-template-columns: repeat(5, 42px);
+      gap: 6px;
+      justify-content: center;
+    }
+    
+    .wordle-tile {
+      width: 42px; height: 42px;
+      border: 2px solid #d4c9b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 21px;
+      font-weight: 600;
+      text-transform: uppercase;
+      transition: all 0.2s ease;
+      background: #f4f0e6;
+      color: #2c2522;
+    }
+    
+    .wordle-tile.green { background: #b38b4d; color: white; border-color: #b38b4d; }
+    .wordle-tile.yellow { background: #c9a36a; color: #2c2522; border-color: #c9a36a; }
+    .wordle-tile.gray { background: #8a8175; color: #f4f0e6; border-color: #8a8175; }
+    
+    .companion-bubble {
+      background: #f4f0e6;
+      border: 1px solid #d4c9b8;
+      max-width: 260px;
+      font-size: 13.5px;
+      line-height: 1.35;
+    }
+
+    .artifact-prose {
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: 15.5px;
+      line-height: 1.72;
+      color: #3f3630;
+    }
+    
+    .artifact-prose h1 { font-size: 28px; line-height: 1.1; margin-bottom: 12px; }
+    .artifact-prose h2 { font-size: 18px; margin-top: 28px; margin-bottom: 8px; color: #2c2522; }
+    
+    .vision-img {
+      background-size: cover;
+      background-position: center;
+      transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .vision-img:hover { transform: scale(1.015); }
+
+    .studio-input {
+      background: white;
+      border: 1px solid #d4c9b8;
+      font-size: 14px;
+    }
+
+    .granular-line {
+      font-size: 13px;
+      padding: 6px 10px;
+      background: white;
+      border: 1px solid #d4c9b8;
+    }
+
+    .nav-tab {
+      font-size: 12px;
+      letter-spacing: 0.5px;
+    }
+
+    .gold-glow {
+      box-shadow: 0 0 0 1px #b38b4d, 0 4px 16px -4px rgb(179 139 77 / 0.3);
+    }
+  </style>
+</head>
+<body class="bg-[#f8f5f0] text-[#2c2522]">
+  <div class="max-w-[1180px] mx-auto">
+    <!-- Top Admin Bar -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-[#d4c9b8]">
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 bg-[#2c2522] text-white flex items-center justify-center text-xs tracking-[2px] font-medium">W</div>
+          <div>
+            <div class="font-semibold tracking-tight text-lg">Wordul</div>
+            <div class="text-[10px] text-[#8a8175] -mt-1">ADMIN • VIBE STUDIO</div>
+          </div>
+        </div>
+        <div class="px-3 py-1 text-xs rounded bg-[#e8e1d3] text-[#8a8175]">Curating 2026-06-03</div>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        <div class="px-3 py-1.5 rounded bg-white border border-[#d4c9b8] text-xs flex items-center gap-1.5">
+          <div class="w-2 h-2 bg-emerald-600 rounded-full"></div>
+          <span class="text-[#5f564f]">Live on prod</span>
+        </div>
+        <button onclick="scheduleDay()" 
+                class="px-4 py-1.5 bg-[#2c2522] text-white text-xs font-medium rounded hover:bg-black transition flex items-center gap-2">
+          <span>SCHEDULE FOR TOMORROW</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="flex gap-6 p-6">
+      <!-- LEFT: CONTROLS / STUDIO -->
+      <div class="w-[420px] flex-shrink-0 space-y-5">
+        <div>
+          <div class="flex items-baseline justify-between mb-2">
+            <div class="section-header text-2xl font-semibold tracking-tighter">Vibe Studio</div>
+            <div class="text-[10px] px-2 py-px bg-[#e8e1d3] text-[#6b5b4f] rounded">EDITORIAL</div>
+          </div>
+          <div class="text-sm text-[#6b5b4f]">Craft a consistent theme for the daily artifact. Presets for speed. Granular for soul.</div>
+        </div>
+
+        <!-- WORD SELECTOR -->
+        <div class="editorial-card rounded-2xl p-4">
+          <div class="text-xs uppercase tracking-widest mb-2 text-[#8a8175]">The Word</div>
+          <div class="flex gap-2 items-end">
+            <div>
+              <input id="word-input" type="text" value="BASIS" maxlength="5"
+                     class="studio-input w-40 px-3 py-2 text-3xl font-semibold tracking-[3px] rounded-lg text-center uppercase" 
+                     oninput="updateWordPreview()">
+              <div class="text-[10px] mt-1 text-[#8a8175]">5 letters • validated in dictionary</div>
+            </div>
+            <button onclick="validateAndLockWord()" 
+                    class="vibe-btn px-4 py-2 text-xs border border-[#b38b4d] text-[#b38b4d] hover:bg-[#b38b4d] hover:text-white rounded-xl font-medium">LOCK WORD</button>
+          </div>
+          <div id="word-status" class="mt-1.5 text-emerald-700 text-xs flex items-center gap-1 hidden">
+            <span>✓</span> <span>Locked for 2026-06-03. Agent ready.</span>
+          </div>
+        </div>
+
+        <!-- AGENT SPIN UP -->
+        <div class="editorial-card rounded-2xl p-4">
+          <div class="flex justify-between items-center mb-2">
+            <div>
+              <div class="text-xs uppercase tracking-widest text-[#8a8175]">AI Agent</div>
+              <div class="font-semibold text-base">Summon a vibe</div>
+            </div>
+            <div class="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-800 rounded">cheap • fast</div>
+          </div>
+          
+          <div class="text-xs mb-2 text-[#6b5b4f]">Describe the feeling for "BASIS". The agent will propose 3 coherent themes (design + voice + tone).</div>
+          
+          <textarea id="agent-prompt" class="studio-input w-full h-16 px-3 py-2 text-sm rounded-xl resize-y" placeholder="A calm, foundational word about building. Warm but precise. Literary companion."></textarea>
+          
+          <button onclick="spinAgent()" 
+                  class="mt-2 w-full vibe-btn py-2.5 bg-[#2c2522] hover:bg-black text-white text-xs font-medium tracking-wider rounded-2xl flex items-center justify-center gap-2">
+            <span>SPIN UP AGENT</span>
+            <span class="text-[10px] opacity-60">⌘G</span>
+          </button>
+
+          <div id="agent-results" class="mt-3 grid grid-cols-3 gap-2 hidden"></div>
+        </div>
+
+        <!-- QUICK PRESETS -->
+        <div>
+          <div class="flex items-center gap-2 mb-1.5 px-0.5">
+            <div class="text-xs uppercase tracking-widest text-[#8a8175]">Quick Presets</div>
+            <div class="flex-1 h-px bg-[#d4c9b8]"></div>
+          </div>
+          <div class="grid grid-cols-3 gap-2" id="preset-cards">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- GRANULAR EDITOR -->
+        <div class="editorial-card rounded-2xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <div class="font-medium text-sm">Granular Fine-Tune</div>
+            <button onclick="resetToPreset()" class="text-xs text-[#8a8175] hover:text-[#2c2522]">reset to current preset</button>
+          </div>
+
+          <!-- Design -->
+          <div class="mb-4">
+            <div class="text-[10px] font-medium tracking-wider mb-1.5 text-[#8a8175]">DESIGN</div>
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+              <div>
+                <div class="text-[#6b5b4f] mb-0.5">Accent</div>
+                <input type="color" id="color-accent" value="#b38b4d" class="w-full h-7 rounded border border-[#d4c9b8]" onchange="applyLiveTheme()">
+              </div>
+              <div>
+                <div class="text-[#6b5b4f] mb-0.5">Paper / BG</div>
+                <input type="color" id="color-bg" value="#f4f0e6" class="w-full h-7 rounded border border-[#d4c9b8]" onchange="applyLiveTheme()">
+              </div>
+              <div class="col-span-2">
+                <div class="flex gap-2">
+                  <div class="flex-1">
+                    <div class="text-[#6b5b4f] text-xs mb-0.5">Font</div>
+                    <select id="font-select" class="studio-input w-full px-2 py-1 text-xs rounded" onchange="applyLiveTheme()">
+                      <option value="fraunces">Fraunces (serif)</option>
+                      <option value="instrument">Instrument Sans</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div class="text-[#6b5b4f] text-xs mb-0.5">Motion</div>
+                    <select id="motion-select" class="studio-input w-full px-2 py-1 text-xs rounded" onchange="applyLiveTheme()">
+                      <option value="calm">Calm, deliberate</option>
+                      <option value="lively">Lively</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Voice Lines -->
+          <div>
+            <div class="text-[10px] font-medium tracking-wider mb-1.5 text-[#8a8175]">VOICES — EVERY LINE</div>
+            
+            <div class="space-y-3 text-xs">
+              <!-- Greens -->
+              <div>
+                <div class="flex justify-between text-[#6b5b4f] mb-1"><span>Greens (2+)</span><span class="text-emerald-700">high impact</span></div>
+                <div id="lines-greens" class="space-y-1"></div>
+                <button onclick="addLine('greens')" class="text-[10px] mt-0.5 text-[#b38b4d] hover:underline">+ add line</button>
+              </div>
+              
+              <!-- Mistake tiers -->
+              <div>
+                <div class="text-[#6b5b4f] mb-1">Mistake (dead letter reuse) — escalating</div>
+                <div class="pl-1 space-y-1.5">
+                  <div>
+                    <div class="text-[10px] text-[#8a8175]">1st time</div>
+                    <div id="lines-mistake-1" class="space-y-1"></div>
+                  </div>
+                  <div>
+                    <div class="text-[10px] text-[#8a8175]">2nd repeat (×2 gold penalty)</div>
+                    <div id="lines-mistake-2" class="space-y-1"></div>
+                  </div>
+                  <div>
+                    <div class="text-[10px] text-[#8a8175]">3rd+ repeat</div>
+                    <div id="lines-mistake-3" class="space-y-1"></div>
+                  </div>
+                </div>
+                <button onclick="addLine('mistake-1')" class="text-[10px] mt-1 text-[#b38b4d] hover:underline">+ add tier 1 line</button>
+              </div>
+
+              <div>
+                <div class="text-[#6b5b4f] mb-1">Progress / Warm</div>
+                <div id="lines-progress" class="space-y-1"></div>
+                <button onclick="addLine('progress')" class="text-[10px] mt-0.5 text-[#b38b4d] hover:underline">+ add</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3 pt-3 border-t border-[#d4c9b8] text-[10px] text-[#8a8175]">
+            Talkativeness: <input type="range" id="talk-range" min="0.2" max="1" step="0.1" value="0.7" class="align-middle w-20" oninput="applyLiveTheme()"> <span id="talk-value">70%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CENTER / RIGHT: LIVE PREVIEWS -->
+      <div class="flex-1 min-w-0 space-y-4">
+        <!-- Live Board + Companion -->
+        <div class="editorial-card rounded-3xl p-5">
+          <div class="flex justify-between items-center mb-3">
+            <div class="uppercase text-xs tracking-[1px] text-[#8a8175]">Live Preview • Board reacts to current vibe</div>
+            <button onclick="makeGuess()" class="text-xs px-3 py-1 border border-[#b38b4d] text-[#b38b4d] rounded-full text-[10px]">SUBMIT TEST GUESS</button>
+          </div>
+          
+          <div class="flex gap-5">
+            <!-- Board -->
+            <div>
+              <div id="preview-board" class="wordle-board"></div>
+              <div class="mt-2 text-center">
+                <input id="guess-input" type="text" maxlength="5" placeholder="TYPE A GUESS" 
+                       class="bg-white border border-[#d4c9b8] text-center text-sm tracking-widest px-3 py-1 rounded w-36 uppercase font-medium"
+                       onkeydown="if(event.key==='Enter') makeGuess()">
+              </div>
+              <div class="text-[10px] text-center text-[#8a8175] mt-1">Type or use the board. Repeats escalate.</div>
+            </div>
+
+            <!-- Companion -->
+            <div class="flex-1">
+              <div class="text-xs text-[#8a8175] mb-1">COMPANION (current lines)</div>
+              <div id="companion-bubble" 
+                   class="companion-bubble px-3.5 py-3 rounded-2xl text-[#3f3630] italic">
+                The board is waiting, precious.
+              </div>
+              <div class="flex gap-1 mt-1.5">
+                <div onclick="triggerCompanion('greens')" class="cursor-pointer px-2 py-px text-[10px] bg-emerald-100 text-emerald-800 rounded">+2 greens</div>
+                <div onclick="triggerCompanion('mistake')" class="cursor-pointer px-2 py-px text-[10px] bg-red-100 text-red-800 rounded">mistake</div>
+                <div onclick="triggerCompanion('progress')" class="cursor-pointer px-2 py-px text-[10px] bg-amber-100 text-amber-800 rounded">progress</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Story + Artifact Expander -->
+        <div class="editorial-card rounded-3xl p-5">
+          <div class="mb-3">
+            <div class="uppercase text-xs tracking-widest text-[#8a8175]">THE STORY</div>
+            <div class="font-medium">Start with a personal line. Then expand.</div>
+          </div>
+          
+          <textarea id="story-starter" class="studio-input w-full px-3 py-2 text-sm h-12 rounded-2xl" 
+                    placeholder="I chose BASIS because it reminds me of the foundations we lay when we wordle every day..."></textarea>
+          
+          <div class="flex gap-2 mt-2">
+            <button onclick="expandStory()" 
+                    class="vibe-btn flex-1 py-2 text-sm bg-[#b38b4d] hover:bg-[#a07a3f] text-white font-medium rounded-2xl">EXPAND WITH AI → FULL SEO ARTIFACT + IMAGES + VIDEO</button>
+            <button onclick="showDailyArtifact()" 
+                    class="vibe-btn px-4 text-sm border border-[#b38b4d] text-[#b38b4d] rounded-2xl">VIEW AS DAILY PAGE</button>
+          </div>
+
+          <div id="artifact-preview" class="mt-4 hidden border border-[#d4c9b8] bg-white rounded-2xl p-4 text-sm">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <div class="text-[10px] text-[#8a8175] px-1 flex items-center gap-2">
+          <div>Consistency enforced: palette, voice tone, and story voice all derive from the same theme.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Tailwind script
+    function initTailwind() {
+      document.documentElement.style.setProperty('--accent', '#b38b4d');
+    }
+    
+    let currentTheme = {
+      id: 'editorial-foundation',
+      name: 'Editorial Foundation',
+      accent: '#b38b4d',
+      bg: '#f4f0e6',
+      font: 'fraunces',
+      lines: {
+        greens: ["Two greens. The structure is taking shape.", "A solid base. Keep laying the stones."],
+        progress: ["Warmer. The word has weight now.", "A good step. Foundations matter."],
+        mistake1: ["That letter was already ruled out. Mind the blueprint."],
+        mistake2: ["Again? The foundation is cracking. Pay attention."],
+        mistake3: ["Third time. The structure won't hold if you keep repeating mistakes."]
+      },
+      talkativeness: 0.7
+    };
+
+    let currentWord = 'BASIS';
+    let boardState = [];
+    let previousGuesses = [];
+    let deadLetters = new Set();
+
+    function initPresets() {
+      const container = document.getElementById('preset-cards');
+      const presets = [
+        { id: 'editorial-foundation', name: 'Editorial\nFoundation', accent: '#b38b4d', desc: 'Calm. Literary. Built to last.' },
+        { id: 'yang-gold', name: 'Yang’s\nTable', accent: '#f0c14b', desc: 'Warm gold. Witty companion.' },
+        { id: 'arcade-crt', name: 'Arcade\nCRT', accent: '#5ee27a', desc: 'Vibrant. Retro play.' }
+      ];
+      
+      container.innerHTML = '';
+      presets.forEach(p => {
+        const el = document.createElement('div');
+        el.className = `preset-card cursor-pointer p-2.5 rounded-2xl border text-center text-xs border-[#d4c9b8] bg-white hover:border-[#b38b4d]`;
+        el.innerHTML = `
+          <div class="font-medium leading-tight mb-0.5 tracking-tight">${p.name}</div>
+          <div class="text-[10px] text-[#8a8175]">${p.desc}</div>
+          <div class="mt-1.5 flex justify-center"><div class="w-5 h-1.5 rounded" style="background:${p.accent}"></div></div>
+        `;
+        el.onclick = () => applyPreset(p.id, p.accent);
+        container.appendChild(el);
+      });
+    }
+
+    function applyPreset(presetId, accentColor) {
+      const cards = document.querySelectorAll('#preset-cards > div');
+      cards.forEach(c => c.classList.remove('selected'));
+      
+      // find clicked and mark
+      event.currentTarget && event.currentTarget.classList.add('selected');
+
+      currentTheme = { ...currentTheme, id: presetId, accent: accentColor };
+      
+      // Update color inputs
+      document.getElementById('color-accent').value = accentColor;
+      
+      // Load different line banks based on preset
+      if (presetId === 'yang-gold') {
+        currentTheme.lines = {
+          greens: ["Two greens, baby. That was no accident.", "Double green. The table is shaking."],
+          progress: ["Ooh, something stuck. We're getting warmer.", "Progress, my favorite person."],
+          mistake1: ["You reused a dead letter. We KNEW that one was out."],
+          mistake2: ["Recycling greys now? The clues are right there, love."],
+          mistake3: ["Third time. Sloppy. Focus."]
+        };
+        currentTheme.talkativeness = 0.85;
+      } else if (presetId === 'arcade-crt') {
+        currentTheme.lines = {
+          greens: ["DOUBLE LOCK. NICE.", "TWO GREENS. SYSTEM STABLE."],
+          progress: ["SIGNAL STRENGTH INCREASING.", "WARM. DATA FLOW GOOD."],
+          mistake1: ["INVALID. THAT SIGNAL IS DEAD."],
+          mistake2: ["REPEAT ERROR. RECALIBRATE."],
+          mistake3: ["CRITICAL. MULTIPLE FAILURES."]
+        };
+        currentTheme.talkativeness = 0.95;
+      } else {
+        // editorial default
+        currentTheme.lines = {
+          greens: ["Two greens. The structure is taking shape.", "A solid base. Keep laying the stones."],
+          progress: ["Warmer. The word has weight now.", "A good step. Foundations matter."],
+          mistake1: ["That letter was already ruled out. Mind the blueprint."],
+          mistake2: ["Again? The foundation is cracking. Pay attention."],
+          mistake3: ["Third time. The structure won't hold if you keep repeating mistakes."]
+        };
+        currentTheme.talkativeness = 0.65;
+      }
+      
+      document.getElementById('talk-range').value = currentTheme.talkativeness;
+      document.getElementById('talk-value').textContent = Math.round(currentTheme.talkativeness * 100) + '%';
+      
+      applyLiveTheme();
+      renderGranularLines();
+      updateCompanion('The board is waiting, precious.');
+    }
+
+    function applyLiveTheme() {
+      const accent = document.getElementById('color-accent').value;
+      const bg = document.getElementById('color-bg').value;
+      const font = document.getElementById('font-select').value;
+      const motion = document.getElementById('motion-select').value;
+      
+      currentTheme.accent = accent;
+      currentTheme.bg = bg;
+      
+      // Update board tiles colors etc via CSS vars on a wrapper
+      const board = document.getElementById('preview-board');
+      board.style.setProperty('--accent', accent);
+      
+      // Update a few live elements
+      document.querySelectorAll('.wordle-tile.green').forEach(t => t.style.background = accent);
+      
+      // Talkativeness
+      currentTheme.talkativeness = parseFloat(document.getElementById('talk-range').value);
+      document.getElementById('talk-value').textContent = Math.round(currentTheme.talkativeness * 100) + '%';
+      
+      // Font hint on companion
+      const bubble = document.getElementById('companion-bubble');
+      if (font === 'fraunces') bubble.style.fontFamily = "'Fraunces', Georgia, serif";
+      else bubble.style.fontFamily = "'Instrument Sans', system_ui, sans-serif";
+    }
+
+    function renderGranularLines() {
+      const sections = {
+        'greens': 'lines-greens',
+        'progress': 'lines-progress',
+        'mistake-1': 'lines-mistake-1',
+        'mistake-2': 'lines-mistake-2',
+        'mistake-3': 'lines-mistake-3'
+      };
+      
+      Object.keys(sections).forEach(key => {
+        const container = document.getElementById(sections[key]);
+        if (!container) return;
+        container.innerHTML = '';
+        
+        const lines = currentTheme.lines[key] || [];
+        lines.forEach((line, idx) => {
+          const row = document.createElement('div');
+          row.className = 'flex items-center gap-1';
+          row.innerHTML = `
+            <input value="${line}" class="granular-line flex-1 rounded px-2 py-px text-xs" 
+                   onchange="updateLine('${key}', ${idx}, this.value)">
+            <button onclick="removeLine('${key}', ${idx})" class="text-red-600 text-[10px] px-1">×</button>
+          `;
+          container.appendChild(row);
+        });
+        
+        if (lines.length === 0) {
+          container.innerHTML = '<div class="text-[10px] text-[#8a8175] italic">No lines — will fall back to edition default</div>';
+        }
+      });
+    }
+
+    function updateLine(category, index, value) {
+      if (!currentTheme.lines[category]) currentTheme.lines[category] = [];
+      currentTheme.lines[category][index] = value;
+    }
+    
+    function addLine(category) {
+      if (!currentTheme.lines[category]) currentTheme.lines[category] = [];
+      currentTheme.lines[category].push("New line. Edit me.");
+      renderGranularLines();
+    }
+    
+    function removeLine(category, index) {
+      currentTheme.lines[category].splice(index, 1);
+      renderGranularLines();
+    }
+
+    function initBoard() {
+      const board = document.getElementById('preview-board');
+      board.innerHTML = '';
+      boardState = [];
+      
+      for (let i = 0; i < 6; i++) {
+        const row = document.createElement('div');
+        row.className = 'contents';
+        for (let j = 0; j < 5; j++) {
+          const tile = document.createElement('div');
+          tile.className = 'wordle-tile rounded font-semibold';
+          tile.textContent = '';
+          row.appendChild(tile);
+        }
+        board.appendChild(row);
+      }
+      
+      // Pre-fill first row example
+      const firstRow = board.children[0];
+      const demo = ['B','A','S','I','S'];
+      for (let i=0; i<5; i++) {
+        firstRow.children[i].textContent = demo[i];
+        firstRow.children[i].classList.add('green');
+      }
+    }
+
+    function updateWordPreview() {
+      // live update header or something if wanted
+    }
+
+    function validateAndLockWord() {
+      const input = document.getElementById('word-input').value.toUpperCase().trim();
+      if (input.length !== 5) {
+        alert('Word must be exactly 5 letters');
+        return;
+      }
+      currentWord = input;
+      document.getElementById('word-status').classList.remove('hidden');
+      document.getElementById('word-status').innerHTML = `✓ Locked “${currentWord}”. Ready for vibe.`;
+      
+      // Reset board for new word
+      previousGuesses = [];
+      deadLetters = new Set();
+      initBoard();
+    }
+
+    function spinAgent() {
+      const promptEl = document.getElementById('agent-prompt');
+      const prompt = promptEl.value.trim() || "A foundational word. Calm and deliberate.";
+      
+      const results = document.getElementById('agent-results');
+      results.innerHTML = '';
+      results.classList.remove('hidden');
+      
+      const proposals = [
+        { 
+          name: "Editorial Foundation", 
+          accent: "#b38b4d", 
+          desc: "Literary. Built to last. Precise companion.",
+          config: { lines: { greens: ["Two greens. The structure is taking shape."], mistake1: ["That letter was already ruled out. Mind the blueprint."] } }
+        },
+        { 
+          name: "Quiet Ledger", 
+          accent: "#6b5b4f", 
+          desc: "Minimal. Record-keeper energy. Dry wit.",
+          config: { lines: { greens: ["Clean double. Noted."], mistake1: ["Already accounted for."] } }
+        },
+        { 
+          name: "Stone & Ink", 
+          accent: "#8b6f47", 
+          desc: "Tactile. Heavy paper. Thoughtful voice.",
+          config: { lines: { greens: ["A firm foundation laid."], mistake1: ["The ink was already dry on that letter."] } }
+        }
+      ];
+      
+      proposals.forEach((p, i) => {
+        const card = document.createElement('div');
+        card.className = `cursor-pointer p-2 rounded-xl border text-center text-xs border-[#d4c9b8] bg-white hover:border-[#b38b4d]`;
+        card.innerHTML = `
+          <div class="font-medium leading-none mb-1">${p.name}</div>
+          <div class="h-2 w-8 mx-auto my-1 rounded" style="background:${p.accent}"></div>
+          <div class="text-[9px] text-[#6b5b4f] leading-tight">${p.desc}</div>
+        `;
+        card.onclick = () => {
+          currentTheme.accent = p.accent;
+          currentTheme.lines = {...currentTheme.lines, ...p.config.lines};
+          document.getElementById('color-accent').value = p.accent;
+          applyLiveTheme();
+          renderGranularLines();
+          updateCompanion("A solid choice. The word feels right.");
+        };
+        results.appendChild(card);
+      });
+    }
+
+    function makeGuess() {
+      const input = document.getElementById('guess-input').value.toUpperCase();
+      if (input.length !== 5) return;
+      
+      const board = document.getElementById('preview-board');
+      const rowIndex = previousGuesses.length;
+      if (rowIndex >= 6) return;
+      
+      const row = board.children[rowIndex];
+      const secret = currentWord.split('');
+      const guess = input.split('');
+      
+      const result = [];
+      const used = new Set();
+      
+      // First pass: greens
+      for (let i = 0; i < 5; i++) {
+        if (guess[i] === secret[i]) {
+          result[i] = 'green';
+          used.add(i);
+        }
+      }
+      
+      // Second: yellows
+      for (let i = 0; i < 5; i++) {
+        if (result[i]) continue;
+        let found = false;
+        for (let s = 0; s < 5; s++) {
+          if (!used.has(s) && guess[i] === secret[s]) {
+            result[i] = 'yellow';
+            used.add(s);
+            found = true;
+            break;
+          }
+        }
+        if (!found) result[i] = 'gray';
+      }
+      
+      // Render
+      let newDead = new Set(deadLetters);
+      for (let i = 0; i < 5; i++) {
+        const tile = row.children[i];
+        tile.textContent = guess[i];
+        tile.classList.remove('green', 'yellow', 'gray');
+        tile.classList.add(result[i]);
+        
+        if (result[i] === 'gray') newDead.add(guess[i]);
+      }
+      
+      previousGuesses.push(input);
+      deadLetters = newDead;
+      
+      // Determine companion reaction
+      const greens = result.filter(r => r === 'green').length;
+      const yellows = result.filter(r => r === 'yellow').length;
+      const isRepeatMistake = guess.some((l, i) => result[i] === 'gray' && previousGuesses.length > 1 && Array.from(deadLetters).includes(l));
+      
+      let reaction = '';
+      let tier = 1;
+      
+      if (greens >= 2) {
+        reaction = currentTheme.lines.greens?.[0] || "Strong foundation.";
+      } else if (yellows >= 1 || greens === 1) {
+        reaction = currentTheme.lines.progress?.[0] || "Warmer now.";
+      } else if (isRepeatMistake) {
+        tier = Math.min(3, previousGuesses.filter(g => g === input).length + 1);
+        const key = `mistake-${Math.min(3, tier)}`;
+        reaction = (currentTheme.lines[key] && currentTheme.lines[key][0]) || "Careful with repeats.";
+      } else {
+        reaction = currentTheme.lines.mistake1?.[0] || "Not it. Adjust.";
+      }
+      
+      updateCompanion(reaction);
+      
+      // Clear input
+      document.getElementById('guess-input').value = '';
+      
+      // Check win
+      if (greens === 5) {
+        setTimeout(() => {
+          updateCompanion("The word is yours. Beautifully built.");
+        }, 700);
+      }
+    }
+
+    function triggerCompanion(type) {
+      let line = '';
+      if (type === 'greens') line = currentTheme.lines.greens?.[0] || "Excellent placement.";
+      else if (type === 'progress') line = currentTheme.lines.progress?.[0] || "Good progress.";
+      else if (type === 'mistake') line = currentTheme.lines['mistake-1']?.[0] || "We knew that letter.";
+      
+      updateCompanion(line);
+    }
+
+    function updateCompanion(text) {
+      const bubble = document.getElementById('companion-bubble');
+      bubble.style.transition = 'opacity .2s';
+      bubble.style.opacity = '0';
+      
+      setTimeout(() => {
+        bubble.textContent = text;
+        bubble.style.opacity = '1';
+      }, 120);
+    }
+
+    function expandStory() {
+      const starter = document.getElementById('story-starter').value.trim() || 
+                      `I chose ${currentWord} because it reminds me of the foundations we lay when we wordle every day.`;
+      
+      const preview = document.getElementById('artifact-preview');
+      preview.classList.remove('hidden');
+      
+      const expanded = `
+        <div class="artifact-prose">
+          <h1 class="display tracking-tighter">Why ${currentWord}?</h1>
+          <p class="text-sm text-[#6b5b4f] mb-3">A note from the curator • June 3, 2026</p>
+          
+          <p>${starter}</p>
+          
+          <p>In the world of Wordul, every daily word is more than a puzzle. It is a small architecture. ${currentWord} carries the weight of beginnings — the first stones you place when the board is still blank and full of promise.</p>
+          
+          <p>When you lock in those early greens, you are not just guessing. You are building. The companion watches. The gold accumulates. The structure rises.</p>
+          
+          <h2>The hidden gift</h2>
+          <p>There is always more than one word. If you listen carefully, if you type the secret second word that only reveals itself to the patient, something magical happens. The board transforms. Letters become blocks. The game becomes a tiny city you get to shape for a moment. Creativity, play, and precision all at once.</p>
+          
+          <p>That is what ${currentWord} taught me. Foundations are not boring. They are where the wonder lives.</p>
+        </div>
+        
+        <div class="mt-4">
+          <div class="uppercase text-xs tracking-widest mb-2 text-[#8a8175]">Visions generated for this day</div>
+          <div class="grid grid-cols-3 gap-2">
+            <div class="vision-img h-20 rounded-xl overflow-hidden relative border border-[#d4c9b8]" style="background: linear-gradient(135deg, #b38b4d22, #f4f0e6);">
+              <div class="absolute bottom-0 left-0 right-0 p-2 text-[9px] bg-gradient-to-t from-black/50 to-transparent text-white">The first green locked in like a cornerstone</div>
+            </div>
+            <div class="vision-img h-20 rounded-xl overflow-hidden relative border border-[#d4c9b8]" style="background: linear-gradient(135deg, #6b5b4f22, #f4f0e6);">
+              <div class="absolute bottom-0 left-0 right-0 p-2 text-[9px] bg-gradient-to-t from-black/50 to-transparent text-white">Worduling as daily ritual and quiet rebellion</div>
+            </div>
+            <div class="vision-img h-20 rounded-xl overflow-hidden relative border border-[#d4c9b8]" style="background: linear-gradient(135deg, #8b6f4722, #f4f0e6);">
+              <div class="absolute bottom-0 left-0 right-0 p-2 text-[9px] bg-gradient-to-t from-black/50 to-transparent text-white">When the hidden word revealed a whole small world</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="mt-3 text-xs">
+          <button onclick="playVisionVideo()" class="px-3 py-1 text-xs border border-[#b38b4d] rounded-full text-[#b38b4d]">▶ Play the 14-second vision</button>
+        </div>
+      `;
+      
+      preview.innerHTML = expanded;
+    }
+
+    function playVisionVideo() {
+      const preview = document.getElementById('artifact-preview');
+      const videoHTML = `
+        <div class="fixed inset-0 bg-black/90 flex items-center justify-center z-[999]" onclick="this.remove()">
+          <div class="max-w-lg w-full mx-4" onclick="event.stopImmediatePropagation()">
+            <div class="bg-[#f4f0e6] rounded-3xl overflow-hidden border border-[#d4c9b8]">
+              <div class="px-4 py-3 flex justify-between text-sm items-center border-b border-[#d4c9b8]">
+                <div class="font-medium">The Vision • 0:14</div>
+                <div class="text-[#8a8175]">click anywhere to close</div>
+              </div>
+              <div class="p-6 bg-[#2c2522] text-[#f4f0e6] text-center relative h-64 flex items-center justify-center" style="background: radial-gradient(circle at 50% 30%, #b38b4d22, transparent)">
+                <div id="vision-anim" class="text-6xl font-semibold tracking-[6px] display transition-all" style="color:#f4f0e6">B A S I S</div>
+                <div class="absolute bottom-6 text-xs opacity-60">Letters become blocks. A city rises.</div>
+              </div>
+            </div>
+            <div class="text-center mt-3 text-xs text-white/60">Simulated. Real video would be generated by the agent and attached to the day.</div>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', videoHTML);
+      
+      // simple animation
+      setTimeout(() => {
+        const anim = document.getElementById('vision-anim');
+        if (anim) {
+          anim.style.transform = 'scale(0.6)';
+          anim.style.letterSpacing = '2px';
+          setTimeout(() => {
+            if (anim) anim.style.transform = 'scale(1.1)';
+          }, 600);
+        }
+      }, 400);
+    }
+
+    function showDailyArtifact() {
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 bg-black/70 flex items-start justify-center pt-8 z-[999] overflow-auto';
+      modal.innerHTML = `
+        <div class="max-w-[820px] w-full mx-4 bg-[#f4f0e6] rounded-3xl overflow-hidden border border-[#d4c9b8] mb-8">
+          <!-- Day Header -->
+          <div class="px-8 py-5 border-b border-[#d4c9b8] flex items-center justify-between bg-white">
+            <div>
+              <div class="text-xs tracking-[2px] text-[#8a8175]">WORDUL OF THE DAY</div>
+              <div class="display text-4xl font-semibold tracking-tighter">BASIS • JUNE 3 2026</div>
+            </div>
+            <div class="text-right text-xs">
+              <div class="text-emerald-700">+102 gold for trying</div>
+              <div class="text-[#8a8175]">You finished 4th today</div>
+            </div>
+          </div>
+          
+          <div class="p-8">
+            <!-- Rich Story -->
+            <div class="max-w-prose">
+              <div class="artifact-prose">
+                <p class="font-medium text-[#6b5b4f]">I chose BASIS because it reminds me of the foundations we lay when we wordle every day.</p>
+                <p class="mt-4">In the world of Wordul, every daily word is more than a puzzle. It is a small architecture...</p>
+                <p class="mt-4">... [the full expanded SEO post would live here, rich with internal links to past days, the wordul world lore, and beautiful typography]</p>
+              </div>
+            </div>
+            
+            <!-- Visions -->
+            <div class="mt-8">
+              <div class="uppercase tracking-widest text-xs mb-2 text-[#8a8175]">VISIONS FOR THIS DAY</div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="aspect-video bg-gradient-to-br from-[#b38b4d] to-[#6b5b4f] rounded-2xl flex items-center justify-center text-white text-sm relative overflow-hidden">
+                  <div>The cornerstone moment</div>
+                </div>
+                <div class="aspect-video bg-gradient-to-br from-[#8b6f47] to-[#2c2522] rounded-2xl flex items-center justify-center text-white text-sm">The city of letters</div>
+              </div>
+              <div class="mt-2">
+                <button onclick="alert('In real version this would play the agent-generated 14s video attached to the day record.'); this.closest('.fixed').remove()" 
+                        class="text-xs px-4 py-2 border border-[#b38b4d] rounded-full">▶ WATCH THE VISION (14s)</button>
+              </div>
+            </div>
+            
+            <!-- Leaderboard + Chat -->
+            <div class="mt-8 grid grid-cols-2 gap-4">
+              <div>
+                <div class="text-xs tracking-widest mb-1.5">TODAY'S LEADERBOARD</div>
+                <div class="bg-white border border-[#d4c9b8] rounded-2xl p-3 text-xs space-y-1">
+                  <div class="flex justify-between"><span>1. curator42</span><span class="font-medium">1240</span></div>
+                  <div class="flex justify-between"><span>2. wordlingqueen</span><span class="font-medium">980</span></div>
+                  <div class="flex justify-between opacity-80"><span>3. you (anhyan)</span><span class="font-medium">+102</span></div>
+                </div>
+              </div>
+              <div>
+                <div class="text-xs tracking-widest mb-1.5">CHAT — THEME: EDITORIAL</div>
+                <div class="bg-white border border-[#d4c9b8] rounded-2xl p-3 h-24 overflow-auto text-xs space-y-1" id="artifact-chat">
+                  <div><span class="text-[#8a8175]">wordlingqueen:</span> that hidden word moment was insane</div>
+                  <div><span class="text-[#8a8175]">you:</span> the foundation metaphor hit different today</div>
+                </div>
+                <input placeholder="Say something in the theme..." class="mt-1 w-full text-xs px-2 py-1 border border-[#d4c9b8] rounded" onkeydown="if(event.key==='Enter'){const c=document.getElementById('artifact-chat'); c.innerHTML += '<div><span class=\\'text-[#8a8175]\\'>you:</span> ' + this.value + '</div>'; this.value=''; c.scrollTop=999}">
+              </div>
+            </div>
+            
+            <div class="mt-6 text-center">
+              <div class="inline-flex items-center gap-2 text-xs bg-white border border-[#d4c9b8] px-3 py-1 rounded-full">
+                <div class="w-5 h-5 bg-[#b38b4d] rounded-full flex items-center justify-center text-[8px] text-white">A</div>
+                <div>This word warded by <span class="font-medium">@anhyan</span> • <a href="#" class="underline">view B.E.O. profile</a></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    }
+
+    function scheduleDay() {
+      if (!currentWord) {
+        alert('Lock a word first');
+        return;
+      }
+      const ok = confirm(`Schedule ${currentWord} with current vibe for tomorrow? The rich artifact (story + media) will be attached.`);
+      if (ok) {
+        const banner = document.createElement('div');
+        banner.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#2c2522] text-white px-6 py-3 rounded-3xl text-sm flex items-center gap-3 shadow-xl';
+        banner.innerHTML = `✓ ${currentWord} scheduled for 2026-06-03. Artifact published. <button class="underline" onclick="this.parentNode.remove(); window.location.href='https://wordul.com/daily/2026-06-03'">VIEW LIVE</button>`;
+        document.body.appendChild(banner);
+        setTimeout(() => banner.remove(), 6500);
+      }
+    }
+
+    function initEverything() {
+      initTailwind();
+      initPresets();
+      initBoard();
+      
+      // Seed a nice starter
+      document.getElementById('story-starter').value = `I chose ${currentWord} because it reminds me of the foundations we lay when we wordle every day.`;
+      
+      // Seed some lines
+      renderGranularLines();
+      
+      // Initial live theme
+      document.getElementById('color-accent').value = currentTheme.accent;
+      document.getElementById('color-bg').value = currentTheme.bg;
+      document.getElementById('font-select').value = 'fraunces';
+      document.getElementById('talk-range').value = currentTheme.talkativeness;
+      document.getElementById('talk-value').textContent = Math.round(currentTheme.talkativeness * 100) + '%';
+      
+      // Initial companion
+      setTimeout(() => {
+        updateCompanion("The board is waiting, precious.");
+      }, 400);
+      
+      // Keyboard support
+      document.addEventListener('keydown', function(e) {
+        if (e.metaKey && e.key === 'g') {
+          e.preventDefault();
+          spinAgent();
+        }
+      });
+      
+      // Demo: make one initial guess visible
+      setTimeout(() => {
+        const board = document.getElementById('preview-board');
+        // already prefilled one row in init
+      }, 200);
+      
+      // Make first preset selected visually
+      setTimeout(() => {
+        const first = document.querySelector('#preset-cards > div');
+        if (first) first.classList.add('selected');
+      }, 50);
+    }
+    
+    window.onload = initEverything;
+  </script>
+</body>
+</html>

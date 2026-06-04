@@ -14,8 +14,25 @@ export const en = {
   "endscreen.goldBreakdown": "Gold breakdown",
   "endscreen.youWon": "🎉 You got it in {n}!",
   "endscreen.someoneWon": "{who} got it first.",
+  "endscreen.outpaced": "{who} beat you to it.",
+  "endscreen.playAgain": "Play again",
+  "endscreen.rematch": "Rematch",
+  "endscreen.joinNext": "Join next game →",
+  "endscreen.createGame": "Create your own game",
+  "endscreen.mainMenu": "Main menu",
+  "rematch.waiting": "Waiting for {who}… ✕",
+  "rematch.prompt": "{who} wants to run it back",
+  "rematch.accept": "Accept",
+  "rematch.decline": "Decline",
+  "rematch.declined": "{who} isn't up for another — nice game!",
+  "rematch.timeout": "{who} didn't answer — nice game!",
+  "rematch.left": "{who} stepped away — nice game!",
   "endscreen.nobodyWon": "Nobody got it this time.",
   "endscreen.didYouKnow": "Did you know",
+
+  // Stats modal (server-truth)
+  "stats.needUsername": "Pick a username to track your stats.",
+  "stats.loadFailed": "Couldn’t load your stats right now.",
 
   // Mode picker (lobby)
   "mode.heading": "Choose a mode",
@@ -26,4 +43,19 @@ export const en = {
   "mode.longgame.blurb": "Turn-based. 3-day clock. Play a row, then wait.",
   "mode.challenge.label": "Open Challenge",
   "mode.challenge.blurb": "One word, always open. Beat the standing record.",
+
+  // Wordul of the Day
+  "daily.entryTitle": "Today's Wordul.",
+  "daily.entrySub": "One word. The whole world. Pick a username to play.",
+  "daily.entryCta": "Play today →",
+  "daily.boardTitle": "Wordul of the Day · {date}",
+  "daily.goodySolved": "🎁 Solved it! The word was {word}. +{gold} gold.",
+  "daily.goodySolvedNoGold": "🎉 Solved it! The word was {word}.",
+  "daily.goodyMissed": "The word was {word}. +{gold} gold for trying — come back tomorrow.",
+  "daily.goodyMissedNoGold": "The word was {word}. Come back tomorrow.",
+  "daily.storyFallbackTitle": "The story behind the word",
+  "daily.storyKicker": "Why this word",
+  "daily.keepPlaying": "Keep playing",
+  "daily.browsePast": "Browse past days →",
+  "daily.archiveTitle": "Every Wordul of the Day",
 };

@@ -47,6 +47,11 @@ export const edition = {
         "Shake it off, it was {answer}.",
         "We'll get the next one. Answer: {answer}.",
       ],
+      wipe: [
+        "Cleared it. No harm, start fresh.",
+        "All gone — take another run at it.",
+        "Clean board. Whenever you're ready.",
+      ],
       idle: [
         "Take your time — no rush here.",
         "I'm right here when you're ready.",

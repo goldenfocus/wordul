@@ -1,7 +1,18 @@
 // Wordul edition runtime: apply theme packs, picker, shared wallet, companion.
 import { EDITIONS, getEdition } from "/editions/index.js";
+import { resolveTier, shouldSpeak } from "/companion.js";
+import { mergeConfig } from "/roomConfig.js";
 
 const LS = { edition: "wordul.edition", gold: "wordul.gold", muted: "wordul.muted" };
+
+// Gold is now server-authoritative (USER ledger). The local value is a display cache
+// only; clear any pre-existing balance once so a hacked/leaked localStorage number
+// can't pose as a real balance. (Spec: secured two-token economy.)
+if (typeof localStorage !== "undefined" && localStorage.getItem("wordul.goldMigratedV2") !== "1") {
+  localStorage.removeItem(LS.gold);
+  localStorage.setItem("wordul.goldMigratedV2", "1");
+}
+
 const DEFAULT_GOLD = 0; // you start broke and earn your way up
 
 export function getGold() {
@@ -44,39 +55,114 @@ export function drainGold(amount) {
 let activeId = "default";
 const reactCounters = {};
 
+// Rung 1: no per-room override exists yet, so the room voice config is empty and
+// companionReact resolves byte-for-byte to the edition default. Rung 2 returns
+// `currentSnapshot?.roomConfig?.voice ?? {}` here — the ONE place persistence wires in.
+function snapshotVoiceConfig() { return {}; }
+
 export function resolveEdition(id) { return getEdition(id); }
+// Sensory feedback config for committing a sloppy mistake (reusing a proven-gray
+// letter). Every room inherits this default; an edition can override via
+// effects.mistake. See app.js mistakeFx().
+const DEFAULT_MISTAKE_FX = { shake: true, crack: true, sound: "glass", flash: false, haptics: false };
+export function activeMistakeFx() { return getEdition(activeId).effects?.mistake ?? DEFAULT_MISTAKE_FX; }
 export function getActiveEditionId() {
   return localStorage.getItem(LS.edition) ?? "default";
 }
 
+// The companion always speaks in Yang's cloned voice + lines, regardless of the
+// active visual theme. Voice is decoupled from theming on purpose.
+export const VOICE_EDITION = "yang";
+
 export function companionReact(event, ctx = {}) {
-  const ed = getEdition(activeId);
-  const bank = ed.companion?.lines?.[event] ?? [];
-  if (bank.length === 0) return { text: "", raw: "", speak: false };
-  const i = (reactCounters[event] = (reactCounters[event] ?? -1) + 1) % bank.length;
+  const ed = getEdition(VOICE_EDITION);
+  // Resolve config through the merge contract: edition default <- room override (empty in rung 1).
+  const merged = mergeConfig(
+    { voice: { react: ed.companion?.react ?? {}, lines: ed.companion?.lines ?? {} } },
+    { voice: snapshotVoiceConfig() },
+  );
+  const react = merged.voice?.react;
+  const banks = merged.voice?.lines?.[event];
+  if (!banks) return { text: "", raw: "", tier: null, speak: false };
+
+  // Flat bank → use the array; nested bank → resolve the tier and read its array.
+  const tier = Array.isArray(banks) ? null : resolveTier(event, ctx, react);
+  const bank = Array.isArray(banks) ? banks : (banks[tier] ?? []);
+  if (bank.length === 0) return { text: "", raw: "", tier, speak: false };
+
+  // Round-robin within the chosen tier so the same line never repeats back-to-back.
+  const counterKey = tier ? `${event}:${tier}` : event;
+  const i = (reactCounters[counterKey] = (reactCounters[counterKey] ?? -1) + 1) % bank.length;
   const raw = bank[i];
-  let text = raw;
-  if (ctx.answer) text = text.replace("{answer}", ctx.answer);
-  // Safety net: never show or speak a naked token if no answer was supplied.
-  text = text.replace("{answer}", "that one");
+
+  let text = raw.replace("{answer}", ctx.answer ?? "that one");
   const muted = localStorage.getItem(LS.muted) === "1";
-  return { text, raw, speak: !!ed.sound?.voice?.on && !muted };
+  const voiceOn = !!ed.sound?.voice?.on && !muted;
+  return { text, raw, tier, speak: voiceOn && shouldSpeak(event, tier, react, ctx.rng) };
 }
 
-const VAR_MAP = {
+// The palette is split into two surfaces with different morphing rules:
+//
+// CHROME always morphs — accent (the day's signature: enter key + every color-mix(var(--accent))
+// glow), the home card, and transient error. One color is hard to make ugly.
+//
+// BOARD is the surface the player stares at for minutes — tiles, keys, feedback colors. We only
+// let an edition repaint it if it carries `morphBoard: true` (a curated, eyeballed theme). Every
+// other edition leaves the board on the elegant :root default, so an auto/loosely-themed day
+// (e.g. Tactile's browns) can't turn the board muddy, and green/yellow keep a stable meaning
+// across days. applyEdition removes any stale board overrides when morphing into an unblessed
+// edition, so switching themes never leaves yesterday's colors stuck inline.
+const CHROME_VARS = { accent: "--accent", bgCard: "--bg-card", error: "--error" };
+const BOARD_VARS = {
   bg: "--bg", fg: "--fg", muted: "--muted", border: "--border",
   tileEmpty: "--tile-empty", tilePendingBorder: "--tile-pending-border",
   keyBg: "--key-bg", green: "--green", yellow: "--yellow", gray: "--gray",
-  accent: "--accent", bgCard: "--bg-card", error: "--error",
 };
+
+// Vibe Studio — a curated day ships a 3-color palette {a1,a2,a3}. Map it to the CSS custom
+// properties the day page re-themes from: a1 drives --accent (re-lighting every existing
+// color-mix(var(--accent)) chrome for free), and a1/a2/a3 are exposed as atoms for the
+// bespoke palette layers (atmosphere glow, gradient title). Returns null for an absent or
+// malformed palette so callers fall straight back to the active edition's own accent.
+export function colorSchemeVars(cs) {
+  if (!cs || typeof cs !== "object") return null;
+  const { a1, a2, a3 } = cs;
+  for (const v of [a1, a2, a3]) if (typeof v !== "string" || !v) return null;
+  return { "--accent": a1, "--a1": a1, "--a2": a2, "--a3": a3 };
+}
+
+// Apply (or clear) a curated day's palette on <html>. A valid palette sets the accent + atom
+// vars and flags html[data-themed="1"] so the palette-only CSS layers light up; null removes
+// the atoms + flag. We deliberately do NOT clear --accent here: applyEdition owns it and is
+// always called first, so on a legacy day / non-daily room the edition's own accent is already
+// in place and stays. Returns whether a palette was applied.
+export function applyColorScheme(cs) {
+  const html = document.documentElement;
+  const vars = colorSchemeVars(cs);
+  if (!vars) {
+    for (const v of ["--a1", "--a2", "--a3"]) html.style.removeProperty(v);
+    delete html.dataset.themed;
+    return false;
+  }
+  for (const [k, val] of Object.entries(vars)) html.style.setProperty(k, val);
+  html.dataset.themed = "1";
+  return true;
+}
 
 export function applyEdition(id) {
   const ed = getEdition(id);
   activeId = ed.id;
   const html = document.documentElement;
   html.dataset.edition = ed.id;
-  for (const [k, cssVar] of Object.entries(VAR_MAP)) {
+  // Chrome always morphs.
+  for (const [k, cssVar] of Object.entries(CHROME_VARS)) {
     if (ed.palette[k] != null) html.style.setProperty(cssVar, ed.palette[k]);
+  }
+  // Board only morphs for a blessed edition; otherwise fall back to the elegant :root default
+  // (removeProperty clears any inline override a previous blessed edition left behind).
+  for (const [k, cssVar] of Object.entries(BOARD_VARS)) {
+    if (ed.morphBoard && ed.palette[k] != null) html.style.setProperty(cssVar, ed.palette[k]);
+    else html.style.removeProperty(cssVar);
   }
   html.style.setProperty("--font-display", ed.fonts.display);
   html.style.setProperty("--font-body", ed.fonts.body);

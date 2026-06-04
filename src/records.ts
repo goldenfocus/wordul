@@ -1,6 +1,7 @@
 // src/records.ts — pure: turn a finished room into one record per player.
 
 import type { GameOutcome } from "./stats.ts";
+import type { Color } from "./color.ts";
 export type Opponent = { username: string; result: GameOutcome; guesses: number };
 
 export type GameRecord = {
@@ -11,7 +12,16 @@ export type GameRecord = {
   result: GameOutcome;
   guesses: number;
   opponents: Opponent[];
+  solveGrid?: string[];   // daily: the player's color pattern, one row string per guess
+                          // ("g"=correct, "y"=present, "x"=absent) — powers the home stamp
 };
+
+// Pure: encode a player's guess masks into compact row strings for the home's solve
+// stamp. green→"g", yellow→"y", gray→"x". (The letters never leave the server.)
+const CELL: Record<Color, string> = { green: "g", yellow: "y", gray: "x" };
+export function encodeSolveGrid(rows: { mask: Color[] }[]): string[] {
+  return (rows ?? []).map((r) => (r?.mask ?? []).map((c) => CELL[c] ?? "x").join(""));
+}
 
 type FinishedPlayer = { username: string; status: "won" | "lost" | "playing"; guesses: number };
 

@@ -1,6 +1,6 @@
 // src/wordsbysize.ts
 // Word lists keyed by word length (4..12).
-// Length 5 keeps separate answer + valid-guess pools (classic Wordle).
+// Length 5 keeps separate answer + valid-guess pools (the classic 5-letter game).
 // All other lengths use a single pool that doubles as answers and valid guesses.
 // Data is comma-joined uppercase strings; reconstructed verbatim from the
 // deployed worker bundle (the source of truth for this generated module).

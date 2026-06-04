@@ -1,6 +1,6 @@
 # Wordul
 
-> Race your friends on the same Wordle. No password — pick a username, get a public profile, create a room, share the link, and keep score across games.
+> Race your friends on the same word. No password — pick a username, get a public profile, create a room, share the link, and keep score across games. (To play Wordul is to *wordul*; the people doing it are *wordulers*.)
 
 ## How it works
 - Pick a username. You're recognized anywhere just by typing it again — no password, no signup.
@@ -9,18 +9,49 @@
 - Each room keeps a running scoreboard across rounds, and every player has a public profile of lifetime stats and past games.
 
 ## Rules in brief
-- 6 guesses; words are 4–12 letters. Tiles: green = right letter & spot, yellow = right letter wrong spot, gray = not in the word.
+- 6 guesses; words are 4–12 letters. Tiles light up Hot (right letter & spot — glows gold), Warm (right letter, wrong spot), or Cold (not in the word).
 - It's a live race: everyone in a room solves the same secret word at once. First to solve wins the round; everyone else finishes for their own gold.
 - Gold is the universal score: earn for each green (+100), yellow (+50), and solve (+500, plus a speed bonus), with combo multipliers; lose a little for non-words and repeated dead letters. In Hard Mode, going bankrupt ends the game.
 - Power-ups (tap ✨): reveal a letter (4000 gold) or count the vowels (200 gold). 💀 gives up.
-- Editions reskin the game (Wordul, Editorial, Yang's Table, Tactile, Arcade, Jackpot); rules are the same across all.
+- Editions reskin the game (Wordul, Editorial, Yang's Table, Tactile, Arcade, Jackpot, Tin Bot); rules are the same across all.
 - Full guide: https://wordul.com/how-to-play
 
+## Wordul of the Day
+- The home page (`/`) is the hub — it surfaces today's curated puzzle plus your gold, streak, and live rooms.
+- The Wordul of the Day is one curated word for the whole world, rolling over at 00:00 UTC. Today's puzzle lives at `/daily/<today>` (e.g. `/daily/2026-06-02`).
+- Every day has an eternal permalink at `/daily/<YYYY-MM-DD>` — the board, the story behind the word, the leaderboard, and the chat for that day.
+- The full archive of every past day is at `/daily/archive`.
+
 ## Key URLs
+- Home (hub): `/`
+- Wordul of the Day (today): `/daily/<today>`
+- A specific day (eternal permalink): `/daily/<YYYY-MM-DD>` (e.g. `/daily/2026-06-02`)
+- Daily archive (every past day): `/daily/archive`
+- Community science latest JSON: `/science/latest.json`
+- Community science weekly JSON: `/science/weekly.json`
+- Community science day JSON: `/api/science/daily/<YYYY-MM-DD>.json`
+- Living Lab Feed (browse): `/feed`
+- Living Lab Feed (machine-readable JSON): `/feed.json`
+- Living Lab Feed (RSS): `/feed.xml`
+- A single day's discovery: `/feed/<YYYY-MM-DD>` or `/feed/<YYYY-MM-DD>.json`
+- Weekly research note: `/feed/weekly` or `/feed/weekly.json`
 - How to play (full guide): `/how-to-play`
 - Profile + lifetime stats: `/@<username>` (e.g. `/@yan`)
 - Game room: `/@<username>/<room-name>` (e.g. `/@yan/friday-night`)
 - Profile data (machine-readable JSON): `/api/user/<username>`
+
+## Community Science
+- Wordul publishes privacy-preserving aggregate research data from gameplay.
+- Public science JSON does not include usernames, chat text, IP addresses, raw personal timelines, or active daily answer-level stats.
+- Past answer-level difficulty stats are released only when k-anonymity is met.
+- Players can disable player-level contribution with the Community science setting.
+
+## Living Lab Feed (Discoveries)
+- The Living Lab Feed turns the science aggregates into readable, honest discoveries paired with curated brain-science notes.
+- Browse: `/feed` · Machine-readable: `/feed.json` · RSS: `/feed.xml`
+- A single day's discovery: `/feed/<YYYY-MM-DD>` (HTML, with Article JSON-LD) or `/feed/<YYYY-MM-DD>.json`.
+- Weekly research note: `/feed/weekly` (HTML) or `/feed/weekly.json`.
+- Every finding is computed live from the aggregates; the active day shows participation only (no answer-level stats, no spoilers).
 
 ## Site
 - Home: https://wordul.com

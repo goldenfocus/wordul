@@ -1,11 +1,25 @@
 import { Room } from "./room.ts";
 import { User } from "./user.ts";
+import { Challenge } from "./challenge.ts";
+import { Daily } from "./daily.ts";
+import { Science } from "./science-object.ts";
+import { Arena } from "./arena.ts";
+import { makeChallengeId } from "./challenge-core.ts";
 import type { Env } from "./types.ts";
 import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts";
-export { Room, User };
+import { activeDate } from "./daily-core.ts";
+import type { World } from "./daily-core.ts";
+import { buildDailyMeta, buildDailyJsonLd, dailyPrevNext, dailyDateFromPathname, dailySitemapUrls } from "./daily-seo.ts";
+import { buildWeeklyScienceSummary, type SciencePublicDailySummary } from "./science.ts";
+import { buildDailyPost, buildWeeklyPost, type FeedPost } from "./feed.ts";
+import { BRAIN_NOTES } from "./brain-notes.ts";
+export { Room, User, Challenge, Daily, Science, Arena };
 
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;
+const CHALLENGE_RE = /^\/c\/([0-9A-Za-z]{5})$/;
+const SCIENCE_DAILY_RE = /^\/api\/science\/daily\/(\d{4}-\d{2}-\d{2})(?:\.json)?$/;
+const FEED_DATE_RE = /^\/feed\/(\d{4}-\d{2}-\d{2})(?:\.json)?$/;
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -13,6 +27,17 @@ export default {
 
     // Room WebSocket: /ws?room=<owner>/<slug>
     if (url.pathname === "/ws") {
+      const challengeId = url.searchParams.get("challenge");
+      if (challengeId && /^[0-9A-Za-z]{5}$/.test(challengeId)) {
+        const player = normalizeUsername(url.searchParams.get("username") ?? "");
+        if (!isValidUsername(player)) return new Response("invalid player", { status: 400 });
+        const key = `c:${challengeId}:${player}`;
+        const stub = env.ROOM.get(env.ROOM.idFromName(key));
+        const upstream = new URL(req.url);
+        upstream.searchParams.set("room", key);
+        upstream.searchParams.set("challenge", challengeId);
+        return stub.fetch(new Request(upstream.toString(), req));
+      }
       const raw = url.searchParams.get("room") ?? "";
       const [ownerRaw, slugRaw] = raw.split("/");
       const owner = normalizeUsername(ownerRaw ?? "");
@@ -30,6 +55,13 @@ export default {
       return stub.fetch(new Request(upstream.toString(), req));
     }
 
+    // Arena Open-Games index (public read). Exact-equality match — avoids the endsWith
+    // shadow class. Singleton coordinator DO keyed by idFromName("arena").
+    if (url.pathname === "/api/arena/open" && req.method === "GET") {
+      const stub = env.ARENA.get(env.ARENA.idFromName("arena"));
+      return stub.fetch(new Request("https://do/open", { method: "GET" }));
+    }
+
     // Profile JSON API: /api/user/<name>
     if (url.pathname.startsWith("/api/user/")) {
       const name = normalizeUsername(decodeURIComponent(url.pathname.slice("/api/user/".length)));
@@ -38,9 +70,145 @@ export default {
       return stub.fetch(new Request(`https://do/?username=${name}`, { method: "GET" }));
     }
 
+    // Daily leaderboard JSON API: /api/daily/<YYYY-MM-DD>/leaderboard?username=<u>
+    // Proxies to the day's single Room DO (keyed exactly like the /ws daily room).
+    const dailyLb = url.pathname.match(/^\/api\/daily\/(\d{4}-\d{2}-\d{2})\/leaderboard$/);
+    if (dailyLb && req.method === "GET") {
+      const date = dailyLb[1];
+      const u = normalizeUsername(url.searchParams.get("username") ?? "");
+      const stub = env.ROOM.get(env.ROOM.idFromName(`daily/${date}`));
+      return stub.fetch(new Request(
+        `https://do/leaderboard?username=${encodeURIComponent(u)}&n=3`,
+        { method: "GET" },
+      ));
+    }
+
+    // Mint a challenge: POST /api/challenge
+    if (url.pathname === "/api/challenge" && req.method === "POST") {
+      const id = makeChallengeId();
+      const stub = env.CHALLENGE.get(env.CHALLENGE.idFromName(id));
+      const body = (await req.json()) as Record<string, unknown>;
+      return stub.fetch(new Request("https://do/", {
+        method: "POST",
+        body: JSON.stringify({ ...body, id }),
+        headers: { "content-type": "application/json" },
+      }));
+    }
+
+    // Challenge meta (no word): GET /api/challenge/<id>/meta
+    const metaMatch = url.pathname.match(/^\/api\/challenge\/([0-9A-Za-z]{5})\/meta$/);
+    if (metaMatch && req.method === "GET") {
+      const stub = env.CHALLENGE.get(env.CHALLENGE.idFromName(metaMatch[1]));
+      return stub.fetch(new Request("https://do/meta", { method: "GET" }));
+    }
+
     // Sitemap from the directory.
     if (url.pathname === "/sitemap.xml") {
       return sitemap(env, url.origin);
+    }
+
+    // Bare /daily -> today's dated permalink (the daily lives at the date; "/" is the hub).
+    if (url.pathname === "/daily") {
+      return Response.redirect(url.origin + "/daily/" + activeDate(Date.now()), 302);
+    }
+
+    // Admin seed: POST /daily/schedule (Bearer token; closed/401 when DAILY_ADMIN_TOKEN unset).
+    if (url.pathname === "/daily/schedule" && req.method === "POST") {
+      const auth = req.headers.get("Authorization") ?? "";
+      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+      if (!env.DAILY_ADMIN_TOKEN || token !== env.DAILY_ADMIN_TOKEN) {
+        return new Response("unauthorized", { status: 401 });
+      }
+      const stub = env.DAILY.get(env.DAILY.idFromName("daily"));
+      return stub.fetch(new Request("https://do/schedule", {
+        method: "POST",
+        body: await req.text(),
+        headers: { "content-type": "application/json" },
+      }));
+    }
+
+    // Archive index.
+    if (url.pathname === "/daily/archive") {
+      const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+      return new HTMLRewriter()
+        .on('[data-meta="title"]', new TextSetter("Wordul Daily — Archive"))
+        .on('[data-meta="description"]', new AttrSetter("content", "Every Wordul of the Day — the whole archive, one word at a time."))
+        .on('[data-meta="canonical"]', new AttrSetter("href", url.origin + "/daily/archive"))
+        .transform(shell);
+    }
+
+    // Daily stats sub-page — client-rendered; serve the SPA shell so hard-loads,
+    // refreshes, and shares of /daily/<YYYY-MM-DD>/stats resolve (the SPA then
+    // client-routes it). Without this the route falls through to a 404.
+    const dailyStatsDate = url.pathname.match(/^\/daily\/(\d{4}-\d{2}-\d{2})\/stats$/);
+    if (dailyStatsDate) {
+      const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+      return new HTMLRewriter()
+        .on('[data-meta="title"]', new TextSetter(`Wordul of the Day — Stats · ${dailyStatsDate[1]}`))
+        .on('[data-meta="description"]', new AttrSetter("content", "How the world played today's Wordul — solve rate, averages, and the day's Studio theme."))
+        .on('[data-meta="canonical"]', new AttrSetter("href", url.origin + url.pathname))
+        .transform(shell);
+    }
+
+    // Dated permalink — the eternal artifact. /daily/<YYYY-MM-DD>
+    const dailyDate = dailyDateFromPathname(url.pathname);
+    if (dailyDate && dailyDate <= activeDate(Date.now())) {
+      return injectDailyMeta(env, url, dailyDate);
+    }
+
+    // Public dates list (powers the archive UI).
+    if (url.pathname === "/api/daily/dates") {
+      const stub = env.DAILY.get(env.DAILY.idFromName("daily"));
+      return stub.fetch(new Request("https://do/dates", { method: "GET" }));
+    }
+
+    // Public, privacy-preserving research artifacts. These are intentionally JSON-first
+    // so AI systems and researchers can ingest them without scraping the app UI.
+    if (url.pathname === "/science/latest.json" || url.pathname === "/api/science/today") {
+      return scienceDaily(env, activeDate(Date.now()));
+    }
+    const scienceMatch = url.pathname.match(SCIENCE_DAILY_RE);
+    if (scienceMatch && req.method === "GET") {
+      return scienceDaily(env, scienceMatch[1]);
+    }
+    if (url.pathname === "/science/weekly.json" || url.pathname === "/api/science/weekly") {
+      return scienceWeekly(env);
+    }
+
+    // Living Lab Feed — JSON-first (the honest AI/science surface).
+    if (url.pathname === "/feed.json") {
+      const posts = await feedStream(env);
+      return Response.json({ generatedAt: Date.now(), posts }, { headers: { "cache-control": "public, max-age=300" } });
+    }
+    if (url.pathname === "/feed/weekly.json") {
+      return Response.json(await feedWeeklyPost(env), { headers: { "cache-control": "public, max-age=300" } });
+    }
+    const feedJsonMatch = url.pathname.match(FEED_DATE_RE);
+    if (feedJsonMatch && url.pathname.endsWith(".json") && req.method === "GET") {
+      const post = await feedDailyPost(env, feedJsonMatch[1]);
+      // A still-active day's post is not published — return 404 rather than a teaser blob to tools.
+      if (!post.published) return new Response("not yet", { status: 404 });
+      return Response.json(post, { headers: { "cache-control": "public, max-age=300" } });
+    }
+
+    if (url.pathname === "/feed") return renderFeedStream(env, url);
+    if (url.pathname === "/feed/weekly") {
+      const post = await feedWeeklyPost(env);
+      const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+      return new HTMLRewriter()
+        .on('[data-meta="title"]', new TextSetter(post.headline))
+        .on('[data-meta="canonical"]', new AttrSetter("href", `${url.origin}/feed/weekly`))
+        .on('[data-feed-prose]', new RawHtmlSetter(feedPostProse(post, url.origin)))
+        .transform(shell);
+    }
+    const feedHtmlMatch = url.pathname.match(FEED_DATE_RE);
+    if (feedHtmlMatch && !url.pathname.endsWith(".json")) return renderFeedPost(env, url, feedHtmlMatch[1]);
+
+    if (url.pathname === "/feed.xml") {
+      const posts = await feedStream(env);
+      return new Response(feedRss(posts, url.origin), {
+        headers: { "content-type": "application/rss+xml; charset=utf-8", "cache-control": "public, max-age=600" },
+      });
     }
 
     // Legacy redirect: /r or /r/<code> -> home (rooms are owner-nested now).
@@ -78,11 +246,12 @@ export default {
       );
     }
 
-    // Profile + room pages: serve SPA shell with per-route meta injected.
+    // Profile + room + challenge pages: serve SPA shell with per-route meta injected.
     const profileMatch = url.pathname.match(PROFILE_RE);
     const roomMatch = url.pathname.match(ROOM_RE);
-    if (profileMatch || roomMatch) {
-      return injectMeta(env, url, profileMatch, roomMatch);
+    const challengeMatch = url.pathname.match(CHALLENGE_RE);
+    if (profileMatch || roomMatch || challengeMatch) {
+      return injectMeta(env, url, profileMatch, roomMatch, challengeMatch);
     }
 
     // Everything else: static asset (SPA fallback handled by wrangler).
@@ -91,7 +260,7 @@ export default {
 };
 
 async function sitemap(env: Env, origin: string): Promise<Response> {
-  const urls: string[] = [origin + "/"];
+  const urls: string[] = [origin + "/", origin + "/science/latest.json", origin + "/science/weekly.json"];
   let cursor: string | undefined;
   do {
     const page = await env.DIRECTORY.list({ limit: 1000, cursor });
@@ -102,6 +271,23 @@ async function sitemap(env: Env, origin: string): Promise<Response> {
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
 
+  // Daily surface: home, archive, and every known date (best-effort — a DAILY hiccup
+  // must not 500 the sitemap).
+  try {
+    const res = await env.DAILY.get(env.DAILY.idFromName("daily")).fetch("https://do/dates");
+    if (res.ok) {
+      const { dates } = (await res.json()) as { dates: string[] };
+      urls.push(...dailySitemapUrls(dates, origin));
+    }
+  } catch { /* skip daily urls */ }
+
+  // Living Lab Feed surface (best-effort — must not 500 the sitemap).
+  urls.push(origin + "/feed", origin + "/feed.xml", origin + "/feed.json", origin + "/feed/weekly");
+  try {
+    const posts = await feedStream(env, 60);
+    for (const p of posts) urls.push(`${origin}/feed/${p.slug}`);
+  } catch { /* skip feed urls */ }
+
   const body =
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
     urls.map((u) => `  <url><loc>${u}</loc></url>`).join("\n") +
@@ -109,16 +295,185 @@ async function sitemap(env: Env, origin: string): Promise<Response> {
   return new Response(body, { headers: { "content-type": "application/xml" } });
 }
 
+async function scienceDaily(env: Env, date: string): Promise<Response> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return new Response("bad date", { status: 400 });
+  const includeWords = date < activeDate(Date.now());
+  const stub = env.SCIENCE.get(env.SCIENCE.idFromName(date));
+  const res = await stub.fetch(`https://do/summary?date=${date}&includeWords=${includeWords ? "1" : "0"}`);
+  return withJsonCache(res, includeWords ? 300 : 60);
+}
+
+async function scienceWeekly(env: Env): Promise<Response> {
+  const today = activeDate(Date.now());
+  const dates = Array.from({ length: 7 }, (_, i) => shiftDate(today, -6 + i));
+  const daily = await Promise.all(dates.map(async (date) => {
+    const includeWords = date < today;
+    const stub = env.SCIENCE.get(env.SCIENCE.idFromName(date));
+    const res = await stub.fetch(`https://do/summary?date=${date}&includeWords=${includeWords ? "1" : "0"}`);
+    return (await res.json()) as SciencePublicDailySummary;
+  }));
+  return Response.json(buildWeeklyScienceSummary(daily, Date.now()), {
+    headers: { "cache-control": "public, max-age=300" },
+  });
+}
+
+function shiftDate(date: string, deltaDays: number): string {
+  const d = new Date(`${date}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
+
+function withJsonCache(res: Response, maxAge: number): Response {
+  const headers = new Headers(res.headers);
+  headers.set("content-type", "application/json; charset=utf-8");
+  headers.set("cache-control", `public, max-age=${maxAge}`);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+async function fetchSummary(env: Env, date: string, today: string): Promise<SciencePublicDailySummary> {
+  const includeWords = date < today;
+  const stub = env.SCIENCE.get(env.SCIENCE.idFromName(date));
+  const res = await stub.fetch(`https://do/summary?date=${date}&includeWords=${includeWords ? "1" : "0"}`);
+  return (await res.json()) as SciencePublicDailySummary;
+}
+
+async function fetchWorld(env: Env, date: string): Promise<World> {
+  const res = await env.DAILY.get(env.DAILY.idFromName("daily")).fetch(`https://do/resolve?date=${date}`);
+  return (await res.json()) as World;
+}
+
+async function feedDailyPost(env: Env, date: string): Promise<FeedPost> {
+  const today = activeDate(Date.now());
+  const [summary, world] = await Promise.all([fetchSummary(env, date, today), fetchWorld(env, date)]);
+  return buildDailyPost(summary, world, BRAIN_NOTES, { todayUTC: today });
+}
+
+async function feedWeeklyPost(env: Env): Promise<FeedPost> {
+  const today = activeDate(Date.now());
+  const dates = Array.from({ length: 7 }, (_, i) => shiftDate(today, -6 + i));
+  const daily = await Promise.all(dates.map((d) => fetchSummary(env, d, today)));
+  const weekly = buildWeeklyScienceSummary(daily, Date.now());
+  return buildWeeklyPost(weekly, BRAIN_NOTES, { todayUTC: today });
+}
+
+/** The published stream: the last `days` PAST days, newest first. Only days that are
+ *  published AND carry at least one finding surface here — a zero-participation past day
+ *  would otherwise show as an empty post in the stream, RSS, and sitemap. A per-day fetch
+ *  failure is logged (not silently dropped) so an outage is distinguishable from "no data". */
+async function feedStream(env: Env, days = 14): Promise<FeedPost[]> {
+  const today = activeDate(Date.now());
+  const dates = Array.from({ length: days }, (_, i) => shiftDate(today, -1 - i)); // yesterday backwards
+  const posts = await Promise.all(
+    dates.map((d) => feedDailyPost(env, d).catch((e) => { console.error("feed day failed", d, e); return null; })),
+  );
+  return posts.filter((p): p is FeedPost => !!p && p.published && p.findings.length > 0);
+}
+
+function feedRss(posts: FeedPost[], origin: string): string {
+  const items = posts.map((p) =>
+    `<item><title>${escapeHtml(p.headline)}</title>` +
+    `<link>${origin}/feed/${p.slug}</link><guid>${origin}/feed/${p.slug}</guid>` +
+    `<description>${escapeHtml(p.findings.map((f) => f.text).join(" "))}</description></item>`).join("");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0"><channel>` +
+    `<title>The Wordul Living Lab</title><link>${origin}/feed</link>` +
+    `<description>Honest, privacy-preserving discoveries from the Wordul of the Day.</description>` +
+    `${items}</channel></rss>`;
+}
+
+function feedPostProse(post: FeedPost, origin: string): string {
+  const findings = post.findings.map((f) => `<li>${escapeHtml(f.text)}</li>`).join("");
+  const notes = post.brainNotes.map((n) =>
+    `<aside class="brain-note" data-pillar="${n.pillar}"><h3>${escapeHtml(n.title)}</h3>` +
+    `<p>${escapeHtml(n.note)}</p>${n.citation ? `<cite>${escapeHtml(n.citation)}</cite>` : ""}</aside>`).join("");
+  const ed = post.editorial?.intro ? `<p class="lab-intro">${escapeHtml(post.editorial.intro)}</p>` : "";
+  return `<article><h1>${escapeHtml(post.headline)}</h1>${ed}` +
+    `<ul class="findings">${findings}</ul>${notes}` +
+    `<p class="pillars">${post.pillars.map(escapeHtml).join(" · ")}</p>` +
+    `<nav><a href="${origin}/feed">← the Lab feed</a></nav></article>`;
+}
+
+function feedArticleJsonLd(post: FeedPost, origin: string): object {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: post.headline,
+    datePublished: post.date,
+    author: { "@type": "Organization", name: "Wordul" },
+    publisher: { "@type": "Organization", name: "Wordul", url: origin },
+    about: post.pillars,
+    isPartOf: { "@type": "WebSite", name: "Wordul Living Lab", url: `${origin}/feed` },
+  };
+}
+
+async function renderFeedPost(env: Env, url: URL, date: string): Promise<Response> {
+  const post = await feedDailyPost(env, date);
+  const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+  if (!post.published) {
+    // Active/unknown day: no-spoiler shell, self canonical, no findings.
+    return new HTMLRewriter()
+      .on('[data-meta="title"]', new TextSetter("The Wordul Lab"))
+      .on('[data-meta="canonical"]', new AttrSetter("href", `${url.origin}/feed/${date}`))
+      .transform(shell);
+  }
+  const title = post.headline;
+  const desc = post.findings.map((f) => f.text).join(" ").slice(0, 200);
+  const jsonld = JSON.stringify(feedArticleJsonLd(post, url.origin)).replace(/</g, "\\u003c");
+  return new HTMLRewriter()
+    .on('[data-meta="title"]', new TextSetter(title))
+    .on('[data-meta="og:title"]', new AttrSetter("content", title))
+    .on('[data-meta="description"]', new AttrSetter("content", desc))
+    .on('[data-meta="og:description"]', new AttrSetter("content", desc))
+    .on('[data-meta="canonical"]', new AttrSetter("href", `${url.origin}/feed/${date}`))
+    .on('[data-meta="og:url"]', new AttrSetter("content", `${url.origin}/feed/${date}`))
+    .on('[data-feed-jsonld]', new RawHtmlSetter(jsonld))
+    .on('[data-feed-prose]', new RawHtmlSetter(feedPostProse(post, url.origin)))
+    .transform(shell);
+}
+
+async function renderFeedStream(env: Env, url: URL): Promise<Response> {
+  const posts = await feedStream(env);
+  const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+  const list = posts.map((p) =>
+    `<li><a href="${url.origin}/feed/${p.slug}"><strong>${escapeHtml(p.headline)}</strong></a>` +
+    (p.findings[0] ? `<span>${escapeHtml(p.findings[0].text)}</span>` : "") + `</li>`).join("");
+  const prose = `<h1>The Wordul Living Lab</h1><p>Honest, privacy-preserving discoveries from the daily puzzle.</p><ul class="feed-stream">${list}</ul>`;
+  return new HTMLRewriter()
+    .on('[data-meta="title"]', new TextSetter("The Wordul Living Lab — daily discoveries"))
+    .on('[data-meta="description"]', new AttrSetter("content", "Honest, privacy-preserving discoveries about how people learn and reason, from the Wordul of the Day."))
+    .on('[data-meta="canonical"]', new AttrSetter("href", `${url.origin}/feed`))
+    .on('[data-feed-prose]', new RawHtmlSetter(prose))
+    .transform(shell);
+}
+
 async function injectMeta(
   env: Env,
   url: URL,
   profileMatch: RegExpMatchArray | null,
   roomMatch: RegExpMatchArray | null,
+  challengeMatch: RegExpMatchArray | null = null,
 ): Promise<Response> {
   let title = "Wordul";
-  let description = "Race your friends on the same Wordle.";
+  let description = "Race your friends on the same word — come wordul with us.";
 
-  if (roomMatch) {
+  if (challengeMatch) {
+    const [, id] = challengeMatch;
+    // Best-effort OG meta for a shared challenge link — a DO hiccup degrades to default.
+    try {
+      const res = await env.CHALLENGE.get(env.CHALLENGE.idFromName(id)).fetch("https://do/meta");
+      if (res.ok) {
+        const m = (await res.json()) as { owner?: string; ownerScore?: string };
+        const owner = m.owner ?? "someone";
+        title = `Beat @${owner}'s Wordul challenge`;
+        description = `@${owner} scored ${m.ownerScore ?? "?"} on this word. Same word, your turn — beat the score.`;
+      } else {
+        title = "A Wordul challenge";
+        description = "Same word, your turn — beat the score.";
+      }
+    } catch {
+      title = "A Wordul challenge";
+      description = "Same word, your turn — beat the score.";
+    }
+  } else if (roomMatch) {
     const [, owner, slug] = roomMatch;
     title = `${slug.replace(/-/g, " ")} — a Wordul room by ${owner}`;
     description = `Join ${owner}'s Wordul room and race on the same word.`;
@@ -155,6 +510,59 @@ async function injectMeta(
     .transform(shell);
 }
 
+// Serve the SPA shell themed for a daily date: meta + JSON-LD + crawlable story
+// prose + prev/next links injected. `date` is a validated YYYY-MM-DD.
+async function injectDailyMeta(env: Env, url: URL, date: string): Promise<Response> {
+  let world: World | null = null;
+  try {
+    const res = await env.DAILY.get(env.DAILY.idFromName("daily")).fetch(`https://do/resolve?date=${date}`);
+    if (res.ok) world = (await res.json()) as World;
+  } catch { /* degrade to default meta below */ }
+
+  const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+  if (!world) {
+    // DAILY unavailable — still serve a sane shell with a self canonical.
+    return new HTMLRewriter()
+      .on('[data-meta="title"]', new TextSetter("Wordul of the Day"))
+      .on('[data-meta="canonical"]', new AttrSetter("href", `${url.origin}/daily/${date}`))
+      .transform(shell);
+  }
+
+  // The ACTIVE puzzle must NEVER reveal its answer via SEO — a curated story like
+  // "Why EMBER?" would leak today's word to anyone reading view-source. Today: generic,
+  // no-spoiler meta + prose. Past days are archival → full story.
+  const isActive = date === activeDate(Date.now());
+  const seoWorld: World = isActive
+    ? { ...world, story: { title: "Today's Wordul", body: "One word, the whole world. Solve today's Wordul to reveal the story behind the word." } }
+    : world;
+  const meta = buildDailyMeta(date, seoWorld, url.origin);
+  const jsonld = JSON.stringify(buildDailyJsonLd(date, seoWorld, url.origin));
+  const { prev, next } = dailyPrevNext(date);
+  const prose =
+    `<h1>${escapeHtml(meta.title)}</h1>` +
+    `<h2>${escapeHtml(seoWorld.story.title)}</h2>` +
+    `<p>${escapeHtml(seoWorld.story.body)}</p>` +
+    (seoWorld.story.tip ? `<p><em>${escapeHtml(seoWorld.story.tip)}</em></p>` : "") +
+    `<nav><a href="${url.origin}/daily/${prev}">← ${prev}</a> · ` +
+    `<a href="${url.origin}/daily/archive">archive</a> · ` +
+    `<a href="${url.origin}/daily/${next}">${next} →</a></nav>`;
+
+  return new HTMLRewriter()
+    .on('[data-meta="title"]', new TextSetter(meta.title))
+    .on('[data-meta="og:title"]', new AttrSetter("content", meta.title))
+    .on('[data-meta="description"]', new AttrSetter("content", meta.description))
+    .on('[data-meta="og:description"]', new AttrSetter("content", meta.description))
+    .on('[data-meta="canonical"]', new AttrSetter("href", meta.canonical))
+    .on('[data-meta="og:url"]', new AttrSetter("content", meta.canonical))
+    .on('[data-daily-jsonld]', new RawHtmlSetter(jsonld.replace(/</g, "\\u003c")))
+    .on('[data-daily-prose]', new RawHtmlSetter(prose))
+    .transform(shell);
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 class TextSetter {
   constructor(private content: string) {}
   element(el: Element) { el.setInnerContent(this.content); }
@@ -163,4 +571,9 @@ class TextSetter {
 class AttrSetter {
   constructor(private attr: string, private value: string) {}
   element(el: Element) { el.setAttribute(this.attr, this.value); }
+}
+
+class RawHtmlSetter {
+  constructor(private html: string) {}
+  element(el: Element) { el.setInnerContent(this.html, { html: true }); }
 }

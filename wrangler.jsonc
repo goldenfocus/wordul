@@ -6,6 +6,12 @@
   //   migration tag v1 -> new_classes ["Room"].
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "wordle-race",
+  // Worker name is an internal Cloudflare id (it hosts all the Durable Objects, so
+  // it CANNOT be renamed without orphaning every user/room/stat). The only public
+  // leak of the legacy "wordle" name was the auto subdomain wordle-race.*.workers.dev
+  // — disabled here so prod is served only from the custom domain wordul.com.
+  "workers_dev": false,
+  "preview_urls": true,
   "main": "src/worker.ts",
   "compatibility_date": "2026-04-25",
   "compatibility_flags": ["nodejs_compat"],
@@ -27,6 +33,22 @@
       {
         "name": "USER",
         "class_name": "User"
+      },
+      {
+        "name": "CHALLENGE",
+        "class_name": "Challenge"
+      },
+      {
+        "name": "DAILY",
+        "class_name": "Daily"
+      },
+      {
+        "name": "SCIENCE",
+        "class_name": "Science"
+      },
+      {
+        "name": "ARENA",
+        "class_name": "Arena"
       }
     ]
   },
@@ -60,6 +82,32 @@
       // grandfathered on new_classes from before this restriction.)
       "tag": "v2",
       "new_sqlite_classes": ["User"]
+    },
+    {
+      // New DO namespace on the free plan MUST be SQLite-backed (else deploy fails
+      // with err 10097 — dry-run won't catch it). Challenge uses the KV-style
+      // ctx.storage.get/put API, which is supported on new_sqlite_classes.
+      "tag": "v3",
+      "new_sqlite_classes": ["Challenge"]
+    },
+    {
+      // New DO namespace on the free plan MUST be SQLite-backed (else deploy fails with
+      // err 10097 — dry-run won't catch it). Daily uses the KV-style ctx.storage.get/put
+      // API, which is supported on new_sqlite_classes.
+      "tag": "v4",
+      "new_sqlite_classes": ["Daily"]
+    },
+    {
+      // Day-sharded public research rollups. Each date gets one Science DO; no database
+      // server required, and raw usernames never enter this storage.
+      "tag": "v5",
+      "new_sqlite_classes": ["Science"]
+    },
+    {
+      // Arena coordinator DO. Free plan: new_sqlite_classes (NOT new_classes — err 10097;
+      // dry-run won't catch it, only a real deploy does). v5 (Science) is the prior max.
+      "tag": "v6",
+      "new_sqlite_classes": ["Arena"]
     }
   ],
 

@@ -47,6 +47,11 @@ export const edition = {
         "Continue? The answer was {answer}.",
         "The cabinet wins this round: {answer}.",
       ],
+      wipe: [
+        "Board cleared! Re-rack and retry.",
+        "Whoosh — letters dumped. Insert a better guess.",
+        "Reset! The grid wipes clean.",
+      ],
       idle: [
         "Insert coin... player still there?",
         "Attract mode engaged. Come back.",

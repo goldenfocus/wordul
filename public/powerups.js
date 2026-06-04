@@ -276,9 +276,9 @@ function renderGiveUp(ctx, snap, me) {
 }
 
 // Give up immediately, in ANY mode → the same lose explosion as running out of guesses.
-// Delegates to the app-owned ctx.forfeit(reason), which records the loss
-// (recordResult(false)), guards fire-once (hasShownEndStats), and runs
-// triggerLoseSequence. Guarded here too so a stray tap after the end is a no-op.
+// Delegates to the app-owned ctx.forfeit(reason), which resigns to the server
+// (the loss is recorded server-side), guards fire-once (hasShownEndStats), and
+// runs triggerLoseSequence. Guarded here too so a stray tap after the end is a no-op.
 export function giveUp(ctx) {
   const { game } = ctx;
   const snap = game.snapshot;
