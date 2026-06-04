@@ -2,6 +2,7 @@ import { Room } from "./room.ts";
 import { User } from "./user.ts";
 import type { Env } from "./types.ts";
 import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts";
+import { isWordPage, slugFor, wordOfTheDay, ANSWER_WORDS } from "./words.ts";
 export { Room, User };
 
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
@@ -78,6 +79,43 @@ export default {
       );
     }
 
+    // OG cards for word pages live in the wordul-og R2 bucket (built + uploaded offline).
+    if (url.pathname.startsWith("/word/og/")) {
+      const key = url.pathname.slice("/word/og/".length);
+      const obj = await env.OG.get(key);
+      if (!obj) return new Response("not found", { status: 404 });
+      return new Response(obj.body, {
+        headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" },
+      });
+    }
+
+    // Word wiki. Note: wrangler serves matching static assets BEFORE the worker, so a
+    // word page like /word/ocean is served straight from public/word/ocean.html; the
+    // /word/ branch below only runs on asset misses (uppercase → lowercase redirect,
+    // and the friendly 404 for non-answer/excluded words). The featured-word route lives
+    // at top-level /today — NOT /word/today, which would be shadowed by the TODAY page.
+    if (url.pathname === "/today") {
+      const slug = slugFor(wordOfTheDay(new Date()));
+      return Response.redirect(`${url.origin}/word/${slug}`, 302);
+    }
+    if (url.pathname.startsWith("/word/")) {
+      const raw = url.pathname.slice("/word/".length).replace(/\/$/, "");
+      const lower = raw.toLowerCase();
+      if (raw !== lower) return Response.redirect(`${url.origin}/word/${lower}`, 301);
+      if (isWordPage(lower)) {
+        return env.ASSETS.fetch(new Request(`${url.origin}/word/${lower}.html`));
+      }
+      // Non-answer or excluded word: a friendly dead-endless 404.
+      return new Response(
+        `<!doctype html><meta charset=utf-8><title>No word page</title>` +
+          `<p>No wiki page for that word. <a href="/words">Browse all words</a> or <a href="/">play Wordul</a>.</p>`,
+        { status: 404, headers: { "content-type": "text/html" } },
+      );
+    }
+    if (url.pathname === "/words") {
+      return env.ASSETS.fetch(new Request(`${url.origin}/words.html`));
+    }
+
     // Profile + room pages: serve SPA shell with per-route meta injected.
     const profileMatch = url.pathname.match(PROFILE_RE);
     const roomMatch = url.pathname.match(ROOM_RE);
@@ -101,6 +139,11 @@ async function sitemap(env: Env, origin: string): Promise<Response> {
     }
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
+
+  urls.push(origin + "/words");
+  for (const w of ANSWER_WORDS) {
+    if (isWordPage(w)) urls.push(`${origin}/word/${slugFor(w)}`);
+  }
 
   const body =
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
