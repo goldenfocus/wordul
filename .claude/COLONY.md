@@ -58,7 +58,7 @@ npm run deploy
 
 | 2026-06-04 05:36 | claude (tm-scrub) | literal "Wordle" trademark scrub on top of `origin/main` e279da9 — `README.md`, `package.json` name+desc, one `style.css` comment (only style.css is a served asset; README/package.json don't touch runtime). Tier C, 374 tests green. Done from an isolated worktree off origin/main. Deploy uploaded 1 file (style.css only). Smoke: home/room/feed 200, served style.css has 0 "Wordle". | b122777d-eda9-440b-9810-467ac565d4f2 | ✅ |
 
-| 2026-06-04 06:27 | claude (disable-workersdev) | 🔒 deploying: `"workers_dev": false` in wrangler.jsonc — kills the only public leak of the legacy name, `wordle-race.*.workers.dev`. Worker NOT renamed (it hosts all DOs; rename = data loss). Config-only, no DO migration (still v6), no 10097 risk. CI secret not set yet → local `wrangler deploy` fallback. | — | 🔒 deploying |
+| 2026-06-04 06:27 | claude (disable-workersdev) | `"workers_dev": false` in wrangler.jsonc — kills the only public leak of the legacy name, `wordle-race.*.workers.dev`. Worker NOT renamed (it hosts all DOs; rename = data loss). Config-only, no DO migration (still v6). Deploy: "No deploy targets" = subdomain route removed; custom domain wordul.com (out-of-band route) unaffected. Verify: wordul.com /,/room,/feed,/daily 200; `wordle-race.love-00b.workers.dev` now 404. | 921a2639-dc76-4a8a-8202-c3e9bdc1c3bd | ✅ |
 
 > Benign collision: both sessions fixed the same daily-leave crash within ~2 min. Final prod `3a07553` carries **both** defenses (render `#boards` guard + session teardown). NOTE: local `main` checkout is stale/orphaned at `bde11dd` (never on origin/main) — origin/main + prod are the truth.
 
