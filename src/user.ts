@@ -99,11 +99,16 @@ export class User extends DurableObject<Env> {
       return Response.json({ passphrase: phrase, nonce });
     }
 
-    // Accounts P0 — commit the previewed claim. Echoes the nonce from /preview; promotes the
-    // pending hash into auth, mints the first session, writes the public KV projection.
-    // Single-writer DO ⇒ this whole transition is race-free with no lock.
+    // Accounts P0 — commit the previewed claim. The nonce binds this claim to the last
+    // previewed phrase (so a re-roll's stale preview can't be committed). Double-claim is
+    // blocked by canClaim (profile.claimed), not the nonce. Promotes the pending hash into
+    // auth, mints the first session, writes the public KV projection. Single-writer DO ⇒
+    // this whole transition is race-free with no lock.
     if (req.method === "POST" && url.pathname.endsWith("/account/claim")) {
-      const { nonce } = (await req.json()) as { nonce?: string };
+      let claimBody: { nonce?: string };
+      try { claimBody = (await req.json()) as { nonce?: string }; }
+      catch { return Response.json({ error: "bad_request" }, { status: 400 }); }
+      const { nonce } = claimBody;
       const profile = await this.load(username);
       const decision = canClaim(profile, username);
       if (!decision.ok) return Response.json({ error: decision.reason }, { status: decision.reason === "already_claimed" ? 409 : 400 });
