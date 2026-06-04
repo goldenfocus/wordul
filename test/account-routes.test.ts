@@ -30,6 +30,26 @@ describe("public GET shape (user.ts GET → publicProfile)", () => {
     expect(body).toContain("\"claimed\":true");
     expect(body).toContain("\"gold\":3");
   });
+
+  it("locks the PUBLIC key set — a new UserProfile field must be consciously added here", () => {
+    const profile = {
+      username: "zang", createdAt: 1, stats: {} as UserProfile["stats"],
+      games: [], ownedRooms: [], ledger: [], balances: { gold: 3 }, h2h: {},
+      claimed: true,
+      auth: { v: 1 as const, salt: "SALT", phraseHash: "HASH", sessions: { h: { createdAt: 1, lastSeen: 1 } }, claimedAt: 1 },
+      pendingClaim: { salt: "PSALT", phraseHash: "PHASH", nonce: "NONCE", createdAt: 1 },
+    } satisfies UserProfile;
+    // Mirror the DO GET exactly:
+    const body = JSON.parse(JSON.stringify({ ...publicProfile(profile), gold: profile.balances.gold ?? 0 }));
+    const keys = new Set(Object.keys(body));
+    // If you add a field to UserProfile and it should be PUBLIC, add it here.
+    // If it's a SECRET, it must be stripped in publicProfile() — and this test will fail until it is.
+    const EXPECTED_PUBLIC_KEYS = new Set([
+      "username", "createdAt", "stats", "games", "ownedRooms",
+      "ledger", "balances", "h2h", "claimed", "verified", "gold",
+    ]);
+    expect(keys).toEqual(EXPECTED_PUBLIC_KEYS);
+  });
 });
 
 describe("rateLimitDecision (pure)", () => {
