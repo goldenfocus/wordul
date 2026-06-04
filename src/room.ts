@@ -197,6 +197,10 @@ export class Room extends DurableObject<Env> {
     if (req.method === "GET" && url.pathname.endsWith("/leaderboard")) {
       const username = (url.searchParams.get("username") ?? "").toLowerCase().trim();
       const n = Number(url.searchParams.get("n") ?? "3");
+      const durationOf = (p: PlayerState) =>
+        p.firstGuessAt != null && p.finishedAt != null
+          ? Math.max(0, p.finishedAt - p.firstGuessAt)
+          : undefined;
       const players = this.state.players.map((p) => ({
         username: p.username,
         guessCount: p.guesses.length,
@@ -204,6 +208,8 @@ export class Room extends DurableObject<Env> {
         resigned: p.resigned,
         isBot: p.isBot,
         goldAwarded: p.goldAwarded,
+        grid: encodeSolveGrid(p.guesses),
+        durationMs: durationOf(p),
       }));
       return Response.json(topDaily(players, username, n));
     }
