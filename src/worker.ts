@@ -15,6 +15,7 @@ import { buildDailyMeta, buildDailyJsonLd, dailyPrevNext, dailyDateFromPathname,
 import { buildWeeklyScienceSummary, type SciencePublicDailySummary } from "./science.ts";
 import { buildDailyPost, buildWeeklyPost, type FeedPost } from "./feed.ts";
 import { BRAIN_NOTES } from "./brain-notes.ts";
+import { buildTuneMessages, cleanTuneOutput, TUNE_MODEL, MAX_STORY_CHARS, MAX_PROMPT_CHARS } from "./vibe-tune.ts";
 export { Room, User, WordStats, Challenge, Daily, Science, Arena };
 
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
@@ -140,6 +141,34 @@ export default {
         body: await req.text(),
         headers: { "content-type": "application/json" },
       }));
+    }
+
+    // Vibe Studio "✨ tune" — rewrite a curator's "why this word" note via Workers AI.
+    // POST /vibe-studio/tune  { story, prompt? } -> { text }. Open for now (the whole
+    // studio is an un-launched, un-auth'd seam; real auth + rate-limit land with the
+    // scheduling increment). Input is hard-capped so a stray request can't balloon the
+    // call; the route 503s cleanly if the AI binding is missing (e.g. local dev).
+    if (url.pathname === "/vibe-studio/tune" && req.method === "POST") {
+      const json = (v: unknown, status: number) =>
+        new Response(JSON.stringify(v), { status, headers: { "content-type": "application/json" } });
+      if (!env.AI) return json({ error: "ai_unavailable" }, 503);
+      let body: Record<string, unknown>;
+      try { body = (await req.json()) as Record<string, unknown>; }
+      catch { return json({ error: "bad_json" }, 400); }
+      const story = (typeof body.story === "string" ? body.story : "").slice(0, MAX_STORY_CHARS);
+      const prompt = (typeof body.prompt === "string" ? body.prompt : "").slice(0, MAX_PROMPT_CHARS);
+      if (!story.trim()) return json({ error: "empty_story" }, 400);
+      try {
+        const out = await env.AI.run(TUNE_MODEL, {
+          messages: buildTuneMessages(story, prompt),
+          max_tokens: 512,
+        }) as { response?: string };
+        const text = cleanTuneOutput(typeof out?.response === "string" ? out.response : "");
+        if (!text) return json({ error: "no_output" }, 502);
+        return json({ text }, 200);
+      } catch {
+        return json({ error: "tune_failed" }, 502);
+      }
     }
 
     // Archive index.

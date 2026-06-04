@@ -106,8 +106,30 @@ door to the broader Room Sandbox vision — one extensible `roomConfig`, progres
 6. **Role-scoped scheduling** — curator assignment (date→curator/token on the DAILY DO) + server
    date-pin; wires up the now-inert Submit seam. This is also where the studio gets real auth.
 7. **Mobile pass** — bottom sheets, keyboard capture, scroll-aware top bar, responsive board.
-8. **AI / clone / Suno / hidden-gift seams** wired to stubs — including the real model call behind
-   the ✨ story-tune affordance and the `aiPrompt` seed already authored in the studio.
+8. **AI / clone / Suno / hidden-gift seams** wired to stubs — ✅ **the ✨ story-tune is now REAL**
+   (Cloudflare Workers AI; see below). Still seams: voice cloning, Suno music, the hidden-word gift.
+
+---
+
+## In flight — ✨ AI story-tune (branch `vibe-ai-tune`, built, NOT yet shipped)
+
+The first real AI on the surface. The ✨ in the "why this word" box now **rewrites the note instantly**
+via **Cloudflare Workers AI** (`env.AI`, model `@cf/meta/llama-3.1-8b-instruct`) — native to our
+Workers stack, on the free Neuron allocation, **no tunnel / no local model / no API key**.
+
+- **Flow:** ✨ → instant rewrite in place → the prompt panel reveals the prompt that was used →
+  **Respin** (re-runs from the curator's *original* words, never compounding) · edit the prompt and
+  respin · **Save** (accept as new baseline) · **Revert to mine** (restore the curator's own words).
+- **Server:** `POST /vibe-studio/tune {story, prompt?} → {text}` in `worker.ts`. Input hard-capped
+  (`MAX_STORY_CHARS`/`MAX_PROMPT_CHARS`); 503 if the AI binding is absent (local dev), 502 on AI error.
+- **Pure + tested:** `src/vibe-tune.ts` (`buildTuneMessages`, `cleanTuneOutput` strips quote/fence/
+  "Here is…:" envelopes, `TUNE_MODEL`, `DEFAULT_TUNE_PROMPT`) — 16 tests in `test/vibe-tune.test.ts`.
+- **Binding:** `"ai": { "binding": "AI" }` in `wrangler.jsonc`; `AI?: Ai` on `Env`.
+- **Note:** `DEFAULT_TUNE_PROMPT` (server) mirrors `DEFAULT_AI_PROMPT` (client `vibe-studio-core.js`);
+  the client/server boundary can't share the public ESM, so keep the two strings in sync.
+- **⚠ Open:** the endpoint is **unauthenticated + unthrottled** — fine while the studio is an
+  un-launched seam, but a public POST that spends Neurons. Add auth + a rate limit in the
+  **role-scoped scheduling increment** (item 6), where the studio gets real auth.
 
 ---
 

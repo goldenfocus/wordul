@@ -72,6 +72,13 @@
     { "binding": "OG", "bucket_name": "wordul-og" }
   ],
 
+  // Workers AI — powers the Vibe Studio "✨ tune" rewrite (POST /vibe-studio/tune).
+  // Runs on Cloudflare's GPU edge; included in the free Neuron allocation. No secret,
+  // no tunnel, no local model. The route degrades to 503 if this binding is absent.
+  "ai": {
+    "binding": "AI"
+  },
+
   // The live Room DO uses the KV-style storage API (ctx.storage.get("state") /
   // ctx.storage.put("state", ...) + getAlarm) and Hibernatable WebSockets
   // (acceptWebSocket / serializeAttachment), NOT SQLite storage. So the

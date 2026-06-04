@@ -125,9 +125,76 @@ $("rowsPlus").addEventListener("click", () => nudgeRows(1));
 // Why-this-word: the story seed (becomes the published story + feeds the AI).
 $("storyInput").addEventListener("input", (e) => { vibe.story = e.target.value; saveDraft(); });
 
-// ✨ toggles the (seam) AI-tune panel; the chevron reveals the editable prompt.
-$("aiSparkle").addEventListener("click", () => { $("aiTune").classList.toggle("open"); });
+// ✨ AI tune — instant rewrite of the "why this word" note via Workers AI.
+// The curator's own words are preserved in `originalStory` so Respin always rewrites
+// from the original (never compounding) and Revert can restore them.
+let originalStory = null;
+
+const TUNE_ERRORS = {
+  ai_unavailable: "AI isn't wired up here yet — try it on the live site.",
+  empty_story: "Write a few words first, then tap ✨.",
+  no_output: "The model came back empty — tap Respin.",
+  tune_failed: "Couldn't reach the AI — tap Respin.",
+  network: "Network hiccup — tap Respin.",
+};
+
+function setTuning(on) {
+  $("storyInput").parentElement.classList.toggle("tuning", on);
+  $("aiSparkle").disabled = on;
+  $("aiSparkle").classList.toggle("spin", on);
+  $("aiRespin").disabled = on;
+}
+
+function tuneStatus(msg) { $("tuneStatus").textContent = msg || ""; }
+
+async function tune() {
+  const source = originalStory != null ? originalStory : ($("storyInput").value || "");
+  if (!source.trim()) { tuneStatus(""); $("storyInput").focus(); return; }
+  if (originalStory == null) originalStory = source; // capture the curator's words once
+  $("aiTune").classList.add("open"); // reveal the prompt that's being used
+  setTuning(true);
+  tuneStatus("Tuning…");
+  try {
+    const res = await fetch("/vibe-studio/tune", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ story: source, prompt: vibe.aiPrompt }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.text) { tuneStatus(TUNE_ERRORS[data.error] || "Tune failed — tap Respin."); return; }
+    $("storyInput").value = data.text;
+    vibe.story = data.text;
+    saveDraft();
+    tuneStatus("");
+  } catch {
+    tuneStatus(TUNE_ERRORS.network);
+  } finally {
+    setTuning(false);
+  }
+}
+
+$("aiSparkle").addEventListener("click", tune);
+$("aiRespin").addEventListener("click", tune);
 $("aiPromptInput").addEventListener("input", (e) => { vibe.aiPrompt = e.target.value; saveDraft(); });
+
+// Save = accept the tuned text as the new baseline; collapse the panel.
+$("aiSave").addEventListener("click", () => {
+  originalStory = null;
+  $("aiTune").classList.remove("open");
+  tuneStatus("");
+});
+
+// Revert = restore the curator's own words (what they typed before the first ✨).
+$("aiRevert").addEventListener("click", () => {
+  if (originalStory != null) {
+    $("storyInput").value = originalStory;
+    vibe.story = originalStory;
+    saveDraft();
+  }
+  originalStory = null;
+  $("aiTune").classList.remove("open");
+  tuneStatus("");
+});
 
 for (const [id, key] of [["sw1", "a1"], ["sw2", "a2"], ["sw3", "a3"]]) {
   $(id).addEventListener("input", (e) => { vibe.colorScheme[key] = e.target.value; applyPalette(); renderBoard(); saveDraft(); });

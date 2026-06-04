@@ -30,6 +30,7 @@ export interface Env {
   DIRECTORY: KVNamespace;
   DESIGNS: R2Bucket;
   OG: R2Bucket;
+  AI?: Ai;                    // Workers AI — powers POST /vibe-studio/tune (optional: route 503s if absent)
   DAILY_ADMIN_TOKEN?: string; // wrangler secret; gates POST /daily/schedule
 }
 

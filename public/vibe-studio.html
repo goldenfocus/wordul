@@ -74,15 +74,30 @@
     cursor: pointer; font-size: 17px; line-height: 1; padding: 4px; border-radius: 8px;
     filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 60%, transparent)); transition: transform .12s; }
   .ai-sparkle:hover { transform: scale(1.15); }
+  .ai-sparkle:disabled { cursor: progress; }
+  .ai-sparkle.spin { animation: ai-spin .8s linear infinite; }
+  @keyframes ai-spin { to { transform: rotate(360deg); } }
+  /* While a rewrite is in flight the note dims + softly pulses (feels "thinking"). */
+  .story-box.tuning textarea { opacity: .5; animation: ai-pulse 1.1s ease-in-out infinite; }
+  @keyframes ai-pulse { 50% { opacity: .72; } }
   .ai-tune { margin-top: 10px; display: none; }
   .ai-tune.open { display: block; }
   .ai-tune-head { display: flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: .12em;
     text-transform: uppercase; color: color-mix(in srgb, var(--accent) 70%, #8a877f); margin-bottom: 6px; }
   .ai-tune input { width: 100%; box-sizing: border-box; font-size: 13px; padding: 9px 11px;
     background: #14130f; border: 1px solid #2c2b28; border-radius: 8px; color: #cfc7b6; }
-  .ai-tune-run { margin-top: 8px; background: transparent; border: 0; cursor: not-allowed;
-    color: #8a877f; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }
-  .ai-tune-run .soon { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+  .ai-tune-actions { display: flex; align-items: center; gap: 16px; margin-top: 9px; }
+  .ai-tune-actions button { background: transparent; border: 0; cursor: pointer; font-size: 13px;
+    font-weight: 600; display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; }
+  .ai-tune-actions button:disabled { opacity: .4; cursor: progress; }
+  .ai-tune-run { color: color-mix(in srgb, var(--accent) 88%, #fff); }
+  .ai-tune-run:hover:not(:disabled) { text-shadow: 0 0 12px var(--accent); }
+  .ai-tune-save { color: var(--a1); }
+  .ai-tune-save:hover { text-shadow: 0 0 12px var(--a1); }
+  .ai-tune-revert { color: #8a877f; margin-left: auto; }
+  .ai-tune-revert:hover { color: #cfc7b6; }
+  .ai-tune-status { margin-top: 8px; min-height: 15px; font-size: 12px; letter-spacing: .02em;
+    color: color-mix(in srgb, var(--a3) 80%, #d98c6a); }
   .badge { display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 600; min-height: 18px; }
   .badge.real { color: var(--a1); }
   .badge.invented { color: var(--a2); }
@@ -131,9 +146,14 @@
         <button class="ai-sparkle" id="aiSparkle" type="button" title="Tune with AI" aria-label="Tune with AI">✨</button>
       </div>
       <div class="ai-tune" id="aiTune">
-        <div class="ai-tune-head">⌄ Tune prompt</div>
+        <div class="ai-tune-head">The prompt — edit it, then respin</div>
         <input id="aiPromptInput" type="text" />
-        <button class="ai-tune-run" type="button" disabled>✨ Tune it <span class="soon">coming soon</span></button>
+        <div class="ai-tune-actions">
+          <button class="ai-tune-run" id="aiRespin" type="button">↻ Respin</button>
+          <button class="ai-tune-save" id="aiSave" type="button">✓ Save</button>
+          <button class="ai-tune-revert" id="aiRevert" type="button">Revert to mine</button>
+        </div>
+        <div class="ai-tune-status" id="tuneStatus" role="status" aria-live="polite"></div>
       </div>
     </div>
 
