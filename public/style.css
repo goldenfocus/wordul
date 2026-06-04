@@ -2745,6 +2745,24 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .daily-top-mark.is-out { color: var(--muted); }    /* ran out of guesses */
 .daily-top-sep { height: 1px; margin: .25rem 0; background: var(--muted); opacity: .25; }
 
+/* Full player roster on the stats page — lean ranked list (rank · name · gold · in N · time). */
+.daily-roster-list { list-style: none; margin: .25rem 0 0; padding: 0; display: grid; gap: .35rem; }
+.daily-roster-row {
+  display: grid;
+  grid-template-columns: 1.75rem 1fr auto auto auto;
+  align-items: center;
+  gap: .6rem;
+  padding: .4rem .6rem;
+  border-radius: .6rem;
+  background: var(--bg-card);
+}
+.daily-roster-row.is-you { outline: 1px solid var(--accent); }
+.daily-roster-rank { font-variant-numeric: tabular-nums; color: var(--muted); font-size: .9em; text-align: center; }
+.daily-roster-name { color: var(--fg); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.daily-roster-name:hover { text-decoration: underline; }
+.daily-roster-gold { color: #f0c14b; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; justify-content: flex-end; font-weight: 600; }
+.daily-roster-guesses, .daily-roster-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+
 /* Luxe rank medallions + the precious coin (struck SVGs, soft static glow). */
 .wmedal { width: 1.5em; height: 1.5em; display: block; }
 .wmedal-1 { filter: drop-shadow(0 0 3px rgba(233,178,61,.5)); }
