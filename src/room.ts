@@ -3,6 +3,7 @@ import { WORDS_BY_SIZE, isSupportedSize } from "./wordsbysize.ts";
 import { scoreGuess, countVowels, revealUngreened, type Color } from "./color.ts";
 import { computeNextGuess } from "./solver.ts";
 import { noobGuess, mistakeRateFor } from "./noob.ts";
+import { planKeystrokes, timelineMs, NOOB_HAND, SHARP_HAND, type KeyStep } from "./rhythm.ts";
 import { projectPlayerForClient } from "./bots.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { everyoneReady, COUNTDOWN_MS } from "./duel.ts";
@@ -853,6 +854,29 @@ export class Room extends DurableObject<Env> {
       } catch {
         // socket may be closing; ignore
       }
+    }
+  }
+
+  // Bot counterpart to onTyping: broadcast a count-only ghost-fill pulse for a (socket-less) bot.
+  // Same wire shape as a human's relay, sent to everyone (the bot has no socket to skip). Ephemeral
+  // — no storage write, no snapshot. Guards mirror onTyping so it no-ops once the round is over.
+  private emitBotTyping(username: string, len: number): void {
+    if (this.state.phase !== "playing" || this.state.isDaily) return;
+    const bot = this.state.players.find((p) => p.username === username);
+    if (!bot || !bot.isBot || bot.status !== "playing") return;
+    const n = Math.max(0, Math.min(this.state.wordLength, Math.floor(len)));
+    const payload = JSON.stringify({ type: "typing", username, len: n } satisfies ServerMessage);
+    for (const ws of this.ctx.getWebSockets()) {
+      try { ws.send(payload); } catch { /* socket may be closing; ignore */ }
+    }
+  }
+
+  // Animate a decided word as cosmetic ghost-fill pulses over the planned timeline. Best-effort:
+  // these setTimeouts are ephemeral (a hibernating DO may drop them) — the durable nextGuessAt
+  // COMMIT in alarm() still lands the word, so a dropped animation degrades to today's instant pop.
+  private scheduleBotTyping(username: string, steps: KeyStep[]): void {
+    for (const step of steps) {
+      setTimeout(() => this.emitBotTyping(username, step.len), step.atMs);
     }
   }
 

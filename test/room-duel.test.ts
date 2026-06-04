@@ -193,4 +193,33 @@ describe("duel room — full DO integration (seats → ready → countdown → K
     expect(player(room, "carol").guesses.length).toBe(0); // rejected — spectators don't play
     expect(room.state.phase).toBe("playing");
   });
+
+  // helper: drive a fresh /robots room to a live round with one worduler duelist.
+  // Pushes the human socket into the room's socket list (the real DO does this in fetch via
+  // acceptWebSocket; these tests bypass fetch) so broadcasts actually reach a client.
+  async function liveRobotRoom() {
+    const { room, sockets } = makeRoom("robots");
+    const a = mockWs();
+    sockets.push(a);
+    await join(room, a, "alice");
+    await room.webSocketMessage(a, JSON.stringify({ type: "ready", ready: true }));
+    room.state.goAt = Date.now() - 1;
+    await room.alarm();
+    const bot = room.state.players.find((p) => p.isBot)!;
+    return { room, sockets, bot, a };
+  }
+
+  it("emitBotTyping broadcasts a count-only typing pulse to clients", async () => {
+    const { room, sockets, bot } = await liveRobotRoom();
+
+    const got: Array<{ type: string; username?: string; len?: number }> = [];
+    (sockets[0] as unknown as { send: (s: string) => void }).send = (s: string) => got.push(JSON.parse(s));
+
+    (room as unknown as { emitBotTyping: (u: string, n: number) => void }).emitBotTyping(bot.username, 3);
+
+    const pulse = got.find((m) => m.type === "typing");
+    expect(pulse).toBeTruthy();
+    expect(pulse!.username).toBe(bot.username);
+    expect(pulse!.len).toBe(3);
+  });
 });
