@@ -682,6 +682,7 @@ export class Room extends DurableObject<Env> {
       p.pointsSpent = 0;
       p.revealHints = 0;
       p.vowelHints = 0;
+      p.pendingWord = undefined;
     }
     this.pushSystem(`${who} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
     this.emitRoundStarted();

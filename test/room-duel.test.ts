@@ -274,4 +274,13 @@ describe("duel room — full DO integration (seats → ready → countdown → K
     expect(username).toBe(bot.username);
     expect((steps as unknown[]).length).toBeGreaterThan(0);
   });
+
+  it("clears a stale pendingWord when a new round starts", async () => {
+    const { room, bot } = await liveRobotRoom();
+    room.state.phase = "finished";             // the round ended while the bot was mid-type
+    bot.pendingWord = "STALE";
+    await (room as unknown as { runStart: (who: string) => Promise<boolean> }).runStart("alice");
+    expect(room.state.phase).toBe("playing");  // the new round actually started
+    expect(bot.pendingWord).toBeUndefined();
+  });
 });
