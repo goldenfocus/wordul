@@ -120,6 +120,24 @@ export function colorSchemeVars(cs) {
   return { "--accent": a1, "--a1": a1, "--a2": a2, "--a3": a3 };
 }
 
+// Apply (or clear) a curated day's palette on <html>. A valid palette sets the accent + atom
+// vars and flags html[data-themed="1"] so the palette-only CSS layers light up; null removes
+// the atoms + flag. We deliberately do NOT clear --accent here: applyEdition owns it and is
+// always called first, so on a legacy day / non-daily room the edition's own accent is already
+// in place and stays. Returns whether a palette was applied.
+export function applyColorScheme(cs) {
+  const html = document.documentElement;
+  const vars = colorSchemeVars(cs);
+  if (!vars) {
+    for (const v of ["--a1", "--a2", "--a3"]) html.style.removeProperty(v);
+    delete html.dataset.themed;
+    return false;
+  }
+  for (const [k, val] of Object.entries(vars)) html.style.setProperty(k, val);
+  html.dataset.themed = "1";
+  return true;
+}
+
 export function applyEdition(id) {
   const ed = getEdition(id);
   activeId = ed.id;

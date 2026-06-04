@@ -123,3 +123,22 @@ describe("colorSchemeVars", () => {
     expect(colorSchemeVars({ a1: "#fff", a2: "", a3: "#000" })).toBeNull();
   });
 });
+
+import { applyColorScheme } from "/edition.js";
+
+describe("applyColorScheme", () => {
+  const html = document.documentElement;
+  it("applies accent + atoms and flags data-themed for a valid palette", () => {
+    expect(applyColorScheme({ a1: "#f0c14b", a2: "#6f9e7a", a3: "#0b0a0c" })).toBe(true);
+    expect(html.style.getPropertyValue("--accent").trim()).toBe("#f0c14b");
+    expect(html.style.getPropertyValue("--a2").trim()).toBe("#6f9e7a");
+    expect(html.dataset.themed).toBe("1");
+  });
+  it("clears atoms + the flag for a null palette (returns false)", () => {
+    applyColorScheme({ a1: "#f0c14b", a2: "#6f9e7a", a3: "#0b0a0c" });
+    expect(applyColorScheme(null)).toBe(false);
+    expect(html.style.getPropertyValue("--a1").trim()).toBe("");
+    expect(html.style.getPropertyValue("--a3").trim()).toBe("");
+    expect(html.dataset.themed).toBeUndefined();
+  });
+});
