@@ -6,6 +6,11 @@
   //   migration tag v1 -> new_classes ["Room"].
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "wordle-race",
+  // Worker name is an internal Cloudflare id (it hosts all the Durable Objects, so
+  // it CANNOT be renamed without orphaning every user/room/stat). The only public
+  // leak of the legacy "wordle" name was the auto subdomain wordle-race.*.workers.dev
+  // — disabled here so prod is served only from the custom domain wordul.com.
+  "workers_dev": false,
   "preview_urls": true,
   "main": "src/worker.ts",
   "compatibility_date": "2026-04-25",

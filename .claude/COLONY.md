@@ -58,6 +58,8 @@ npm run deploy
 
 | 2026-06-04 05:36 | claude (tm-scrub) | literal "Wordle" trademark scrub on top of `origin/main` e279da9 — `README.md`, `package.json` name+desc, one `style.css` comment (only style.css is a served asset; README/package.json don't touch runtime). Tier C, 374 tests green. Done from an isolated worktree off origin/main. Deploy uploaded 1 file (style.css only). Smoke: home/room/feed 200, served style.css has 0 "Wordle". | b122777d-eda9-440b-9810-467ac565d4f2 | ✅ |
 
+| 2026-06-04 06:27 | claude (disable-workersdev) | 🔒 deploying: `"workers_dev": false` in wrangler.jsonc — kills the only public leak of the legacy name, `wordle-race.*.workers.dev`. Worker NOT renamed (it hosts all DOs; rename = data loss). Config-only, no DO migration (still v6), no 10097 risk. CI secret not set yet → local `wrangler deploy` fallback. | — | 🔒 deploying |
+
 > Benign collision: both sessions fixed the same daily-leave crash within ~2 min. Final prod `3a07553` carries **both** defenses (render `#boards` guard + session teardown). NOTE: local `main` checkout is stale/orphaned at `bde11dd` (never on origin/main) — origin/main + prod are the truth.
 
 ## ✅ RESOLVED (2026-06-03 17:11 UTC): Arena merged to `main`; block cleared
