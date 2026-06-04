@@ -118,4 +118,8 @@ describe("fullDaily", () => {
     expect(view.players[0].durationMs).toBe(95000);
     expect(view.players[0].grid).toBeUndefined();
   });
+
+  it("reports youRank null for an anonymous viewer (empty username)", () => {
+    expect(fullDaily([p("ava", 1240, 2)], "").youRank).toBeNull();
+  });
 });

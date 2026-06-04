@@ -70,6 +70,6 @@ export type FullLeaderboardView = {
 export function fullDaily(players: RankablePlayer[], username: string): FullLeaderboardView {
   const ranked = rankedEntries(players);
   const withRank: RosterEntry[] = ranked.map((e, i) => ({ ...e, rank: i + 1 }));
-  const meIdx = ranked.findIndex((e) => e.username === username);
-  return { players: withRank, youRank: meIdx >= 0 ? meIdx + 1 : null, total: ranked.length };
+  const meIdx = withRank.findIndex((e) => e.username === username);
+  return { players: withRank, youRank: meIdx >= 0 ? withRank[meIdx].rank : null, total: ranked.length };
 }

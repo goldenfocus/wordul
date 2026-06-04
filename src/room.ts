@@ -201,30 +201,21 @@ export class Room extends DurableObject<Env> {
         p.firstGuessAt != null && p.finishedAt != null
           ? Math.max(0, p.finishedAt - p.firstGuessAt)
           : undefined;
-      if (full) {
-        // Lean roster: every ranked player with duration, but NO grid (scales to hundreds).
-        const players = this.state.players.map((p) => ({
-          username: p.username,
-          guessCount: p.guesses.length,
-          won: p.status === "won",
-          resigned: p.resigned,
-          isBot: p.isBot,
-          goldAwarded: p.goldAwarded,
-          durationMs: durationOf(p),
-        }));
-        return Response.json(fullDaily(players, username));
-      }
-      const n = Number(url.searchParams.get("n") ?? "3");
-      const players = this.state.players.map((p) => ({
+      // Shared base mapping. The full roster stays lean (no grid); the top-N view adds grid.
+      const toRankable = (p: PlayerState) => ({
         username: p.username,
         guessCount: p.guesses.length,
         won: p.status === "won",
         resigned: p.resigned,
         isBot: p.isBot,
         goldAwarded: p.goldAwarded,
-        grid: encodeSolveGrid(p.guesses),
         durationMs: durationOf(p),
-      }));
+      });
+      if (full) {
+        return Response.json(fullDaily(this.state.players.map(toRankable), username));
+      }
+      const n = Number(url.searchParams.get("n") ?? "3");
+      const players = this.state.players.map((p) => ({ ...toRankable(p), grid: encodeSolveGrid(p.guesses) }));
       return Response.json(topDaily(players, username, n));
     }
     return new Response("not found", { status: 404 });
