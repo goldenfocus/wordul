@@ -37,6 +37,45 @@ export const MAX_OPEN_MS = 4 * 60 * 60 * 1000; // registered max lifetime FROM M
 export const TARGET_OPEN = 3;
 export const MAX_SEEDED = 10;
 
+// --- Living Arena (v2 inc.1): liveliness knobs. desiredOpen drifts within this band; each
+// seeded room gets a jittered lifetime and a weighted word length. All chosen by PURE
+// helpers taking an injected roll so arena.ts (Math.random) stays the only impure layer.
+export const ARENA_MIN_OPEN = 1;
+export const ARENA_MAX_OPEN = 6;
+export const LIFETIME_MIN_MS = 45_000;
+export const LIFETIME_MAX_MS = 180_000;
+// Friendly lengths common, long ones rare — atmosphere without a wall of brutal rooms.
+export const LENGTH_WEIGHTS: ReadonlyArray<readonly [number, number]> = [
+  [4, 3], [5, 5], [6, 3], [7, 2], [8, 1], [9, 1],
+];
+
+// Random-walk the desired open-room count one step within [MIN, MAX]. roll in [0,1):
+// low third → -1, high third → +1, middle → hold. A slow tide, never a sawtooth.
+export function driftTarget(current: number, roll: number): number {
+  const base = Number.isFinite(current) ? current : ARENA_MIN_OPEN;
+  let next = base;
+  if (roll < 1 / 3) next = base - 1;
+  else if (roll >= 2 / 3) next = base + 1;
+  return Math.max(ARENA_MIN_OPEN, Math.min(ARENA_MAX_OPEN, next));
+}
+
+// Weighted pick of a seeded room's word length. roll in [0,1).
+export function rollWordLength(roll: number): number {
+  const total = LENGTH_WEIGHTS.reduce((a, [, w]) => a + w, 0);
+  let t = Math.max(0, Math.min(0.999999, roll)) * total;
+  for (const [len, w] of LENGTH_WEIGHTS) {
+    if (t < w) return len;
+    t -= w;
+  }
+  return LENGTH_WEIGHTS[LENGTH_WEIGHTS.length - 1][0];
+}
+
+// A seeded room's jittered expiry budget (ms from mint). roll in [0,1).
+export function rollLifetime(roll: number): number {
+  const r = Math.max(0, Math.min(1, roll));
+  return Math.round(LIFETIME_MIN_MS + r * (LIFETIME_MAX_MS - LIFETIME_MIN_MS));
+}
+
 export function emptyArenaState(): ArenaState {
   return { seeded: {}, seedCount: 0 };
 }

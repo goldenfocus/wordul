@@ -173,3 +173,56 @@ describe("publish — human public rooms in the index", () => {
     expect(openGames(s)).toHaveLength(0);
   });
 });
+
+import {
+  driftTarget,
+  rollWordLength,
+  rollLifetime,
+  ARENA_MIN_OPEN,
+  ARENA_MAX_OPEN,
+  LIFETIME_MIN_MS,
+  LIFETIME_MAX_MS,
+  LENGTH_WEIGHTS,
+} from "../src/arena-core.ts";
+
+describe("driftTarget", () => {
+  it("steps down on a low roll, up on a high roll, holds in the middle", () => {
+    expect(driftTarget(3, 0.0)).toBe(2);
+    expect(driftTarget(3, 0.5)).toBe(3);
+    expect(driftTarget(3, 0.99)).toBe(4);
+  });
+
+  it("clamps to [MIN, MAX]", () => {
+    expect(driftTarget(ARENA_MIN_OPEN, 0.0)).toBe(ARENA_MIN_OPEN);
+    expect(driftTarget(ARENA_MAX_OPEN, 0.99)).toBe(ARENA_MAX_OPEN);
+  });
+
+  it("recovers a sane value from a non-finite current", () => {
+    expect(driftTarget(NaN, 0.5)).toBeGreaterThanOrEqual(ARENA_MIN_OPEN);
+    expect(driftTarget(NaN, 0.5)).toBeLessThanOrEqual(ARENA_MAX_OPEN);
+  });
+});
+
+describe("rollWordLength", () => {
+  it("only ever returns a length present in the weight table", () => {
+    const valid = new Set(LENGTH_WEIGHTS.map(([len]) => len));
+    for (const roll of [0, 0.1, 0.33, 0.5, 0.75, 0.9, 0.999]) {
+      expect(valid.has(rollWordLength(roll))).toBe(true);
+    }
+  });
+
+  it("returns the first length at roll 0 and the last at roll ~1", () => {
+    expect(rollWordLength(0)).toBe(LENGTH_WEIGHTS[0][0]);
+    expect(rollWordLength(0.999999)).toBe(LENGTH_WEIGHTS[LENGTH_WEIGHTS.length - 1][0]);
+  });
+});
+
+describe("rollLifetime", () => {
+  it("maps roll 0..1 across [MIN, MAX]", () => {
+    expect(rollLifetime(0)).toBe(LIFETIME_MIN_MS);
+    expect(rollLifetime(1)).toBe(LIFETIME_MAX_MS);
+    const mid = rollLifetime(0.5);
+    expect(mid).toBeGreaterThan(LIFETIME_MIN_MS);
+    expect(mid).toBeLessThan(LIFETIME_MAX_MS);
+  });
+});
