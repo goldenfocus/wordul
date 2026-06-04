@@ -55,3 +55,21 @@ export function topDaily(players: RankablePlayer[], username: string, n: number)
   const you = meIdx >= size ? { ...ranked[meIdx], rank: meIdx + 1 } : null;
   return { top, you, total: ranked.length };
 }
+
+// A single ranked entry with its 1-based rank — the full-roster row shape.
+export type RosterEntry = LeaderEntry & { rank: number };
+export type FullLeaderboardView = {
+  players: RosterEntry[];      // ALL ranked players, sorted, each with a 1-based rank
+  youRank: number | null;      // caller's rank if ranked, else null
+  total: number;
+};
+
+// The complete daily roster for the stats page. Same filter/sort as topDaily, but
+// returns every ranked player (topDaily caps at 10). Callers that want a lean payload
+// simply don't supply `grid` on the input.
+export function fullDaily(players: RankablePlayer[], username: string): FullLeaderboardView {
+  const ranked = rankedEntries(players);
+  const withRank: RosterEntry[] = ranked.map((e, i) => ({ ...e, rank: i + 1 }));
+  const meIdx = ranked.findIndex((e) => e.username === username);
+  return { players: withRank, youRank: meIdx >= 0 ? meIdx + 1 : null, total: ranked.length };
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { topDaily, type RankablePlayer } from "../src/leaderboard-core.ts";
+import { topDaily, fullDaily, type RankablePlayer } from "../src/leaderboard-core.ts";
 
 // helper: a scored, finished human player
 const p = (username: string, gold: number, guesses: number, won = true): RankablePlayer => ({
@@ -82,5 +82,40 @@ describe("topDaily", () => {
     const { top } = topDaily([p("ava", 1240, 2)], "ava", 3);
     expect(top[0].grid).toBeUndefined();
     expect(top[0].durationMs).toBeUndefined();
+  });
+});
+
+describe("fullDaily", () => {
+  it("returns every ranked player with a 1-based rank, sorted like topDaily", () => {
+    const players = [
+      p("ava", 1240, 2), p("bao", 1090, 3), p("cy", 980, 3),
+      p("dot", 700, 4), p("me", 540, 4),
+    ];
+    const view = fullDaily(players, "me");
+    expect(view.players.map((e) => e.username)).toEqual(["ava", "bao", "cy", "dot", "me"]);
+    expect(view.players.map((e) => e.rank)).toEqual([1, 2, 3, 4, 5]);
+    expect(view.total).toBe(5);
+    expect(view.youRank).toBe(5);
+  });
+
+  it("excludes bots and unscored players, and reports youRank null when unranked", () => {
+    const players: RankablePlayer[] = [
+      p("ava", 1240, 2),
+      { username: "clanker", guessCount: 2, won: true, goldAwarded: 9999, isBot: true },
+      { username: "still", guessCount: 1, won: false, goldAwarded: undefined },
+    ];
+    const view = fullDaily(players, "ghost");
+    expect(view.players.map((e) => e.username)).toEqual(["ava"]);
+    expect(view.total).toBe(1);
+    expect(view.youRank).toBeNull();
+  });
+
+  it("carries durationMs through (grid is left to the caller and may be absent)", () => {
+    const players: RankablePlayer[] = [
+      { username: "ava", guessCount: 2, won: true, goldAwarded: 1240, durationMs: 95000 },
+    ];
+    const view = fullDaily(players, "ava");
+    expect(view.players[0].durationMs).toBe(95000);
+    expect(view.players[0].grid).toBeUndefined();
   });
 });
