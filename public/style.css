@@ -1336,10 +1336,11 @@ html[data-edition="default"] .key.pressed {
 .give-up-icon {
   width: 44px; height: 44px; border-radius: 8px;
   border: 1px solid var(--error, #ff3838); background: var(--bg-card, var(--key-bg));
-  font-size: 20px; line-height: 1; cursor: pointer; padding: 0;
+  color: var(--error, #ff3838); line-height: 1; cursor: pointer; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   transition: border-color 0.15s, transform 0.08s, box-shadow 0.15s;
 }
+.give-up-icon .glyph { width: 24px; height: 24px; }
 .give-up-icon:hover { box-shadow: 0 0 0 3px rgba(255,56,56,0.18); }
 .give-up-icon:active { transform: scale(0.92); }
 .magic-popover {
