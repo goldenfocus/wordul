@@ -13,7 +13,10 @@ export type SeedRec = {
   personaIcon: string; // human avatar (emoji)
   edition: string; // theme id from the existing library
   wordLength: number; // always 5 in v1
-  seats: string; // "1/2" (multi-bot seat variety is Increment 2)
+  seats: string; // "1/2", "2/3", "4/5" … = `${botCount}/${capacity}`
+  capacity: number; // total seats 2–5 (Inc.2)
+  botCount: number; // bots present at mint, 1…capacity−1 (Inc.2)
+  personaIds: string[]; // the room's full bot roster (capacity−1 ids) — drives cross-room dedup
   mintedAt: number; // epoch ms at mint
   lifetimeMs: number; // jittered expiry budget from mint; 0 ⇒ fall back to MAX_OPEN_MS
   status: SeedStatus;
@@ -50,6 +53,12 @@ export const LENGTH_WEIGHTS: ReadonlyArray<readonly [number, number]> = [
   [4, 3], [5, 5], [6, 3], [7, 2], [8, 1], [9, 1],
 ];
 
+// Inc.2 seat variety: mostly small rooms, occasional lively big ones. Same weighted-pick
+// shape as LENGTH_WEIGHTS. capacity 2 = the classic 1v1; 5 = the rare battle-royale.
+export const CAPACITY_WEIGHTS: ReadonlyArray<readonly [number, number]> = [
+  [2, 6], [3, 4], [4, 2], [5, 1],
+];
+
 // Random-walk the desired open-room count one step within [MIN, MAX]. roll in [0,1):
 // low third → -1, high third → +1, middle → hold. A slow tide, never a sawtooth.
 export function driftTarget(current: number, roll: number): number {
@@ -75,6 +84,25 @@ export function rollWordLength(roll: number): number {
 export function rollLifetime(roll: number): number {
   const r = Math.max(0, Math.min(1, roll));
   return Math.round(LIFETIME_MIN_MS + r * (LIFETIME_MAX_MS - LIFETIME_MIN_MS));
+}
+
+// Weighted capacity + a uniform botCount in [1, capacity-1]. Two injected rolls in [0,1)
+// (same purity contract as rollWordLength/rollLifetime — arena.ts is the only Math.random layer).
+export function rollSpawn(rCap: number, rBots: number): { capacity: number; botCount: number } {
+  const capacity = pickCapacity(rCap);
+  const span = capacity - 1; // ≥ 1
+  const botCount = 1 + Math.floor(Math.max(0, Math.min(0.999999, rBots)) * span);
+  return { capacity, botCount };
+}
+
+function pickCapacity(roll: number): number {
+  const total = CAPACITY_WEIGHTS.reduce((a, [, w]) => a + w, 0);
+  let t = Math.max(0, Math.min(0.999999, roll)) * total;
+  for (const [cap, w] of CAPACITY_WEIGHTS) {
+    if (t < w) return cap;
+    t -= w;
+  }
+  return CAPACITY_WEIGHTS[CAPACITY_WEIGHTS.length - 1][0];
 }
 
 export function emptyArenaState(): ArenaState {
@@ -155,4 +183,16 @@ export function liveCount(state: ArenaState): number {
 export function seedPaths(personaId: string, seedCount: number): { path: string; routePath: string } {
   const slug = `${personaId}-${seedCount}`;
   return { path: `arena/${slug}`, routePath: `/@arena/${slug}` };
+}
+
+// Backfill a persisted pre-Inc2 SeedRec (no capacity/botCount/personaIds) to the legacy
+// 1/2 single-bot shape so old rooms render + typecheck until they churn out. Idempotent.
+export function hydrateSeedRec(rec: SeedRec): SeedRec {
+  const capacity = typeof rec.capacity === "number" ? rec.capacity : 2;
+  const botCount = typeof rec.botCount === "number" ? rec.botCount : 1;
+  const personaIds = Array.isArray(rec.personaIds) && rec.personaIds.length > 0
+    ? rec.personaIds
+    : [rec.personaId];
+  const seats = rec.seats || `${botCount}/${capacity}`;
+  return { ...rec, capacity, botCount, personaIds, seats };
 }

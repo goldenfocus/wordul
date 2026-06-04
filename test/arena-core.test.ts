@@ -6,6 +6,9 @@ import {
   openGames,
   liveCount,
   seedPaths,
+  rollSpawn,
+  hydrateSeedRec,
+  CAPACITY_WEIGHTS,
   STALE_MS,
   MAX_OPEN_MS,
   type SeedRec,
@@ -24,6 +27,9 @@ function rec(over: Partial<SeedRec> = {}): SeedRec {
     edition: "default",
     wordLength: 5,
     seats: "1/2",
+    capacity: 2,
+    botCount: 1,
+    personaIds: ["maya"],
     mintedAt: 0,
     lifetimeMs: 0,
     status: "minted",
@@ -247,5 +253,79 @@ describe("prune honors per-rec lifetimeMs", () => {
     s = apply(s, { type: "register", path: "arena/maya-0" });
     expect(prune(s, 60_000).seeded["arena/maya-0"]).toBeDefined(); // 60s < 4h
     expect(prune(s, MAX_OPEN_MS + 1).seeded["arena/maya-0"]).toBeUndefined();
+  });
+});
+
+describe("rollSpawn", () => {
+  it("capacity is always one of the weighted table values", () => {
+    const allowed = new Set(CAPACITY_WEIGHTS.map(([c]) => c));
+    for (let i = 0; i < 1000; i++) {
+      const { capacity } = rollSpawn(i / 1000, 0.5);
+      expect(allowed.has(capacity)).toBe(true);
+    }
+  });
+
+  it("botCount is always in [1, capacity-1]", () => {
+    for (let rc = 0; rc < 1; rc += 0.05) {
+      for (let rb = 0; rb < 1; rb += 0.05) {
+        const { capacity, botCount } = rollSpawn(rc, rb);
+        expect(botCount).toBeGreaterThanOrEqual(1);
+        expect(botCount).toBeLessThanOrEqual(capacity - 1);
+      }
+    }
+  });
+
+  it("is pure — same rolls, same result", () => {
+    expect(rollSpawn(0.3, 0.7)).toEqual(rollSpawn(0.3, 0.7));
+  });
+
+  it("favors small rooms (capacity 2-3 dominate)", () => {
+    let small = 0;
+    const N = 2000;
+    for (let i = 0; i < N; i++) {
+      const { capacity } = rollSpawn((i * 0.6180339887) % 1, 0.5);
+      if (capacity <= 3) small++;
+    }
+    expect(small / N).toBeGreaterThan(0.6);
+  });
+});
+
+describe("SeedRec new fields round-trip", () => {
+  it("apply(mint) preserves capacity/botCount/personaIds", () => {
+    const r = rec({ capacity: 5, botCount: 4, seats: "4/5", personaIds: ["maya", "theo", "nova", "remy"] });
+    const s = apply(emptyArenaState(), { type: "mint", rec: r });
+    expect(s.seeded[r.path].capacity).toBe(5);
+    expect(s.seeded[r.path].botCount).toBe(4);
+    expect(s.seeded[r.path].personaIds).toEqual(["maya", "theo", "nova", "remy"]);
+  });
+
+  it("openGames still omits internal fields (no capacity/botCount/personaIds leak)", () => {
+    const r = rec({ capacity: 3, botCount: 2, seats: "2/3", personaIds: ["maya", "theo"], status: "registered" });
+    // publish goes straight to registered (no mint→register handshake needed)
+    const [g] = openGames(apply(emptyArenaState(), { type: "publish", rec: r }));
+    expect(g.seats).toBe("2/3");
+    expect("capacity" in g).toBe(false);
+    expect("botCount" in g).toBe(false);
+    expect("personaIds" in g).toBe(false);
+    expect("mintedAt" in g).toBe(false);
+  });
+});
+
+describe("hydrateSeedRec (legacy backfill)", () => {
+  it("defaults a pre-Inc2 rec to capacity 2 / botCount 1 / face-only roster", () => {
+    const legacy = { ...rec(), seats: "1/2" } as SeedRec;
+    delete (legacy as Partial<SeedRec>).capacity;
+    delete (legacy as Partial<SeedRec>).botCount;
+    delete (legacy as Partial<SeedRec>).personaIds;
+    const h = hydrateSeedRec(legacy);
+    expect(h.capacity).toBe(2);
+    expect(h.botCount).toBe(1);
+    expect(h.personaIds).toEqual(["maya"]);
+    expect(h.seats).toBe("1/2");
+  });
+
+  it("leaves a complete rec untouched", () => {
+    const r = rec({ capacity: 4, botCount: 3, seats: "3/4", personaIds: ["maya", "theo", "nova"] });
+    expect(hydrateSeedRec(r)).toEqual(r);
   });
 });
