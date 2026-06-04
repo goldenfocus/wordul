@@ -440,6 +440,8 @@ export class Room extends DurableObject<Env> {
       const world = (await res.json()) as {
         word: string; edition: string; voice: string;
         story: { title: string; body: string; tip?: string };
+        colorScheme?: { a1: string; a2: string; a3: string };
+        vibeTitle?: string;
       };
       const word = (world.word ?? "").toUpperCase();
       if (!/^[A-Z]+$/.test(word)) {
@@ -454,6 +456,8 @@ export class Room extends DurableObject<Env> {
       this.state.edition = world.edition || "default";
       this.state.voice = world.voice || "yang";
       this.state.story = world.story ?? null;
+      this.state.colorScheme = world.colorScheme ?? null;
+      this.state.vibeTitle = world.vibeTitle;
       this.state.phase = "playing";    // async one-shot: always live, no lobby
       this.state.round = 1;
       this.state.startedAt = this.state.startedAt ?? Date.now();

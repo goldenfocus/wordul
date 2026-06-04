@@ -82,6 +82,9 @@ export type RoomSnapshot = {
   isDaily?: boolean;       // async one-shot, locked word, no resets, per-player scoring
   story?: { title: string; body: string; tip?: string } | null; // World story for the unlock
   voice?: string;          // World companion voice id (forward-compat; client still defaults)
+  // --- Vibe Studio v1: curated day-page theming (additive; absent on legacy days) ---
+  colorScheme?: { a1: string; a2: string; a3: string } | null; // palette → CSS-var re-theme
+  vibeTitle?: string;      // curated title; becomes the daily board title when present
   seed?: SeedMarker;       // INTERNAL ONLY — present on seeded bot rooms; stripped outbound (Slice C)
   publicArena?: boolean;   // INTERNAL ONLY — a human-hosted public Arena room; stripped outbound
   // Rematch handshake — INTERNAL ONLY; stripped outbound in snapshotFor (like seed/publicArena).
