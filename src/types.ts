@@ -4,6 +4,7 @@ import type { GameRecord, RoomGame } from "./records.ts";
 import type { RoomScore } from "./scoreboard.ts";
 import type { RoomMode } from "./modes.ts";
 import type { LedgerTx } from "./economy.ts";
+import type { AuthRecord, PendingClaim } from "./account-core.ts";
 
 export type OwnedRoom = { slug: string; name: string; lastPlayedAt: number };
 
@@ -16,6 +17,10 @@ export type UserProfile = {
   ledger: LedgerTx[];   // append-only token transactions; capped audit log (last 500)
   balances: Record<string, number>;  // running per-token balance; authoritative (ledger is a capped audit log)
   h2h?: Record<string, { w: number; l: number }>; // per-(human, persona) record, keyed by persona id
+  // --- Accounts P0 (all optional; absent = open "kindness model" name) ---
+  claimed?: boolean;            // true once secured with a wordul-passphrase
+  auth?: AuthRecord;            // secret material — NEVER leaves the DO (publicProfile strips it)
+  pendingClaim?: PendingClaim;  // ephemeral preview slot between preview→commit; stripped from public output
 };
 
 export interface Env {
@@ -110,7 +115,7 @@ export type RoomSnapshot = {
 };
 
 export type ClientMessage =
-  | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string; scienceOptOut?: boolean; public?: boolean }
+  | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string; scienceOptOut?: boolean; public?: boolean; sessionToken?: string }
   | { type: "start" }
   | { type: "ready"; ready: boolean } // duel: toggle ready / "Challenge 👑"; gates the countdown
   | { type: "guess"; word: string }

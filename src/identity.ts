@@ -31,3 +31,17 @@ export function normalizeSlug(input: string): string {
 export function roomPath(owner: string, slug: string): string {
   return `${owner}/${slug}`;
 }
+
+/** Names that may NOT be claimed via the open form (brand, role, impersonation bait).
+ *  Lowercase, already-normalized form. Maintained here in version control (no KV hop). */
+export const RESERVED_USERNAMES: ReadonlySet<string> = new Set([
+  "wordul", "admin", "administrator", "official", "mod", "moderator", "staff",
+  "support", "help", "root", "system", "owner", "team", "wordul-team",
+  "yan", "yang", "jr", "goldenfocus", "golden-focus",
+  "api", "www", "mail", "null", "undefined", "anonymous", "guest",
+]);
+
+/** True when a normalized username is reserved and cannot be claimed via the open path. */
+export function isReserved(username: string): boolean {
+  return RESERVED_USERNAMES.has(normalizeUsername(username));
+}

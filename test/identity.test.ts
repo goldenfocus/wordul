@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeUsername, isValidUsername, normalizeSlug, roomPath } from "../src/identity.ts";
+import { normalizeUsername, isValidUsername, normalizeSlug, roomPath, isReserved, RESERVED_USERNAMES } from "../src/identity.ts";
 
 describe("normalizeUsername", () => {
   it("lowercases and strips illegal chars", () => {
@@ -37,5 +37,20 @@ describe("normalizeSlug", () => {
 describe("roomPath", () => {
   it("joins owner and slug", () => {
     expect(roomPath("yan", "friday-night")).toBe("yan/friday-night");
+  });
+});
+
+describe("isReserved", () => {
+  it("flags brand/role names (normalized)", () => {
+    expect(isReserved("admin")).toBe(true);
+    expect(isReserved("WORDUL")).toBe(true);   // normalized before lookup
+    expect(isReserved(" Official ")).toBe(true);
+  });
+  it("allows ordinary names", () => {
+    expect(isReserved("zang")).toBe(false);
+    expect(isReserved("maple_otter")).toBe(false);
+  });
+  it("keeps the anchor word reserved (cannot register @wordul)", () => {
+    expect(RESERVED_USERNAMES.has("wordul")).toBe(true);
   });
 });
