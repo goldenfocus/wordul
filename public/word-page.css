@@ -17,3 +17,28 @@
 .wp-faq summary { cursor:pointer; }
 .wp-cta { text-align:center; margin-top:40px; }
 .wp-play { display:inline-block; background:var(--green); color:#fff; padding:12px 24px; border-radius:8px; text-decoration:none; font-weight:700; }
+
+/* Meanings — numbered senses with italic examples + a small register tag. */
+.wp-senses ol { margin:6px 0 0; padding-left:22px; }
+.wp-senses li { margin:0 0 10px; }
+.wp-senses em { color:var(--muted); }
+.wp-register { display:inline-block; margin-left:6px; padding:1px 8px; border:1px solid #2a2a2c; border-radius:999px; font-size:12px; color:var(--muted); text-transform:lowercase; vertical-align:middle; }
+
+/* Did you know? — list form when multiple facts. */
+.wp-fact ul { margin:6px 0 0; padding-left:22px; }
+.wp-fact li { margin:0 0 8px; }
+
+/* Remember it — mnemonic. */
+.wp-mnemonic p { margin:6px 0 0; }
+
+/* A little poem — centered, slightly serif, airy, with a muted form caption. */
+.wp-poem { text-align:center; margin:28px 0; }
+.wp-poem-body { font-family:Georgia,"Times New Roman",serif; font-size:19px; line-height:1.9; color:var(--fg); margin:8px 0 6px; }
+.wp-poem-form { color:var(--muted); font-size:13px; font-style:italic; margin:0; text-transform:lowercase; letter-spacing:1px; }
+
+/* Wordplay — joke list. */
+.wp-jokes ul { margin:6px 0 0; padding-left:22px; }
+.wp-jokes li { margin:0 0 10px; }
+
+/* What it teaches — lesson, set off like a soft pull-quote. */
+.wp-lesson p { margin:6px 0 0; color:var(--fg); }

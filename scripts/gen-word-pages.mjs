@@ -16,7 +16,7 @@ import { ogCardSvg } from "./lib/og-card.mjs";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ORIGIN = process.env.WIKI_ORIGIN || "https://wordul.com";
 
-const { WORD_INTEL } = await import(pathToFileURL(join(ROOT, "public/data/word-intel.js")).href);
+const { WORD_INTEL } = await import(pathToFileURL(join(ROOT, "data/word-intel-rich.js")).href);
 const words = answerWords();
 const excluded = exclusions();
 const graph = buildWordGraph(words);

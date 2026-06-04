@@ -22,25 +22,98 @@ export function renderWordPage(word, intel, graph, origin) {
   const title = `What does "${W}" mean? — definition, facts & word game`;
   const desc = (i.def || `Definition, facts and word play for ${W}.`).slice(0, 155);
 
-  const faq = [
+  // Up to 5 Q&As — each entry only included when its source field exists.
+  const faqCandidates = [
+    i.def && { q: `What does ${W} mean?`, a: i.def },
     { q: `Is ${W} a valid word?`, a: `Yes — ${W} is one of the answer words in Wordul, the daily word game.` },
     { q: `How many letters is ${W}?`, a: `${W} has ${W.length} letters and ${i.syllables ? `${i.syllables} syllable${i.syllables === 1 ? "" : "s"}` : "is a common English word"}.` },
-    { q: `What part of speech is ${W}?`, a: i.pos ? `${W} is a ${i.pos}.` : `${W} appears in everyday English.` },
+    i.etymology && { q: `Where does ${W} come from?`, a: i.etymology },
+    i.lesson && { q: `What can ${W} teach us?`, a: i.lesson },
   ];
+  const faq = faqCandidates.filter(Boolean);
+
+  const graphNodes = [
+    { "@type": "DefinedTerm", "@id": "#term", name: W, description: i.def || "", inDefinedTermSet: `${origin}/words` },
+    { "@type": "WebPage", name: title, url: canonical, primaryImageOfPage: { "@type": "ImageObject", url: ogImg } },
+    { "@type": "FAQPage", mainEntity: faq.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })) },
+  ];
+  if (i.poem && i.poem.lines && i.poem.lines.length) {
+    graphNodes.push({
+      "@type": "CreativeWork",
+      genre: "Poetry",
+      name: `${W} — a little poem`,
+      text: i.poem.lines.join("\n"),
+      creator: { "@type": "Organization", name: "Wordul" },
+      about: { "@id": "#term" },
+    });
+  }
+  if (i.quote) {
+    graphNodes.push({
+      "@type": "Quotation",
+      text: i.quote,
+      ...(i.author ? { creator: { "@type": "Person", name: i.author } } : {}),
+    });
+  }
 
   const jsonld = {
     "@context": "https://schema.org",
-    "@graph": [
-      { "@type": "DefinedTerm", name: W, description: i.def || "", inDefinedTermSet: `${origin}/words` },
-      { "@type": "WebPage", name: title, url: canonical, primaryImageOfPage: { "@type": "ImageObject", url: ogImg } },
-      { "@type": "FAQPage", mainEntity: faq.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })) },
-    ],
+    "@graph": graphNodes,
   };
+
+  // Pronunciation appended to the .wp-meta line.
+  const metaParts = [
+    i.pos ? esc(i.pos) : "",
+    i.syllables ? ` · ${i.syllables} syllable${i.syllables === 1 ? "" : "s"}` : "",
+    i.ipa ? ` · ${esc(i.ipa)}` : "",
+  ];
+
+  const sensesBlock =
+    i.senses && i.senses.length
+      ? `<section class="wp-senses"><h2>Meanings</h2><ol>${i.senses
+          .map(
+            (s) =>
+              `<li>${esc(s.gloss || "")}` +
+              (s.example ? ` <em>${esc(s.example)}</em>` : "") +
+              (s.register ? ` <span class="wp-register">${esc(s.register)}</span>` : "") +
+              `</li>`,
+          )
+          .join("")}</ol></section>`
+      : "";
+
+  const factsBlock =
+    i.facts && i.facts.length
+      ? `<section class="wp-fact"><h2>Did you know?</h2><ul>${i.facts.map((f) => `<li>${esc(f)}</li>`).join("")}</ul></section>`
+      : i.fact
+        ? `<section class="wp-fact"><h2>Did you know?</h2><p>${esc(i.fact)}</p></section>`
+        : "";
 
   const quoteBlock = i.quote
     ? `<blockquote class="wp-quote">"${esc(i.quote)}"${i.author ? `<cite>— ${esc(i.author)}</cite>` : ""}</blockquote>`
     : "";
   const etymBlock = i.etymology ? `<section class="wp-etym"><h2>Word origin</h2><p>${esc(i.etymology)}</p></section>` : "";
+
+  const mnemonicBlock = i.mnemonic
+    ? `<section class="wp-mnemonic"><h2>Remember it</h2><p>${esc(i.mnemonic)}</p></section>`
+    : "";
+
+  const poemBlock =
+    i.poem && i.poem.lines && i.poem.lines.length
+      ? `<section class="wp-poem"><h2>A little poem</h2><p class="wp-poem-body">${i.poem.lines
+          .map((l) => esc(l))
+          .join("<br>")}</p>${i.poem.form ? `<p class="wp-poem-form">${esc(i.poem.form)}</p>` : ""}</section>`
+      : "";
+
+  const jokesBlock =
+    i.jokes && i.jokes.length
+      ? `<section class="wp-jokes"><h2>Wordplay</h2><ul>${i.jokes
+          .map((j) => `<li>${esc(j.text || "")}</li>`)
+          .join("")}</ul></section>`
+      : "";
+
+  const lessonBlock = i.lesson
+    ? `<section class="wp-lesson"><h2>What it teaches</h2><p>${esc(i.lesson)}</p></section>`
+    : "";
+
   const relBlock = (label, words) =>
     words && words.length ? `<div class="wp-rel"><h3>${esc(label)}</h3><p>${links(words)}</p></div>` : "";
 
@@ -66,12 +139,17 @@ export function renderWordPage(word, intel, graph, origin) {
 <main class="wp-main" data-word="${esc(W)}">
   <article>
     ${tiles(W)}
-    <p class="wp-meta">${i.pos ? esc(i.pos) : ""}${i.syllables ? ` · ${i.syllables} syllable${i.syllables === 1 ? "" : "s"}` : ""}</p>
+    <p class="wp-meta">${metaParts.join("")}</p>
     <h1>${esc(W)}</h1>
     <section class="wp-def"><h2>What does &quot;${esc(W)}&quot; mean?</h2><p>${esc(i.def || "")}</p></section>
-    ${i.fact ? `<section class="wp-fact"><h2>Did you know?</h2><p>${esc(i.fact)}</p></section>` : ""}
+    ${sensesBlock}
+    ${factsBlock}
     ${quoteBlock}
     ${etymBlock}
+    ${mnemonicBlock}
+    ${poemBlock}
+    ${jokesBlock}
+    ${lessonBlock}
     <section class="wp-faq"><h2>Quick facts</h2>${faq.map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join("")}</section>
     <section class="wp-related"><h2>Related words</h2>
       ${relBlock("Anagrams", g.anagrams)}
