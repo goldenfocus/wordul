@@ -1293,15 +1293,22 @@ function render() {
     syncLengthSelect(snap);
     syncModePicker(snap);
     syncLobbyEdition();
-    startBtn.hidden = false;
-    const meReady = !!me?.ready;
-    startBtn.textContent = meReady ? "Ready ✓" : "Ready";
-    startBtn.classList.toggle("ready-on", meReady);
-    const active = snap.players.filter((p) => p.connected);
-    const readyCount = active.filter((p) => p.ready).length;
-    $("#lobbyHint").textContent = active.length < 2
-      ? (meReady ? "You're ready — invite a friend or wait" : "Ready up to start — or invite a friend")
-      : `${readyCount}/${active.length} ready`;
+    const meIsDuelist = me && me.role === "duelist";
+    startBtn.hidden = !meIsDuelist; // queued players watch; they can't ready
+    if (meIsDuelist) {
+      const meReady = !!me.ready;
+      const amChallenger = snap.throne && snap.throne.username !== getUsername();
+      startBtn.textContent = meReady ? "Ready ✓" : (amChallenger ? "Challenge 👑" : "Ready");
+      startBtn.classList.toggle("ready-on", meReady);
+      const ds = snap.players.filter((p) => p.role === "duelist" && p.connected);
+      const readyCount = ds.filter((p) => p.ready).length;
+      $("#lobbyHint").textContent = ds.length < 2
+        ? (meReady ? "You're ready — invite a friend or wait" : "Ready up to start — or invite a friend")
+        : `${readyCount}/${ds.length} ready`;
+    } else {
+      const pos = (snap.queue || []).indexOf(getUsername());
+      $("#lobbyHint").textContent = pos >= 0 ? `Spectating · #${pos + 1} in line to challenge` : "Spectating";
+    }
   } else if (snap.phase === "countdown") {
     lobby.hidden = true;
     endControls.hidden = true;
@@ -1338,6 +1345,7 @@ function render() {
   renderKeyboard($("#keyboard"), me);
   renderChat(snap);
   renderScoreboard(snap);
+  renderQueue(snap);
   renderGames(snap);
   applyTabVisibility(snap.phase === "playing");
   renderPowerups(powerupsCtx, snap, me);
@@ -1345,7 +1353,7 @@ function render() {
   // Show the keyboard only when a guess is actually possible — keeps the lobby
   // unambiguous (no dead keys to mash) and post-game state minimal.
   const kb = $("#keyboard");
-  const canType = snap.phase === "playing" && me && me.status === "playing";
+  const canType = snap.phase === "playing" && me && me.role === "duelist" && me.status === "playing";
   if (kb) kb.hidden = !canType;
 }
 
@@ -1582,18 +1590,51 @@ function renderScoreboard(snap) {
     name.textContent = e.username + (e.username === me ? " (you)" : "");
     const tally = document.createElement("span");
     tally.className = "score-tally";
-    tally.textContent = `${e.wins}W · ${e.played}P`;
+    const losses = e.losses ?? 0;
+    const ties = e.ties ?? 0;
+    tally.textContent = `${e.wins}W · ${losses}L · ${ties}T`;
     row.appendChild(name);
     row.appendChild(tally);
     root.appendChild(row);
   }
 }
 
+// The challenge queue strip: who's on the throne and who's next in line. Shown
+// whenever anyone is waiting (or a throne exists); hidden in a plain solo room.
+function renderQueue(snap) {
+  const strip = $("#queueStrip");
+  if (!strip) return;
+  const queue = Array.isArray(snap.queue) ? snap.queue : [];
+  if (queue.length === 0 && !snap.throne) {
+    strip.hidden = true;
+    strip.textContent = "";
+    return;
+  }
+  strip.hidden = false;
+  strip.textContent = "";
+  if (snap.throne) {
+    const king = document.createElement("span");
+    king.className = "queue-king";
+    king.textContent = `👑 ${snap.throne.username} · ${snap.throne.streak} in a row`;
+    strip.appendChild(king);
+  }
+  if (queue.length) {
+    const label = document.createElement("span");
+    label.className = "queue-next muted small";
+    const me = getUsername();
+    const names = queue.map((u, i) => (u === me ? `you (#${i + 1})` : u));
+    label.textContent = `Next up: ${names.join(" → ")}`;
+    strip.appendChild(label);
+  }
+}
+
 function renderBoards(snap, me) {
   const root = $("#boards");
+  const duelists = snap.players.filter((p) => p.role === "duelist");
+  const meIsDuelist = me && me.role === "duelist";
   const ordered = [
-    ...(me ? [me] : []),
-    ...snap.players.filter((p) => p.username !== getUsername()),
+    ...(meIsDuelist ? [me] : []),
+    ...duelists.filter((p) => p.username !== getUsername()),
   ];
   // While my board's tiles are mid-explosion OR mid-payout (glow/floater anchored to
   // them), preserve the existing DOM so the animations don't get nuked by a snapshot
@@ -1624,6 +1665,12 @@ function renderBoards(snap, me) {
       const b = document.createElement("span"); b.className = "badge lost"; b.textContent = "OUT"; name.appendChild(b);
     } else if (!p.connected) {
       const b = document.createElement("span"); b.className = "badge off"; b.textContent = "AWAY"; name.appendChild(b);
+    }
+    if (snap.throne && p.username === snap.throne.username) {
+      const crown = document.createElement("span");
+      crown.className = "badge throne";
+      crown.textContent = `👑 ×${snap.throne.streak}`;
+      name.appendChild(crown);
     }
     board.appendChild(name);
 
@@ -1736,7 +1783,7 @@ function onPhysicalKey(e) {
 
   if (game.snapshot.phase !== "playing") return;
   const me = game.snapshot.players.find((p) => p.username === getUsername());
-  if (!me || me.status !== "playing") return;
+  if (!me || me.role !== "duelist" || me.status !== "playing") return;
   // A give-up / bankruptcy ends the game from MY side without a server status change
   // (server still says "playing"). Once that's happened, input is closed — otherwise you
   // could keep typing, re-trigger payouts, even "win" after a loss was recorded.
