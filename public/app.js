@@ -2184,9 +2184,7 @@ function renderWordCard(parent, word) {
 
   const look = document.createElement("a");
   look.className = "ewc-look";
-  look.href = `https://www.google.com/search?q=${encodeURIComponent(w + " meaning")}`;
-  look.target = "_blank";
-  look.rel = "noopener";
+  look.href = `/word/${w}`;
   look.textContent = t("endscreen.lookup");
 
   const intel = wordIntel(word);
