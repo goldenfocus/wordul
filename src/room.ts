@@ -268,6 +268,8 @@ export class Room extends DurableObject<Env> {
         return this.onStart(ws);
       case "guess":
         return this.onGuess(ws, msg.word);
+      case "typing":
+        return this.onTyping(ws, msg.len);
       case "rematch_propose":
         return this.onRematchPropose(ws);
       case "rematch_accept":
@@ -668,6 +670,30 @@ export class Room extends DurableObject<Env> {
 
     await this.applyGuess(player, word);
     await this.persistAndBroadcast();
+  }
+
+  // Live-typing pulse: relay a player's current row LENGTH to everyone else so opponents
+  // see ghost cells fill/clear in real time. Deliberately ephemeral — NO storage write and
+  // NO snapshot (keystrokes must not hammer DO storage), and it carries a count only, never
+  // letters, preserving the same hidden-word rule as the spectator boards. Clients clear a
+  // ghost on their own when a guess commits / a player goes out, so there's no reset to send.
+  private onTyping(ws: WebSocket, lenRaw: number): void {
+    if (this.state.phase !== "playing" || this.state.isDaily) return; // no opponents to show in daily
+    const username = this.userFor(ws);
+    if (!username) return;
+    const player = this.state.players.find((p) => p.username === username);
+    if (!player || player.status !== "playing") return;
+    const n = Number.isFinite(lenRaw) ? Math.floor(lenRaw) : 0;
+    const len = Math.max(0, Math.min(this.state.wordLength, n));
+    const payload = JSON.stringify({ type: "typing", username, len } satisfies ServerMessage);
+    for (const other of this.ctx.getWebSockets()) {
+      if (other === ws) continue; // never echo a player their own typing
+      try {
+        other.send(payload);
+      } catch {
+        // socket may be closing; ignore
+      }
+    }
   }
 
   // Shared guess core — both human onGuess (after validation) and the bot alarm call this,

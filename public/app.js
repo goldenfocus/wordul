@@ -582,6 +582,7 @@ const game = {
   toastTimer: null,
   hasShownEndStats: false,
   lastGuessCounts: new Map(),
+  typing: new Map(), // username -> # letters in their live (uncommitted) row, for opponent ghost fill
   // Chat state: how many entries we'd already rendered so we can flag new ones for
   // the unread badge while the panel is collapsed.
   lastChatLen: 0,
@@ -707,6 +708,7 @@ function showRoom(owner, slug) {
   game.unreadChat = 0;
   game.chatCollapsed = false;
   game.lastGuessCounts = new Map();
+  game.typing = new Map();
   game.autoStart = false;
   game.publicArena = false; // never carry a public-host intent into the next room
   // Arena origin: the pending flag (set at entry) OR a sessionStorage marker (survives a
@@ -762,6 +764,7 @@ async function showChallenge(id) {
   game.unreadChat = 0;
   game.chatCollapsed = false;
   game.lastGuessCounts = new Map();
+  game.typing = new Map();
   game.autoStart = true; // challenge boards go live immediately — no lobby ceremony
   game.roomTab = "play";
   game.shareImage = null;
@@ -1514,6 +1517,16 @@ function onServerMessage(msg) {
   if (msg.type === "snapshot") {
     const prev = game.snapshot;
     game.snapshot = msg.room;
+    // Live-typing ghosts are transient: drop a player's ghost the moment they commit a guess
+    // (their row advanced) or leave the race (won / out / away), so no phantom fill lingers on
+    // the new empty row. Done here, before render(), so the board never flashes a stale ghost.
+    if (game.typing.size) {
+      for (const p of msg.room.players) {
+        const before = prev?.players.find((q) => q.username === p.username);
+        const committed = before && p.guesses.length > before.guesses.length;
+        if (committed || p.status !== "playing" || !p.connected) game.typing.delete(p.username);
+      }
+    }
     // The room owns the theme: adopt it whenever it differs from what's applied. This is
     // how invitees inherit the host's theme and how a live change reaches everyone. applyEdition
     // also persists it locally, so your last room's vibe sticks into your next solo game.
@@ -1709,6 +1722,15 @@ function onServerMessage(msg) {
     // tip Hard Mode into bankruptcy).
     bumpErrorCount(powerupsCtx);
     checkBankruptcy(powerupsCtx);
+  } else if (msg.type === "typing") {
+    // An opponent's live row length (anonymous — count only). Patch just their ghost row
+    // in place; a full render() per keystroke would nuke in-flight board animations.
+    if (msg.username && msg.username !== getUsername()) {
+      const len = Math.max(0, msg.len | 0);
+      if (len > 0) game.typing.set(msg.username, len);
+      else game.typing.delete(msg.username);
+      updateOpponentGhost(msg.username);
+    }
   } else if (msg.type === "revealed_letter" || msg.type === "vowels") {
     handlePowerupMessage(powerupsCtx, msg);
   } else if (msg.type === "rematch_proposed") {
@@ -2338,6 +2360,14 @@ function renderBoards(snap, me) {
         ) {
           // Blinking cursor on the next slot so you always know where you're typing.
           tile.classList.add("cursor");
+        } else if (!isMe && isCurrentRow && snap.phase === "playing" && p.status === "playing") {
+          // Opponent's LIVE typing (anonymous): ghost-fill the letters they've entered, with a
+          // soft pulse on the slot they're about to fill. No letters — same hidden-word rule as
+          // the rest of the spectator board. Driven by game.typing; updateOpponentGhost() patches
+          // this in place between full renders.
+          const tlen = Math.min(game.typing.get(p.username) ?? 0, cols);
+          if (c < tlen) tile.classList.add("ghost");
+          else if (c === tlen && tlen > 0) tile.classList.add("ghost-cursor");
         }
         row.appendChild(tile);
       }
@@ -2352,6 +2382,27 @@ function renderBoards(snap, me) {
     root.appendChild(board);
     game.lastGuessCounts.set(p.username, p.guesses.length);
   }
+}
+
+// Patch a single opponent's live-typing ghost row in place — far cheaper than a full render()
+// and it never disturbs another board or an in-flight animation. game.typing is already updated
+// by the caller; here we just re-paint the ghost / ghost-cursor classes on their current input
+// row. No-ops silently if their board isn't on screen yet (a later full render picks it up).
+function updateOpponentGhost(username) {
+  const snap = game.snapshot;
+  if (!snap || snap.phase !== "playing" || game.isDaily) return;
+  const p = snap.players.find((q) => q.username === username);
+  if (!p || p.status !== "playing") return;
+  const root = $("#boards");
+  const board = root && $$(".player-board", root).find((b) => b.dataset.player === username);
+  if (!board) return;
+  const rowEl = board.querySelectorAll(".grid-row")[p.guesses.length];
+  if (!rowEl) return; // their current row is off the board (shouldn't happen while playing)
+  const len = Math.min(game.typing.get(username) ?? 0, snap.wordLength);
+  rowEl.querySelectorAll(".tile").forEach((tile, c) => {
+    tile.classList.toggle("ghost", c < len);
+    tile.classList.toggle("ghost-cursor", c === len && len > 0);
+  });
 }
 
 // During a preserved render (mid-payout / mid-explosion) the board DOM is frozen so the
@@ -2446,11 +2497,29 @@ function onPhysicalKey(e) {
   else if (isLetter) { typeLetter(e.key.toUpperCase()); e.preventDefault(); }
 }
 
+// Broadcast my current row LENGTH (never the letters) so opponents see a live ghost fill.
+// Coalesced to one send per frame — fast typing or a held ⌫ collapses into the latest length —
+// and only sent in a live race that actually has someone else watching; solo/daily skip it.
+let _typingRaf = 0;
+let _typingLen = -1;
+function sendTyping(len = game.pending.length) {
+  const snap = game.snapshot;
+  if (!snap || snap.phase !== "playing" || game.isDaily) return;
+  if (!snap.players.some((p) => p.username !== getUsername())) return; // nobody to show it to
+  _typingLen = len;
+  if (_typingRaf) return;
+  _typingRaf = requestAnimationFrame(() => {
+    _typingRaf = 0;
+    send({ type: "typing", len: _typingLen });
+  });
+}
+
 function typeLetter(l) {
   if (!game.snapshot || game.snapshot.phase !== "playing") return;
   if (game.pending.length >= game.snapshot.wordLength) return;
   game.pending += l.toUpperCase();
   render();
+  sendTyping();
   resetIdle();
 }
 let lastWipeReactAt = 0;
@@ -2458,6 +2527,7 @@ function clearRow() {
   if (!game.pending.length) return;
   const cleared = game.pending.length;
   resetIdle();
+  sendTyping(0); // tell opponents the row emptied the instant the wipe starts
 
   // A meaningful wipe (most of a word, not one stray letter) earns a dry companion
   // aside — throttled so rapid retries don't turn it into a chatterbox. Text-only:
@@ -2488,6 +2558,7 @@ function backspace() {
   if (game.pending.length === 0) return;
   game.pending = game.pending.slice(0, -1);
   render();
+  sendTyping();
   resetIdle();
   maybeShowClearHint();
 }

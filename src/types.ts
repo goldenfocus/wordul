@@ -97,6 +97,7 @@ export type ClientMessage =
   | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string; scienceOptOut?: boolean; public?: boolean }
   | { type: "start" }
   | { type: "guess"; word: string }
+  | { type: "typing"; len: number } // ephemeral: how many letters are in my current row (no letters sent)
   | { type: "rematch_propose" }
   | { type: "rematch_accept" }
   | { type: "rematch_decline" }
@@ -112,6 +113,7 @@ export type ClientMessage =
 
 export type ServerMessage =
   | { type: "snapshot"; room: RoomSnapshot }
+  | { type: "typing"; username: string; len: number } // relayed live-typing pulse (anonymous: count only)
   | { type: "error"; message: string }
   | { type: "invalid_guess"; reason: string }
   | { type: "revealed_letter"; index: number; letter: string }
