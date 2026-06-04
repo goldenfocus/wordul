@@ -2710,6 +2710,18 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .daily-result-hero { display: flex; justify-content: center; padding: .35rem 0 .25rem; }
 .daily-result-hero.is-lost { opacity: .92; }
 
+/* Featured card region — swappable hero for the post-play recap. */
+.daily-featured { display: flex; flex-direction: column; align-items: center; gap: .35rem; padding: .35rem 0 .25rem; }
+.daily-stamp-hero { display: flex; justify-content: center; }
+.daily-stamp-hero.is-lost { opacity: .92; }
+.daily-featured-cap { color: var(--muted); font-size: .9em; text-align: center; }
+.daily-featured-cap.is-other { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .5rem; }
+.daily-featured-name { color: var(--fg); text-decoration: none; font-weight: 600; }
+.daily-featured-name:hover { text-decoration: underline; }
+.daily-featured-rank { font-variant-numeric: tabular-nums; }
+.daily-featured-gold { color: #f0c14b; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; font-weight: 600; }
+.daily-featured-guesses, .daily-featured-time { font-variant-numeric: tabular-nums; }
+
 .daily-top { margin-top: 1rem; }
 .daily-top .section-label { display: block; margin-bottom: .5rem; }
 .daily-top-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
@@ -2722,7 +2734,9 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
   border-radius: .6rem;
   background: var(--bg-card);
 }
+.daily-top-row { cursor: pointer; }
 .daily-top-row.is-you { outline: 1px solid var(--accent); }
+.daily-top-row.is-selected { background: color-mix(in oklab, var(--accent) 14%, var(--bg-card)); }
 .daily-top-rank { display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; color: var(--muted); font-size: .9em; }
 .daily-top-name { color: var(--fg); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .daily-top-name:hover { text-decoration: underline; }
