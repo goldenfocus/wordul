@@ -17,6 +17,9 @@ export const DEFAULT_SETTINGS = {
   colorBlind: false,
   reducedMotion: false,
   communityScience: true,
+  // Companion's written reaction toasts (win/loss/wrong/idle/wipe). On by default;
+  // independent of the 🔊 sound mute, which governs companion VOICE + chimes.
+  companionComments: true,
   // "auto" = detect from browser/OS locale (fr-* → AZERTY) until the player picks
   // explicitly in settings; an explicit pick is persisted and always wins.
   keyboardLayout: "auto",

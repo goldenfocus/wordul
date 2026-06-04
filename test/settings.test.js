@@ -18,6 +18,14 @@ describe("getSettings", () => {
     expect(s.colorBlind).toBe(false); // default preserved
     expect(s.keyboardLayout).toBe("auto"); // default preserved
   });
+  it("defaults companionComments to true (companion text reactions on)", () => {
+    expect(getSettings().companionComments).toBe(true);
+  });
+  it("lets a stored companionComments=false override the default", () => {
+    localStorage.setItem("wr.settings", JSON.stringify({ companionComments: false }));
+    expect(getSettings().companionComments).toBe(false);
+    expect(getSettings().hardMode).toBe(false); // other defaults preserved
+  });
   it("tolerates corrupt JSON by falling back to defaults", () => {
     localStorage.setItem("wr.settings", "not-json{");
     expect(getSettings()).toEqual(DEFAULT_SETTINGS);
