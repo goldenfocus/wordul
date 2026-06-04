@@ -1232,7 +1232,7 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
 .key.gray { background: var(--gray); color: white; opacity: 0.45; }
 
 /* ── Default edition — "Obsidian": Hot · Warm · Cold ──────────────────────────
-   The board's identity, decoupled from Wordle's green/yellow/gray. Hot (exact) is
+   The board's identity, its own green/yellow/gray language. Hot (exact) is
    the precious gold jewel; Warm (right letter, wrong spot) is a champagne outline;
    Cold (absent) recedes into the obsidian. Scoped to the default edition so every
    other edition keeps its own palette + treatment. The internal Color stays

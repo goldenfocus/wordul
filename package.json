@@ -1,7 +1,7 @@
 {
-  "name": "golden-wordle",
+  "name": "golden-wordul",
   "version": "1.0.0",
-  "description": "Wordle Race — race your friends on the same Wordle. No login, just a shared link.",
+  "description": "Wordul — race your friends on the same word. No login, just a shared link.",
   "private": true,
   "type": "module",
   "scripts": {

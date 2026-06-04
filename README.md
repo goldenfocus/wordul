@@ -12,7 +12,7 @@ Live: **[wordul.com](https://wordul.com)**
 
 ## The vibe
 
-It's Wordle, but everyone in the room is sweating the *same* secret word at the *same* time. You see the race heat up in real time, talk smack in the live chat, and rake in gold for every green you uncover. Solve fast and the coins literally rain from the sky. Choke, and you'll hear about it.
+It's a live word race, but everyone in the room is sweating the *same* secret word at the *same* time. You see the race heat up in real time, talk smack in the live chat, and rake in gold for every green you uncover. Solve fast and the coins literally rain from the sky. Choke, and you'll hear about it.
 
 Built for couches, group chats, and the kind of friendship that survives losing a five-letter word by one guess.
 
