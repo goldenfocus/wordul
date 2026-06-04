@@ -313,7 +313,7 @@ export class Room extends DurableObject<Env> {
   private async handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
       case "hello":
-        return this.onHello(ws, msg.username, msg.wordLength, msg.edition, msg.mode, msg.scienceOptOut, msg.public);
+        return this.onHello(ws, msg.username, msg.wordLength, msg.edition, msg.mode, msg.scienceOptOut, msg.public, msg.sessionToken);
       case "start":
         return this.onStart(ws);
       case "ready":
@@ -360,6 +360,7 @@ export class Room extends DurableObject<Env> {
     mode?: RoomMode,
     scienceOptOut = false,
     isPublic = false,
+    sessionToken?: string,
   ): Promise<void> {
     // Trust model is intentional: identity is passwordless by product decision (a casual
     // word game — "kindness model", see spec 2026-05-31-username-identity). The client-
@@ -377,7 +378,22 @@ export class Room extends DurableObject<Env> {
       this.send(ws, { type: "error", message: "room full" });
       return;
     }
-    ws.serializeAttachment({ username });
+    // Auth seam (P0): if the client presented a session token, ask the owning User DO whether
+    // it's valid and stow the verdict on the WS attachment — NEVER on PlayerState (which is
+    // broadcast). Casual play sends no token → no extra DO hop. Best-effort: a hiccup ⇒ unauthed.
+    let authed = false;
+    if (sessionToken) {
+      try {
+        const res = await this.env.USER.get(this.env.USER.idFromName(username))
+          .fetch(`https://do/account/verify-session?username=${encodeURIComponent(username)}`, {
+            method: "POST",
+            body: JSON.stringify({ sessionToken }),
+            headers: { "content-type": "application/json" },
+          });
+        if (res.ok) authed = !!((await res.json()) as { valid?: boolean }).valid;
+      } catch (e) { console.error("verify-session failed", username, (e as Error).message); }
+    }
+    ws.serializeAttachment({ username, authed });
 
     const existing = this.state.players.find((p) => p.username === username);
     if (existing) {
