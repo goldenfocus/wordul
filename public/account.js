@@ -34,27 +34,11 @@ function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 // Build + show the secure-account sheet. `username` is the active (unclaimed) name.
 // onClaimed() is called after a successful commit so the host can refresh chrome.
 export async function openSecureSheet(username, onClaimed) {
+  if (document.querySelector(".acct-overlay")) return; // guard: don't stack overlays
   const overlay = document.createElement("div");
   overlay.className = "acct-overlay";
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
-
-  let nonce = "";
-  async function roll() {
-    overlay.querySelector(".acct-phrase").textContent = "…";
-    const r = await previewPassphrase(username);
-    if (!r.ok) {
-      overlay.querySelector(".acct-phrase").textContent =
-        r.data.error === "reserved" ? "That name is reserved." :
-        r.data.error === "already_claimed" ? "This name is already secured." :
-        r.status === 429 ? "Slow down a moment, then try again." : "Couldn't generate a phrase.";
-      overlay.querySelector(".acct-confirm").disabled = true;
-      return;
-    }
-    nonce = r.data.nonce;
-    overlay.querySelector(".acct-phrase").textContent = r.data.passphrase;
-    overlay.querySelector(".acct-confirm").disabled = false;
-  }
 
   overlay.innerHTML = `
     <div class="acct-sheet" role="dialog" aria-modal="true" aria-label="Secure this account">
@@ -72,23 +56,53 @@ export async function openSecureSheet(username, onClaimed) {
       </div>
     </div>`;
 
+  const phraseEl = overlay.querySelector(".acct-phrase");
+  const confirmBtn = overlay.querySelector(".acct-confirm");
+  const ackBox = overlay.querySelector(".acct-ack-box");
+  let nonce = "";
+
+  // Confirm is live only when a phrase has been minted (nonce) AND the user acked.
+  const sync = () => { confirmBtn.disabled = !ackBox.checked || !nonce; };
+
+  async function roll() {
+    phraseEl.textContent = "…";
+    confirmBtn.disabled = true;
+    const r = await previewPassphrase(username);
+    if (!r.ok) {
+      nonce = ""; // drop any prior phrase so a stale nonce can't be committed
+      phraseEl.textContent =
+        r.data.error === "reserved" ? "That name is reserved." :
+        r.data.error === "already_claimed" ? "This name is already secured." :
+        r.status === 429 ? "Slow down a moment, then try again." : "Couldn't generate a phrase.";
+      sync();
+      return;
+    }
+    nonce = r.data.nonce;
+    phraseEl.textContent = r.data.passphrase;
+    sync();
+  }
+
   overlay.querySelector(".acct-roll").addEventListener("click", roll);
   overlay.querySelector(".acct-cancel").addEventListener("click", close);
   overlay.querySelector(".acct-copy").addEventListener("click", () => {
-    navigator.clipboard?.writeText(overlay.querySelector(".acct-phrase").textContent || "").catch(() => {});
+    navigator.clipboard?.writeText(phraseEl.textContent || "").catch(() => {});
   });
-  const confirmBtn = overlay.querySelector(".acct-confirm");
-  const ackBox = overlay.querySelector(".acct-ack-box");
-  const sync = () => { confirmBtn.disabled = !ackBox.checked || !nonce; };
   ackBox.addEventListener("change", sync);
+  overlay.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
   confirmBtn.addEventListener("click", async () => {
     confirmBtn.disabled = true;
-    const r = await commitClaim(username, nonce);
-    if (r.ok) { close(); if (onClaimed) onClaimed(); }
-    else { overlay.querySelector(".acct-phrase").textContent = "Claim failed — re-roll and try again."; }
+    try {
+      const r = await commitClaim(username, nonce);
+      if (r.ok) { close(); if (onClaimed) onClaimed(); return; }
+      nonce = ""; // failed claim — force a re-roll
+      phraseEl.textContent = "Claim failed — re-roll and try again.";
+      sync();
+    } catch {
+      phraseEl.textContent = "Network error — check your connection and try again.";
+      sync(); // keep the (still-valid) nonce so the user can retry without re-rolling
+    }
   });
 
   await roll();
-  // Confirm stays disabled until BOTH a phrase exists and the ack box is checked.
-  confirmBtn.disabled = true;
+  confirmBtn.focus(); // move focus into the dialog for keyboard users
 }

@@ -1,6 +1,6 @@
 // Wordul — client
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
-import { getSessionToken } from "/account.js";
+import { getSessionToken, openSecureSheet } from "/account.js";
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
 import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
@@ -3811,9 +3811,7 @@ function showHub(anchor) {
     onShare: inRoom ? () => shareRoomInvite() : null,
     onRename: inRoom ? () => renameRoom() : null,
     onScoreboard: inRoom ? () => scrollToScoreboard() : null,
-    onSecure: needsSecure
-      ? () => import("/account.js").then((m) => m.openSecureSheet(getUsername(), () => location.reload()))
-      : null,
+    onSecure: needsSecure ? () => openSecureSheet(getUsername(), () => location.reload()) : null,
   });
 }
 
