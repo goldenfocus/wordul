@@ -38,7 +38,8 @@ Wordulers (`isBot` server-side) are **indistinguishable from humans**. They have
 | "Studio" | Reuse the **edition** system; no separate studio UI this PR |
 | Alone in room | Invite is the hero + rotating waiting vibe; after a delay, **"Play solo"** + **"Match me now"** appear |
 | Extra joiners | Join the **challenge queue** — watch live while waiting their turn |
-| Next-opponent model | **Room setting.** Default **King of the Hill** |
+| Next-opponent model | **Room setting:** King of the Hill (default) or Host's choice |
+| Room stats | Per-player **W / L / T** record, shown in the room |
 | Disconnect during countdown | **Cancel** to lobby + re-ready |
 | Disconnect during play | **Continue**, AWAY; reconnect resumes board |
 
@@ -46,12 +47,23 @@ Wordulers (`isBot` server-side) are **indistinguishable from humans**. They have
 
 1. **King of the Hill** (default) — winner keeps the throne, loser goes to the back of the
    queue, the next challenger rotates in. "Challenge the best." Throne shows a **win streak**.
-2. **Host's choice** — after each game the host picks the next challenger from the queue;
-   the other active player steps to the queue.
-3. **Casual 1v1** — the two players just rematch each other; extra joiners stay in the queue
-   as watchers and only rotate in if a seat actually empties.
+   On a **tie the king retains** the throne (a challenger must *win* to dethrone) and the
+   challenger drops to the back of the queue.
+2. **Host's choice** — after each game the host picks the next challenger from the queue; the
+   other active player steps to the queue. No throne/streak in this mode.
 
 (Set like `mode`/`edition` today — lobby-only, broadcast, with a system line.)
+
+## Room stats (W / L / T)
+
+Each room shows a per-player record — e.g. `player3 — W 3 · L 0 · T 1` — surfaced in the
+Players/scoreboard tab (and next to each name in the queue/throne). Outcomes per finished
+round:
+- **Win / Loss** — there is a winner: winner +W, opponent +L.
+- **Tie** — no winner: both fail to solve, or both solve on the same guess count → both +T.
+
+Extends the existing room scoreboard (`src/scoreboard.ts` / `RoomScore`) rather than a new
+store. Records are room-scoped (reset with the room), separate from a user's global stats.
 
 ## What already exists (reuse, don't rebuild)
 
@@ -79,7 +91,7 @@ type PlayerState = {
 };
 
 type RoomPhase = "lobby" | "countdown" | "playing" | "finished";   // + "countdown"
-type Rotation = "koth" | "host" | "casual";                        // NEW
+type Rotation = "koth" | "host";                                   // NEW
 
 type RoomSnapshot = {
   // ...existing...
@@ -120,13 +132,15 @@ type ClientMessage =
 ### Round end → next matchup (the rotation engine)
 On a game finishing (`finished`), apply `rotation`, then return to lobby with seats set and
 `ready` reset:
-- **koth:** winner stays duelist (update `throne` = winner + incremented `streak`); loser →
-  back of `queue` (`role: "queued"`); front of `queue` → duelist. Loser drops a gg/yield
-  companion line. If a duelist is a worduler and loses, it yields by the same rule — no
+  First, record the W/L/T outcome on each active player's room record (see Room stats).
+- **koth (win/loss):** winner stays duelist (update `throne` = winner + incremented
+  `streak`); loser → back of `queue` (`role: "queued"`); front of `queue` → duelist. Loser
+  drops a gg/yield companion line. A worduler that loses yields by the same rule — no
   special-casing.
-- **host:** both step to queue-eligible; host `pick_challenger` chooses the next opponent for
-  the king (or the host themselves). Clear `throne` streak rules per pick.
-- **casual:** same two remain duelists; `throne` unused; queue untouched.
+- **koth (tie):** king **retains** the throne (streak unchanged); challenger → back of
+  `queue`; front of `queue` → duelist.
+- **host:** both step to queue-eligible; host `pick_challenger` chooses the next opponent
+  (or themselves). No throne/streak in this mode.
 - After seats are set: `ready = false` for duelists, `goAt = null`, `phase = "lobby"`. The
   queued challenger's "Challenge 👑" tap is their `ready`.
 
@@ -210,7 +224,10 @@ clean follow-up.
 - **Alarm dispatch:** countdown flip and bot tick coexist (worduler duel covers both).
 - **KOTH rotation:** winner stays + streak increments; loser → back of queue; next rotates
   in; worduler loss yields by the same rule (no vanish).
-- **Host's choice / casual:** correct seat assignment per mode; `set_rotation` lobby-only.
+- **KOTH tie:** king retains throne (streak unchanged); challenger → back of queue.
+- **W/L/T record:** win→winner+W/opponent+L; tie (both fail, or equal-guess solve)→both+T;
+  record renders per player in the room and is room-scoped.
+- **Host's choice:** correct seat assignment; host `pick_challenger`; `set_rotation` lobby-only.
 - **Disconnect:** countdown → cancel + re-ready + alarm cancelled; playing → AWAY + resume.
 - **Solo / match-me:** `play_solo` solo round; `match_me` fills seat, one ready → countdown.
 - **Cover:** no "bot"/"AI" string anywhere user-visible; `isBot` never in client DOM/snapshot
