@@ -2777,3 +2777,29 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
   background: none; border: none; padding: .3rem 0; font: inherit; color: var(--muted); cursor: pointer; }
 .daily-seeall:hover { color: var(--fg); }
 .daily-seeall .daily-chev { font-size: 1.15em; line-height: 1; }
+
+/* --- Duel: 3-2-1 countdown overlay + ready button (restored from c873f4b/f1e2da8) --- */
+.countdown-overlay {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 60; pointer-events: none;
+  font-weight: 900; font-size: clamp(6rem, 30vw, 18rem); line-height: 1;
+  color: var(--accent, #c8a96a); text-shadow: 0 0 32px var(--accent, #c8a96a);
+}
+.countdown-overlay.pulse { animation: countdown-pop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1); }
+@keyframes countdown-pop {
+  0%   { transform: scale(0.3);  opacity: 0; }
+  40%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1);    opacity: 0.85; }
+}
+.btn.ready-on { background: var(--green, #538d4e); border-color: var(--green, #538d4e); color: #fff; }
+@media (prefers-reduced-motion: reduce) { .countdown-overlay.pulse { animation: none; } }
+
+/* --- Duel: queue strip + throne badge (restored from e7746d0/f1e2da8) --- */
+.queue-strip {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 0.4rem 1rem; margin: 0.25rem auto 0.75rem; text-align: center;
+}
+.queue-king { font-weight: 700; color: var(--accent, #c8a96a); }
+.queue-next { opacity: 0.85; }
+.badge.throne { background: var(--accent, #c8a96a); color: #1a1a1a; font-weight: 700; }

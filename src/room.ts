@@ -5,6 +5,8 @@ import { computeNextGuess } from "./solver.ts";
 import { noobGuess, mistakeRateFor } from "./noob.ts";
 import { projectPlayerForClient } from "./bots.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
+import { everyoneReady, COUNTDOWN_MS } from "./duel.ts";
+import { nextSeatRole, applyKothRotation } from "./rotation.ts";
 import { buildGameRecords, summarizeRoomGame, encodeSolveGrid } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
 import { pointsEarned, goldFromPoints, POINTS } from "./economy.ts";
@@ -101,6 +103,7 @@ export class Room extends DurableObject<Env> {
       word: null,
       winner: null,
       startedAt: null,
+      goAt: null,
       finishedAt: null,
       round: 0,
       chat: [],
@@ -110,6 +113,9 @@ export class Room extends DurableObject<Env> {
       scoreboard: [],
       history: [],
       edition: "default",
+      rotation: "koth",
+      queue: [],
+      throne: null,
       isDaily: false,
       story: null,
       challengeId: null,
@@ -132,6 +138,28 @@ export class Room extends DurableObject<Env> {
           if (typeof p.revealHints !== "number") p.revealHints = 0;
           if (typeof p.vowelHints !== "number") p.vowelHints = 0;
           if (typeof p.scienceOptOut !== "boolean") p.scienceOptOut = false;
+          if (typeof p.ready !== "boolean") p.ready = false; // pre-duel rooms
+        }
+        // Duel-state backfill for rooms persisted before seats/queue/throne existed.
+        if (restored.goAt === undefined) restored.goAt = null;
+        if (!restored.rotation) restored.rotation = "koth";
+        if (!Array.isArray(restored.queue)) restored.queue = [];
+        if (restored.throne === undefined) restored.throne = null;
+        if (restored.players.some((p) => p.role === undefined)) {
+          // First two players are duelists, the rest queue (preserve array order).
+          let seated = 0;
+          restored.queue = [];
+          for (const p of restored.players) {
+            if (seated < 2) { p.role = "duelist"; seated++; }
+            else { p.role = "queued"; restored.queue.push(p.username); }
+          }
+        }
+        // A room caught mid-countdown by restore can't trust its stale goAt alarm — drop
+        // back to lobby so duelists simply re-ready (cheap; avoids a stuck 3-2-1 overlay).
+        if (restored.phase === "countdown") {
+          restored.phase = "lobby";
+          restored.goAt = null;
+          for (const p of restored.players) p.ready = false;
         }
         this.state = restored;
       }
@@ -277,6 +305,8 @@ export class Room extends DurableObject<Env> {
         return this.onHello(ws, msg.username, msg.wordLength, msg.edition, msg.mode, msg.scienceOptOut, msg.public);
       case "start":
         return this.onStart(ws);
+      case "ready":
+        return this.onReady(ws, msg.ready);
       case "guess":
         return this.onGuess(ws, msg.word);
       case "typing":
@@ -354,17 +384,21 @@ export class Room extends DurableObject<Env> {
         this.send(ws, { type: "error", message: "room full" });
         return;
       }
+      const role: "duelist" | "queued" = this.isDuelRoom() ? nextSeatRole(this.state.players) : "duelist";
       this.state.players.push({
         username,
         connected: true,
         guesses: [],
         status: "playing",
+        ready: false,
+        role,
         scienceOptOut: !!scienceOptOut,
         revealHints: 0,
         vowelHints: 0,
         points: 0,
         pointsSpent: 0,
       });
+      if (this.isDuelRoom() && role === "queued") this.state.queue.push(username);
       // The room's default word length follows its owner's preference, and only in a
       // pristine lobby. Anyone can still change it mid-lobby via set_length (shared control).
       if (
@@ -656,6 +690,113 @@ export class Room extends DurableObject<Env> {
     return true;
   }
 
+  // --- Duel: 1v1 seats + king-of-the-hill + ready-gate countdown ----------------
+  // Normal / public / robots rooms are duel rooms: two duelists play, the rest queue,
+  // and the winner is rotated against the queue (KOTH). Daily, seeded-Arena, and challenge
+  // rooms are NOT duel rooms — they keep the classic start + rematch-handshake flow.
+  private isDuelRoom(): boolean {
+    return !this.state.isDaily && !dailyDateOf(this.state.path) && !this.state.seed && !this.state.challengeId;
+  }
+
+  /** The (up to two) players currently holding a duel seat. */
+  private duelists(): PlayerState[] {
+    return this.state.players.filter((p) => p.role === "duelist");
+  }
+
+  /** Players whose results count this round: duelists in a duel room, else everyone.
+   *  Falls back to all players if seats were never assigned (legacy/hand-built state) —
+   *  in real runtime isGameOver requires a live duelist, so this only guards edge cases. */
+  private finishParticipants(): PlayerState[] {
+    if (!this.isDuelRoom()) return this.state.players;
+    const ds = this.duelists();
+    return ds.length ? ds : this.state.players;
+  }
+
+  // A duelist toggles ready / taps "Challenge 👑". When every connected duelist is ready —
+  // in the lobby OR the between-rounds finished intermission — the 3-2-1 countdown begins.
+  private async onReady(ws: WebSocket, ready: boolean): Promise<void> {
+    if (!this.isDuelRoom()) return;
+    if (this.state.phase !== "lobby" && this.state.phase !== "finished") return;
+    const username = this.userFor(ws);
+    const player = username ? this.state.players.find((p) => p.username === username) : null;
+    if (!player || player.role !== "duelist") return; // only duelists ready up; spectators wait in the queue
+    player.ready = !!ready;
+    this.ensureBot(); // a worduler in the room is born ready (pushed ready:true) and counts toward the gate
+    if (everyoneReady(this.duelists())) { await this.beginCountdown(); return; }
+    await this.persistAndBroadcast();
+  }
+
+  // Enter the 3-2-1 countdown. Stamp goAt + arm the DO alarm to flip the round live; the
+  // word pick + board/economy reset are deferred to goLive→runStart so round-init runs the
+  // single existing start path (challenge word, science emit, bot tick). Duel rooms never
+  // have a rematch alarm pending, so a plain setAlarm can't clobber one.
+  private async beginCountdown(): Promise<void> {
+    this.state.phase = "countdown";
+    this.state.goAt = Date.now() + COUNTDOWN_MS;
+    for (const p of this.state.players) p.ready = false; // consumed; the next lobby re-readies
+    this.pushSystem(`Get ready — round ${this.state.round + 1}`);
+    void this.ctx.storage.setAlarm(this.state.goAt);
+    await this.persistAndBroadcast();
+  }
+
+  // The countdown alarm fired: start the round through the shared runStart core, then align
+  // startedAt to the synchronized goAt so every client's clock agrees on the start instant.
+  private async goLive(): Promise<void> {
+    const goAt = this.state.goAt;
+    this.state.goAt = null;
+    const ok = await this.runStart(this.state.throne?.username ?? "the duel");
+    if (ok) {
+      if (goAt) { this.state.startedAt = goAt; await this.persistAndBroadcast(); }
+    } else {
+      // No word / guard failed — fall back to the lobby so the room isn't stuck mid-countdown.
+      this.state.phase = "lobby";
+      await this.persistAndBroadcast();
+    }
+  }
+
+  // A duelist dropped during the 3-2-1 — abort back to the lobby and re-ready everyone.
+  private async cancelCountdown(): Promise<void> {
+    this.state.phase = "lobby";
+    this.state.goAt = null;
+    for (const p of this.state.players) p.ready = false;
+    try { await this.ctx.storage.deleteAlarm(); } catch { /* nothing pending */ }
+    this.pushSystem("Countdown cancelled — ready up again");
+    await this.persistAndBroadcast();
+  }
+
+  // King-of-the-hill advance, applied when a duel round ends. Winner keeps the throne
+  // (streak++), loser drops to the back of the queue, the next challenger steps up; a tie
+  // keeps the reigning king. Empty queue → the same two simply rematch. Pure: rotation.ts.
+  private applyRotation(): void {
+    if (this.state.rotation !== "koth") return;
+    const current = this.duelists().map((p) => p.username);
+    if (current.length < 2) {
+      // Solo (one duelist): no rotation, but a solo win still grows the throne streak.
+      if (this.state.winner && current.includes(this.state.winner)) {
+        const prev = this.state.throne;
+        this.state.throne = prev && prev.username === this.state.winner
+          ? { username: this.state.winner, streak: prev.streak + 1 }
+          : { username: this.state.winner, streak: 1 };
+      }
+      return;
+    }
+    const res = applyKothRotation({
+      duelists: current,
+      winner: this.state.winner,
+      queue: this.state.queue,
+      throne: this.state.throne,
+    });
+    const seated = new Set(res.duelists);
+    const queued = new Set(res.queue);
+    for (const p of this.state.players) {
+      if (seated.has(p.username)) p.role = "duelist";
+      else if (queued.has(p.username)) p.role = "queued";
+    }
+    this.state.queue = res.queue;
+    this.state.throne = res.throne;
+    if (res.throne) this.pushSystem(`👑 ${res.throne.username} holds the throne — ${res.throne.streak} in a row`);
+  }
+
   private async onGuess(ws: WebSocket, wordRaw: string): Promise<void> {
     if (this.state.phase !== "playing" || !this.state.word) {
       this.send(ws, { type: "error", message: "game not in progress" });
@@ -665,6 +806,7 @@ export class Room extends DurableObject<Env> {
     if (!username) return;
     const player = this.state.players.find((p) => p.username === username);
     if (!player || player.status !== "playing") return;
+    if (this.isDuelRoom() && player.role !== "duelist") return; // spectators in the queue can't guess
     if (player.guesses.length >= this.state.maxGuesses) return;
 
     const len = this.state.wordLength;
@@ -736,7 +878,8 @@ export class Room extends DurableObject<Env> {
     // into the snapshot and emitPlayerFinished fires for science/records/H2H. The
     // existing afterPlayerStatus → maybeFinish then finds isGameOver() and finishes.
     if (!hadWinner && this.state.winner && !this.state.isDaily) {
-      for (const username of outpacedLosers(this.state.players, this.state.winner)) {
+      const racers = this.isDuelRoom() ? this.duelists() : this.state.players;
+      for (const username of outpacedLosers(racers, this.state.winner)) {
         const other = this.state.players.find((p) => p.username === username);
         if (other) {
           other.status = "lost";
@@ -784,6 +927,8 @@ export class Room extends DurableObject<Env> {
           guesses: [],
           status: "playing",
           isBot: true,
+          ready: true,        // wordulers are always ready (gate-counting)
+          role: "duelist",    // seeded Arena rooms aren't duel rooms; role is inert there
           scienceOptOut: true,
           revealHints: 0,
           vowelHints: 0,
@@ -796,19 +941,24 @@ export class Room extends DurableObject<Env> {
     // /robots: exactly one labeled clanker (unchanged).
     if (this.state.players.some((p) => p.isBot)) return;
     if (this.state.players.length >= MAX_PLAYERS) return;
+    const botName = BOT_NAME;
+    const botRole: "duelist" | "queued" = this.isDuelRoom() ? nextSeatRole(this.state.players) : "duelist";
     this.state.players.push({
-      username: BOT_NAME,
+      username: botName,
       connected: true,
       guesses: [],
       status: "playing",
       isBot: true,
+      ready: true, // a worduler is born ready — it counts toward the duel ready-gate like a person
+      role: botRole,
       scienceOptOut: true,
       revealHints: 0,
       vowelHints: 0,
       points: 0,
       pointsSpent: 0,
     });
-    this.pushSystem(`🤖 ${BOT_NAME} powered on — knows the basics, holds no grudges.`);
+    if (this.isDuelRoom() && botRole === "queued") this.state.queue.push(botName);
+    // The worduler joins like any other player — no "powered on" announcement (worduler cover rule).
   }
 
   // Arm every playing bot's next guess time, then set the single DO alarm to the soonest.
@@ -834,6 +984,11 @@ export class Room extends DurableObject<Env> {
   // delayed wakes (bot decision + proposal timeout). The two phases are mutually
   // exclusive, so they never contend for the one alarm.
   async alarm(): Promise<void> {
+    if (this.state.phase === "countdown") {
+      // Duel go-live: the 3-2-1 elapsed. Flip the round live (countdown owns this phase alone).
+      if (this.state.goAt && Date.now() >= this.state.goAt) await this.goLive();
+      return;
+    }
     if (this.state.phase === "finished") {
       await this.handleRematchAlarm(Date.now());
       return;
@@ -909,6 +1064,13 @@ export class Room extends DurableObject<Env> {
         : `Nobody got it. The word was ${this.state.word}`,
     );
     await this.finishGame();
+    if (this.isDuelRoom()) {
+      // KOTH: rotate seats for the next matchup, then sit in the finished phase as the
+      // between-rounds intermission. Duelists ready up (onReady accepts "finished") → countdown.
+      this.applyRotation();
+      for (const p of this.state.players) p.ready = false;
+      this.state.goAt = null;
+    }
   }
 
   // A player gives up (💀 / bankruptcy). Mark them lost so others see them OUT, and so
@@ -1067,7 +1229,7 @@ export class Room extends DurableObject<Env> {
     // gets a "played" credit and a "lost" record (status "playing" -> "lost").
     this.state.scoreboard = bumpScoreboard(this.state.scoreboard, {
       winner: this.state.winner,
-      participants: this.state.players.map((p) => p.username),
+      participants: this.finishParticipants().map((p) => p.username),
     });
     // Append a compact summary to the room's game history (newest last, keep last 20).
     this.state.history.push(
@@ -1076,7 +1238,7 @@ export class Room extends DurableObject<Env> {
         word: this.state.word ?? "",
         winner: this.state.winner,
         finishedAt: this.state.finishedAt ?? Date.now(),
-        players: this.state.players.map((p) => ({ username: p.username, status: p.status, guesses: p.guesses.length })),
+        players: this.finishParticipants().map((p) => ({ username: p.username, status: p.status, guesses: p.guesses.length })),
       }),
     );
     if (this.state.history.length > 20) this.state.history = this.state.history.slice(-20);
@@ -1085,7 +1247,7 @@ export class Room extends DurableObject<Env> {
       word: this.state.word ?? "",
       wordLength: this.state.wordLength,
       finishedAt: this.state.finishedAt ?? Date.now(),
-      players: this.state.players.map((p) => ({
+      players: this.finishParticipants().map((p) => ({
         username: p.username,
         status: p.status,
         guesses: p.guesses.length,
@@ -1128,7 +1290,7 @@ export class Room extends DurableObject<Env> {
     // win reveal on a cold WORDSTATS DO. finishGame runs once per finish (maybeFinish guards
     // re-entry), so backgrounding it can't double-bump.
     const statsWord = (this.state.word ?? "").toUpperCase();
-    const statHumans = this.state.players.filter((p) => !p.isBot);
+    const statHumans = this.finishParticipants().filter((p) => !p.isBot);
     if (statsWord && statHumans.length) {
       const statGames = statHumans.map((p) => ({
         result: p.status === "won" ? "won" : "lost",
@@ -1302,7 +1464,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private async onRematchPropose(ws: WebSocket): Promise<void> {
-    if (this.state.isDaily || this.state.phase !== "finished") return;
+    if (this.state.isDaily || this.isDuelRoom() || this.state.phase !== "finished") return;
     const username = this.userFor(ws);
     if (!username) return;
     const me = this.state.players.find((p) => p.username === username);
@@ -1327,7 +1489,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private async onRematchAccept(ws: WebSocket): Promise<void> {
-    if (this.state.isDaily || this.state.phase !== "finished") return;
+    if (this.state.isDaily || this.isDuelRoom() || this.state.phase !== "finished") return;
     const username = this.userFor(ws);
     if (!username) return;
     const { rematch, effects } = rematchReduce(this.state.rematch ?? null, { kind: "accept", from: username });
@@ -1337,7 +1499,7 @@ export class Room extends DurableObject<Env> {
   }
 
   private async onRematchDecline(ws: WebSocket): Promise<void> {
-    if (this.state.isDaily || this.state.phase !== "finished") return;
+    if (this.state.isDaily || this.isDuelRoom() || this.state.phase !== "finished") return;
     const username = this.userFor(ws);
     if (!username) return;
     const { rematch, effects } = rematchReduce(this.state.rematch ?? null, { kind: "decline" });
@@ -1448,7 +1610,8 @@ export class Room extends DurableObject<Env> {
   private isGameOver(): boolean {
     // The race no longer ends the instant someone wins — remaining players keep going
     // for their own gold/score. It's over once every connected player is done (won/lost).
-    const active = this.state.players.filter((p) => p.connected);
+    const pool = this.isDuelRoom() ? this.duelists() : this.state.players;
+    const active = pool.filter((p) => p.connected);
     if (active.length === 0) return false;
     return active.every((p) => p.status !== "playing");
   }
@@ -1466,9 +1629,13 @@ export class Room extends DurableObject<Env> {
   // gets the answer + its end-screen intel, while anyone still guessing never sees it.
   private snapshotFor(viewer: string | null): RoomSnapshot {
     const me = viewer ? this.state.players.find((p) => p.username === viewer) : null;
-    const reveal = this.state.phase === "finished" || (!!me && me.status !== "playing");
+    const duel = this.isDuelRoom();
+    // Duel: only a finished DUELIST gets the word early; a queued spectator waits for finish.
+    const reveal = this.state.phase === "finished"
+      || (!!me && me.status !== "playing" && (!duel || me.role === "duelist"));
     return {
       ...this.state,
+      isDuel: duel,
       word: reveal ? this.state.word : null,
       // The daily story names the answer ("Why EMBER?") — gate it exactly like `word`,
       // else a still-playing viewer reads today's word straight off the WS payload.

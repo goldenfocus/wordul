@@ -729,8 +729,25 @@ function showRoom(owner, slug) {
   hacklog = null;
   mount("tpl-room");
   renderRoomHeader();
-  $("#startBtn").addEventListener("click", () => send({ type: "start" }));
-  $("#rematchBtn").addEventListener("click", () => { proposeRematch(); });
+  $("#startBtn").addEventListener("click", () => {
+    const snap = game.snapshot;
+    if (snap && snap.isDuel) {
+      const meP = snap.players.find((p) => p.username === getUsername());
+      send({ type: "ready", ready: !(meP && meP.ready) });
+    } else {
+      send({ type: "start" });
+    }
+  });
+  $("#rematchBtn").addEventListener("click", () => {
+    const snap = game.snapshot;
+    if (snap && snap.isDuel) {
+      // Duel: the between-rounds button readies up for the next KOTH round (no rematch handshake).
+      const meP = snap.players.find((p) => p.username === getUsername());
+      send({ type: "ready", ready: !(meP && meP.ready) });
+    } else {
+      proposeRematch();
+    }
+  });
   wireChat();
   wireRoomTabs();
   buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
@@ -1632,7 +1649,14 @@ function onServerMessage(msg) {
     // re-trigger it, and lobby-gated so it never fires mid-game.
     if (game.autoStart && msg.room.phase === "lobby") {
       game.autoStart = false;
-      send({ type: "start" });
+      // In a duel room, auto-start goes through the ready-gate so solo still gets the 3-2-1.
+      send(msg.room.isDuel ? { type: "ready", ready: true } : { type: "start" });
+    }
+    // Duel 3-2-1 overlay: enter on the move into countdown, leave when it exits.
+    if (prev?.phase !== "countdown" && msg.room.phase === "countdown" && msg.room.goAt) {
+      startCountdownOverlay(msg.room.goAt);
+    } else if (prev?.phase === "countdown" && msg.room.phase !== "countdown") {
+      stopCountdownOverlay();
     }
     // Synchronized start celebration: any transition INTO playing (fresh start or
     // rematch) fires GO! + confetti. Driven by the shared snapshot, so it lands on
@@ -2073,7 +2097,12 @@ function render() {
     endControls.hidden = true;
     syncModePicker(snap);
     syncLobbySetup(snap);
-    startBtn.hidden = false;
+    if (snap.isDuel) applyDuelReadyButton(startBtn, snap, me);
+    else startBtn.hidden = false;
+  } else if (snap.phase === "countdown") {
+    lobby.hidden = true;
+    endControls.hidden = true;
+    const mc = $("#modeControl"); if (mc) mc.hidden = true;
   } else if (snap.phase === "playing") {
     lobby.hidden = true;
     endControls.hidden = true;
@@ -2081,8 +2110,11 @@ function render() {
   } else if (snap.phase === "finished") {
     lobby.hidden = true;
     endControls.hidden = false;
-    rematchBtn.hidden = false;
     const mc = $("#modeControl"); if (mc) mc.hidden = true;
+    // Duel: the between-rounds intermission reuses the rematch button as the ready toggle
+    // (KOTH replaces the rematch handshake); queued spectators just watch the queue advance.
+    if (snap.isDuel) applyDuelReadyButton(rematchBtn, snap, me);
+    else rematchBtn.hidden = false;
   }
 
   syncModeChip(snap);
@@ -2107,6 +2139,7 @@ function render() {
   renderKeyboard($("#keyboard"), me);
   renderChat(snap);
   renderScoreboard(snap);
+  renderQueue(snap);
   renderGames(snap);
   applyTabVisibility(snap.phase === "playing");
   renderPowerups(powerupsCtx, snap, me);
@@ -2114,7 +2147,7 @@ function render() {
   // Show the keyboard only when a guess is actually possible — keeps the lobby
   // unambiguous (no dead keys to mash) and post-game state minimal.
   const kb = $("#keyboard");
-  const canType = snap.phase === "playing" && me && me.status === "playing";
+  const canType = snap.phase === "playing" && me && me.status === "playing" && (!snap.isDuel || me.role === "duelist");
   if (kb) kb.hidden = !canType;
 }
 
@@ -2348,10 +2381,49 @@ function renderScoreboard(snap) {
     name.appendChild(userLink(e.username, { suffix: e.username === me ? " (you)" : "" }));
     const tally = document.createElement("span");
     tally.className = "score-tally";
-    tally.textContent = `${e.wins}W · ${e.played}P`;
+    tally.textContent = `${e.wins}W · ${e.losses ?? 0}L · ${e.ties ?? 0}T`;
     row.appendChild(name);
     row.appendChild(tally);
     root.appendChild(row);
+  }
+}
+
+// Duel ready / "Challenge 👑" button, shared by the lobby start button and the
+// between-rounds intermission button. Only duelists ready up; spectators see no button.
+function applyDuelReadyButton(btn, snap, me) {
+  const amDuelist = me && me.role === "duelist";
+  btn.hidden = !amDuelist;
+  if (!amDuelist) return;
+  const ready = !!me.ready;
+  const challenger = snap.throne && snap.throne.username !== getUsername();
+  btn.textContent = ready ? "Ready ✓" : (challenger ? "Challenge 👑" : "Ready");
+  btn.classList.toggle("ready-on", ready);
+}
+
+// Duel queue strip: the throne holder + the line of waiting challengers. Hidden when
+// there's no queue and no throne (a fresh 1v1 with nobody waiting), or in a non-duel room.
+function renderQueue(snap) {
+  const strip = $("#queueStrip");
+  if (!strip) return;
+  const queue = Array.isArray(snap.queue) ? snap.queue : [];
+  if (!snap.isDuel || (queue.length === 0 && !snap.throne)) {
+    strip.hidden = true; strip.textContent = ""; return;
+  }
+  strip.hidden = false;
+  strip.textContent = "";
+  if (snap.throne) {
+    const king = document.createElement("span");
+    king.className = "queue-king";
+    king.textContent = `👑 ${snap.throne.username} · ${snap.throne.streak} in a row`;
+    strip.appendChild(king);
+  }
+  if (queue.length) {
+    const label = document.createElement("span");
+    label.className = "queue-next muted small";
+    const meName = getUsername();
+    const names = queue.map((u, i) => (u === meName ? `you (#${i + 1})` : u));
+    label.textContent = `Next up: ${names.join(" → ")}`;
+    strip.appendChild(label);
   }
 }
 
@@ -2362,6 +2434,12 @@ function renderBoards(snap, me) {
   // a wall of strangers' boards. Live race rooms still show everyone.
   const ordered = game.isDaily
     ? (me ? [me] : [])
+    : snap.isDuel
+    ? [
+        // Duel rooms show only the two duelists' boards; spectators watch via the queue strip.
+        ...(me && me.role === "duelist" ? [me] : []),
+        ...snap.players.filter((p) => p.role === "duelist" && p.username !== getUsername()),
+      ]
     : [
         ...(me ? [me] : []),
         ...snap.players.filter((p) => p.username !== getUsername()),
@@ -2398,6 +2476,12 @@ function renderBoards(snap, me) {
       const b = document.createElement("span"); b.className = "badge lost"; b.textContent = "OUT"; name.appendChild(b);
     } else if (!p.connected) {
       const b = document.createElement("span"); b.className = "badge off"; b.textContent = "AWAY"; name.appendChild(b);
+    }
+    if (snap.throne && p.username === snap.throne.username) {
+      const crown = document.createElement("span");
+      crown.className = "badge throne";
+      crown.textContent = `👑 ×${snap.throne.streak}`;
+      name.appendChild(crown);
     }
     board.appendChild(name);
 
@@ -2562,7 +2646,14 @@ function onPhysicalKey(e) {
       startPlaying.click(); e.preventDefault(); return;
     }
     if (game.snapshot?.phase === "lobby") {
-      send({ type: "start" }); e.preventDefault();
+      const snap = game.snapshot;
+      if (snap.isDuel) {
+        const meP = snap.players.find((p) => p.username === getUsername());
+        if (meP && meP.role === "duelist") send({ type: "ready", ready: true });
+      } else {
+        send({ type: "start" });
+      }
+      e.preventDefault();
     }
     return;
   }
@@ -2751,6 +2842,38 @@ function triggerStartCelebration() {
   setTimeout(() => burst.remove(), 1100);
 
   spawnConfetti(40);
+}
+
+// --- Duel 3-2-1 countdown overlay (server-stamped goAt keeps every client in sync) ---
+let countdownTimer = null;
+function startCountdownOverlay(goAt) {
+  stopCountdownOverlay();
+  if (getSettings().reducedMotion) return; // numbers skipped; the alarm still flips the round live
+  const el = document.createElement("div");
+  el.id = "countdownOverlay";
+  el.className = "countdown-overlay";
+  document.body.appendChild(el);
+  let lastShown = null;
+  const tick = () => {
+    const remaining = goAt - Date.now();
+    const n = remaining <= 0 ? null : Math.ceil(remaining / 1000);
+    if (n == null) { stopCountdownOverlay(); return; }
+    if (n !== lastShown) {
+      lastShown = n;
+      el.textContent = String(n);
+      el.classList.remove("pulse");
+      void el.offsetWidth; // restart the pop animation
+      el.classList.add("pulse");
+      try { playChime([[330 + (3 - n) * 110, 0]]); } catch {} // 330→440→550 Hz as it ticks down
+    }
+  };
+  tick();
+  countdownTimer = setInterval(tick, 80);
+}
+function stopCountdownOverlay() {
+  if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+  const el = $("#countdownOverlay");
+  if (el) el.remove();
 }
 
 // Solve celebration: a big "SOLVED!" pop + confetti so winning the word lands as an
@@ -3650,6 +3773,7 @@ function toggleMute() {
 // Tear down any live room connection when leaving a room view.
 function leaveRoom() {
   if (game.rematchSettleTimer) { clearTimeout(game.rematchSettleTimer); game.rematchSettleTimer = null; }
+  stopCountdownOverlay(); // tear down a duel 3-2-1 overlay if we navigate away mid-countdown
   stopHeartbeat();
   game.challengeId = null;
   game.challengeMeta = null;

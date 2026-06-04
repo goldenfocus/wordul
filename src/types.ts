@@ -43,6 +43,8 @@ export type PlayerState = {
   guesses: GuessRow[];
   status: "playing" | "won" | "lost";
   isBot?: boolean;         // a worduler — born in Wordul, plays from public masks only
+  ready: boolean;          // duel readiness — gates the 3-2-1 countdown (reset false on join/round)
+  role: "duelist" | "queued"; // duel seat: only two duelists play at a time; everyone else is queued (spectator)
   scienceOptOut?: boolean; // true = skip player-level research telemetry
   revealHints?: number;    // per-round count, powers aggregate hint-use research
   vowelHints?: number;     // per-round count, powers aggregate hint-use research
@@ -54,7 +56,7 @@ export type PlayerState = {
   nextGuessAt?: number;    // bot-only: epoch ms this bot is next due to guess (per-bot heartbeat, Inc.2)
 };
 
-export type RoomPhase = "lobby" | "playing" | "finished";
+export type RoomPhase = "lobby" | "countdown" | "playing" | "finished";
 
 export type ChatEntry =
   | { kind: "user"; from: string; text: string; t: number }
@@ -74,6 +76,7 @@ export type RoomSnapshot = {
   word: string | null;
   winner: string | null;   // winner username
   startedAt: number | null;
+  goAt: number | null;     // duel: epoch ms the 3-2-1 countdown ends and the round goes live (null off-countdown)
   finishedAt: number | null;
   round: number;
   chat: ChatEntry[];
@@ -83,6 +86,11 @@ export type RoomSnapshot = {
   scoreboard: RoomScore[];
   history: RoomGame[];     // finished games in this room, newest last (capped)
   edition: string;         // theme/edition id bound to the room — everyone in it sees this theme
+  // --- Duel (1v1 + king-of-the-hill). Present on every room; only meaningful in duel rooms. ---
+  rotation: "koth" | "host"; // next-opponent model; "koth" = winner stays (default). "host" reserved for Plan 2b.
+  queue: string[];         // duel: waiting challenger usernames, front = next to play
+  throne: { username: string; streak: number } | null; // duel: current king + win streak (KOTH)
+  isDuel?: boolean;        // computed outbound: true when this room runs the duel (ready/seats/KOTH); absent on stored state
   challengeId?: string | null; // set when this room plays a pinned challenge word
   // Daily-mode (Wordul of the Day). Absent/false on normal race rooms.
   isDaily?: boolean;       // async one-shot, locked word, no resets, per-player scoring
@@ -102,6 +110,7 @@ export type RoomSnapshot = {
 export type ClientMessage =
   | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string; scienceOptOut?: boolean; public?: boolean }
   | { type: "start" }
+  | { type: "ready"; ready: boolean } // duel: toggle ready / "Challenge 👑"; gates the countdown
   | { type: "guess"; word: string }
   | { type: "typing"; len: number } // ephemeral: how many letters are in my current row (no letters sent)
   | { type: "rematch_propose" }
