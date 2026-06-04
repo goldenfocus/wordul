@@ -116,4 +116,18 @@ describe("hub home (redesign)", () => {
     expect(document.querySelector(".daily-result.is-lost")).toBeTruthy();
     expect(document.querySelector(".daily-result-text").textContent).toMatch(/Missed today/);
   });
+
+  it("when a solve grid is present, the board IMAGE is the hero — no text result line", () => {
+    renderHub({}, makeCallbacks({
+      dailyResult: { won: true, guesses: 2, solveGrid: ["xyxxg", "ggggg"], solveWords: ["SLATE", "GRAPE"] },
+    }));
+    const hero = document.querySelector(".daily-result-hero");
+    expect(hero).toBeTruthy();
+    expect(hero.getAttribute("aria-label")).toBe("Solved in 2");   // result conveyed to AT
+    expect(document.querySelector(".daily-result-text")).toBeNull(); // no duplicate text line
+    expect(document.querySelector(".daily-stamp.has-letters")).toBeTruthy();
+    // The real letters render inside the stamp tiles.
+    const letters = [...document.querySelectorAll(".stamp-ch")].map((e) => e.textContent).join("");
+    expect(letters).toBe("SLATEGRAPE");
+  });
 });

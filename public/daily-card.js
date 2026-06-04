@@ -127,13 +127,18 @@ function startCountdown() {
 export function renderDailyCard({ themeId, result }) {
   if (result) {
     const won = !!result.won;
-    return `<article class="daily-card daily-done" data-theme="${themeId}">
-      <div class="daily-result ${won ? "is-won" : "is-lost"}">
+    const caption = won ? `Solved in ${result.guesses}` : "Missed today";
+    const stamp = renderStamp(result.solveGrid, result.solveWords);
+    // The player's own solved board IS the result — show the board image as the hero.
+    // Fall back to a text line only when there's no board to draw (e.g. an old record).
+    const hero = stamp
+      ? `<div class="daily-result-hero ${won ? "is-won" : "is-lost"}" role="img" aria-label="${caption}">${stamp}</div>`
+      : `<div class="daily-result ${won ? "is-won" : "is-lost"}">
         <span class="daily-result-mark" aria-hidden="true">${won ? GLYPH.check : GLYPH.cross}</span>
-        <span class="daily-result-text">${won ? `Solved in ${result.guesses}` : "Missed today"}</span>
-        <span class="daily-result-gold" id="dailyResultGold" hidden></span>
-      </div>
-      ${renderStamp(result.solveGrid, result.solveWords)}
+        <span class="daily-result-text">${caption}</span>
+      </div>`;
+    return `<article class="daily-card daily-done" data-theme="${themeId}">
+      ${hero}
       <section class="daily-top" id="dailyTop" hidden aria-label="Today's top players"></section>
       <div class="daily-next">
         <span class="daily-next-label">Next Wordul in</span>
@@ -176,12 +181,6 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
     if (fetchLeaderboard && username) {
       fetchLeaderboard(username).then((view) => {
         if (!view) return;
-        const mine = (view.you) ?? (view.top || []).find((e) => e.username === username);
-        const goldEl = document.getElementById("dailyResultGold");
-        if (goldEl && mine && typeof mine.gold === "number") {
-          goldEl.innerHTML = ` · +${goldValue(mine.gold)}`;
-          goldEl.hidden = false;
-        }
         const board = document.getElementById("dailyTop");
         const html = renderLeaderboard(view, username);
         if (board && html) {

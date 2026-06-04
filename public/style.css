@@ -2632,8 +2632,9 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 
 .lab-entry { display: inline-block; margin-top: 8px; color: var(--accent); font-weight: 600; }
 
-/* Daily post-play: gold won + Today's Top leaderboard */
-.daily-result-gold { color: #f0c14b; font-weight: 600; display: inline-flex; align-items: center; }
+/* Daily post-play: your solved-board image (hero) + Today's Top leaderboard */
+.daily-result-hero { display: flex; justify-content: center; padding: .35rem 0 .25rem; }
+.daily-result-hero.is-lost { opacity: .92; }
 
 .daily-top { margin-top: 1rem; }
 .daily-top .section-label { display: block; margin-bottom: .5rem; }
@@ -2664,9 +2665,9 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 
 /* Crystallized stamp of your own solved board — mirrors the precious/champagne/obsidian
    board treatment, shrunk to a seal. Tiny glass sheen on every cell. */
-.daily-stamp { display: grid; gap: 3px; justify-content: center; margin: .15rem 0 .35rem; }
-.stamp-row { display: flex; gap: 3px; }
-.stamp-cell { position: relative; width: 14px; height: 14px; border-radius: 3px; overflow: hidden; }
+.daily-stamp { display: grid; gap: 4px; justify-content: center; margin: .15rem 0 .35rem; }
+.stamp-row { display: flex; gap: 4px; }
+.stamp-cell { position: relative; width: 18px; height: 18px; border-radius: 3px; overflow: hidden; }
 .stamp-cell::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(135deg, rgba(255,255,255,.22), transparent 48%); pointer-events: none; }
 .stamp-cell.is-correct { background: linear-gradient(135deg, #ffe7a3, #e9b23d 55%, #a87a1f); box-shadow: 0 0 0 1px rgba(255,231,163,.5), 0 0 7px rgba(233,178,61,.3); }
 .stamp-cell.is-present { background: rgba(216,201,122,.10); box-shadow: 0 0 0 1px rgba(207,214,227,.35) inset; }
@@ -2680,9 +2681,9 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 /* Stamp with real letters (this browser's own solve only) — bigger tiles to hold a glyph. */
 .daily-stamp.has-letters { gap: 4px; }
 .daily-stamp.has-letters .stamp-row { gap: 4px; }
-.daily-stamp.has-letters .stamp-cell { width: 22px; height: 22px; border-radius: 4px; }
+.daily-stamp.has-letters .stamp-cell { width: 28px; height: 28px; border-radius: 5px; }
 .stamp-ch { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center;
-  width: 100%; height: 100%; font-family: var(--font-display); font-weight: 700; font-size: 12px; text-transform: uppercase; }
+  width: 100%; height: 100%; font-family: var(--font-display); font-weight: 700; font-size: 15px; text-transform: uppercase; }
 .stamp-cell.is-correct .stamp-ch { color: #2a1d05; }
 .stamp-cell.is-present .stamp-ch { color: #ede2b0; }
 .stamp-cell.is-absent .stamp-ch { color: #6f6e74; }
