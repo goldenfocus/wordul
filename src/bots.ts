@@ -65,10 +65,12 @@ export function pickPersonas(
 }
 
 /**
- * The disguise. Total omit (NOT an allowlist) so future PlayerState fields pass through
- * automatically — only `isBot` is stripped. Both snapshotFor branches route through this.
+ * The disguise. Strips the two server-only bot tells — `isBot` AND `nextGuessAt` (the per-bot
+ * heartbeat schedule, present only on bots) — while letting every other PlayerState field pass
+ * through automatically (a near-total omit, so non-tell fields don't need per-field maintenance).
+ * Both snapshotFor branches route through this.
  */
-export function projectPlayerForClient(p: PlayerState): Omit<PlayerState, "isBot"> {
-  const { isBot: _isBot, ...rest } = p;
+export function projectPlayerForClient(p: PlayerState): Omit<PlayerState, "isBot" | "nextGuessAt"> {
+  const { isBot: _isBot, nextGuessAt: _nextGuessAt, ...rest } = p;
   return rest;
 }

@@ -109,15 +109,19 @@ describe("pickPersonas", () => {
 });
 
 describe("multi-bot disguise", () => {
-  it("strips isBot from every bot in an N-bot room", () => {
-    const bots: PlayerState[] = PERSONAS.slice(0, 4).map((p) => ({
+  it("strips isBot AND the bot-only nextGuessAt from every bot in an N-bot room", () => {
+    const bots: PlayerState[] = PERSONAS.slice(0, 4).map((p, i) => ({
       username: p.id, connected: true, guesses: [], status: "playing",
       isBot: true, scienceOptOut: true, points: 0, pointsSpent: 0,
+      nextGuessAt: 1_000_000 + i * 1000, // bot-only heartbeat field — must NOT leak
     }));
     for (const b of bots) {
       const out = projectPlayerForClient(b);
       expect("isBot" in out).toBe(false);
-      expect(JSON.stringify(out)).not.toContain("isBot");
+      expect("nextGuessAt" in out).toBe(false);
+      const json = JSON.stringify(out);
+      expect(json).not.toContain("isBot");
+      expect(json).not.toContain("nextGuessAt");
     }
   });
 });
