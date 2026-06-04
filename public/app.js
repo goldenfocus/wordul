@@ -931,7 +931,7 @@ async function renderDailyRoster(date) {
   if (!host) return;
   const view = computeRosterView(full, me);
   if (!view.rows.length) {
-    host.innerHTML = `<p class="muted small">No finishers yet today.</p>`;
+    host.innerHTML = `<p class="muted small">No finishers recorded.</p>`;
     return;
   }
   host.innerHTML = `<ul class="daily-roster-list">${view.rows.map((r) => {

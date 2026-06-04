@@ -1191,9 +1191,10 @@ export class Room extends DurableObject<Env> {
     // which keeps whatever was earned). scorePlayer then mints 0 gold for resigners.
     player.resigned = true;
     player.points = 0;
-    player.finishedAt = Date.now();
+    const now = Date.now();
+    player.finishedAt = now;
     if (!this.isGameOver()) this.pushSystem(`${username} gave up`);
-    this.emitPlayerFinished(player, "resigned", Date.now());
+    this.emitPlayerFinished(player, "resigned", now);
     await this.afterPlayerStatus(player);
     await this.persistAndBroadcast();
   }
