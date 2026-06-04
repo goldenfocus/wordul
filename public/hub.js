@@ -87,10 +87,13 @@ function wireDaily() {
   const { onType } = wireDailyCard({
     themeId: themeOfDay(),
     result: hubCallbacks.dailyResult ?? null,
+    username: hubCallbacks.username,
     onPlay: hubCallbacks.onPlay,
     onStats: hubCallbacks.onStats,
     onShareDaily: hubCallbacks.onShareDaily,
+    onProfile: hubCallbacks.onProfile,
     fetchPlayed: hubCallbacks.fetchPlayed,
+    fetchLeaderboard: hubCallbacks.fetchLeaderboard,
   });
   onHomeTyping = onType;
 

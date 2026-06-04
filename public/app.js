@@ -238,6 +238,11 @@ function renderHomeIdentity() {
       onArena: () => showArena(),
       onStats: () => navigate("/daily/" + todayUTC() + "/stats"),
       onShareDaily: () => shareDailyResult(cbs.dailyResult),
+      onProfile: (name) => navigate("/@" + name),
+      fetchLeaderboard: (username) =>
+        fetch(`/api/daily/${todayUTC()}/leaderboard?username=${encodeURIComponent(username)}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
       // dailyResult is filled from the profile below: null until you've played today,
       // then { won, guesses } — flips the home card to its post-play recap.
       dailyResult: null,

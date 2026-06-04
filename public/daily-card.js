@@ -7,6 +7,32 @@
 // The shell (hub.js) supplies the header + modes; this file owns the card.
 import { GLYPH } from "/hub-glyphs.js";
 
+const MEDALS = ["🥇", "🥈", "🥉"];
+function escAttr(s) { return String(s).replace(/[^a-z0-9_-]/gi, ""); } // usernames are [a-z0-9_-]
+function fmtGold(n) { return `${Number(n).toLocaleString()}g`; }
+
+// Build the leaderboard HTML from a LeaderboardView ({ top, you, total }) and the
+// viewer's own username. Top-3 medal rows; your medal row gets .is-you; if you're
+// outside the top, a pinned row with your real rank — always shown ("celebrate you").
+function renderLeaderboard(view, me) {
+  if (!view || !Array.isArray(view.top) || view.top.length === 0) return "";
+  const row = (entry, rank, opts = {}) => {
+    const u = escAttr(entry.username);
+    const badge = opts.pinned ? `#${rank}` : (MEDALS[rank - 1] ?? `#${rank}`);
+    const mine = u === escAttr(me);
+    const label = mine ? `you (@${u})` : `@${u}`;
+    return `<li class="daily-top-row${mine ? " is-you" : ""}${opts.pinned ? " is-pinned" : ""}">
+      <span class="daily-top-rank" aria-hidden="true">${badge}</span>
+      <a class="daily-top-name" href="/@${u}" data-profile="${u}">${label}</a>
+      <span class="daily-top-gold">${fmtGold(entry.gold)}</span>
+      <span class="daily-top-guesses">in ${entry.guesses}</span>
+    </li>`;
+  };
+  const medals = view.top.map((e, i) => row(e, i + 1)).join("");
+  const pinned = view.you ? `<li class="daily-top-sep" aria-hidden="true"></li>${row(view.you, view.you.rank, { pinned: true })}` : "";
+  return `<span class="section-label">Today's Top</span><ul class="daily-top-list">${medals}${pinned}</ul>`;
+}
+
 // Deterministic featured edition for a date: rotates the non-default editions so
 // every day has a theme with no server. Same UTC day -> same theme for everyone.
 export function dayTheme(date, editionIds) {
@@ -54,7 +80,9 @@ export function renderDailyCard({ themeId, result }) {
       <div class="daily-result ${won ? "is-won" : "is-lost"}">
         <span class="daily-result-mark" aria-hidden="true">${won ? GLYPH.check : GLYPH.cross}</span>
         <span class="daily-result-text">${won ? `Solved in ${result.guesses}` : "Missed today"}</span>
+        <span class="daily-result-gold" id="dailyResultGold" hidden></span>
       </div>
+      <section class="daily-top" id="dailyTop" hidden aria-label="Today's top players"></section>
       <div class="daily-next">
         <span class="daily-next-label">Next Wordul in</span>
         <span class="daily-countdown" id="dailyCountdown">—</span>
@@ -79,17 +107,42 @@ export function renderDailyCard({ themeId, result }) {
 // ── Wire ────────────────────────────────────────────────────────────────────
 // Binds the card's events for the current state. Returns { onType } — a letter
 // handler the shell registers for type-to-play (a no-op once you've played today).
-export function wireDailyCard({ themeId, result, onPlay, onStats, onShareDaily, fetchPlayed }) {
+export function wireDailyCard({ themeId, result, username, onPlay, onStats, onShareDaily, onProfile, fetchPlayed, fetchLeaderboard }) {
   stopCountdown(); // never leave a stale timer running across re-renders
 
   const stats = document.getElementById("dailyStats");
   if (stats && onStats) stats.addEventListener("click", (e) => { e.stopPropagation(); onStats(); });
 
-  // Post-play: result + countdown + share. No play surface (no replay teleport).
+  // Post-play: result + gold + Today's Top + countdown + share. No play surface.
   if (result) {
     const share = document.getElementById("dailyShare");
     if (share && onShareDaily) share.addEventListener("click", () => onShareDaily());
     startCountdown();
+
+    // Best-effort leaderboard: fills the gold line + the board once it resolves; a
+    // failure or empty board just leaves them hidden (recap still renders).
+    if (fetchLeaderboard && username) {
+      fetchLeaderboard(username).then((view) => {
+        if (!view) return;
+        const mine = (view.you) ?? (view.top || []).find((e) => e.username === username);
+        const goldEl = document.getElementById("dailyResultGold");
+        if (goldEl && mine && typeof mine.gold === "number") {
+          goldEl.textContent = ` · +${mine.gold.toLocaleString()} gold`;
+          goldEl.hidden = false;
+        }
+        const board = document.getElementById("dailyTop");
+        const html = renderLeaderboard(view, username);
+        if (board && html) {
+          board.innerHTML = html;
+          board.hidden = false;
+          if (onProfile) {
+            board.querySelectorAll("a[data-profile]").forEach((a) => {
+              a.addEventListener("click", (e) => { e.preventDefault(); onProfile(a.getAttribute("data-profile")); });
+            });
+          }
+        }
+      }).catch(() => {});
+    }
     return { onType: () => {} };
   }
 
