@@ -2675,7 +2675,11 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .daily-top-name:hover { text-decoration: underline; }
 .daily-top-gold { color: #f0c14b; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; justify-content: flex-end; font-weight: 600; }
 .daily-top-guesses { color: var(--muted); font-variant-numeric: tabular-nums; }
-.daily-top-guesses .is-quit { opacity: .65; filter: grayscale(.4); cursor: help; } /* gave up → 💀 */
+/* Non-win marks in the result column: luxe currentColor glyphs, themed by intent. */
+.daily-top-mark { display: inline-grid; place-items: center; cursor: help; vertical-align: middle; }
+.daily-top-mark .glyph { width: 17px; height: 17px; }
+.daily-top-mark.is-quit { color: var(--error); }  /* gave up — forfeited to 0 */
+.daily-top-mark.is-out { color: var(--muted); }    /* ran out of guesses */
 .daily-top-sep { height: 1px; margin: .25rem 0; background: var(--muted); opacity: .25; }
 
 /* Luxe rank medallions + the precious coin (struck SVGs, soft static glow). */

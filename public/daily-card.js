@@ -67,13 +67,13 @@ function renderLeaderboard(view, me) {
     const badge = opts.pinned ? `#${rank}` : medalGlyph(rank);
     const mine = u === escAttr(me);
     const label = mine ? `you (@${u})` : `@${u}`;
-    // Result column: solved → "in N"; gave up → 💀 (forfeit, 0 gold); ran out of guesses
-    // → "X/N" (N == maxGuesses, since exhaustion is the only non-resign loss).
+    // Result column: solved → "in N"; gave up → skull (forfeit, 0 gold); ran out of
+    // guesses → cross. Luxe currentColor glyphs (never emoji), themed by class in CSS.
     const result = entry.won
       ? `in ${entry.guesses}`
       : entry.resigned
-        ? `<span class="is-quit" title="gave up" aria-label="gave up">💀</span>`
-        : `X/${entry.guesses}`;
+        ? `<span class="daily-top-mark is-quit" role="img" aria-label="gave up" title="gave up">${GLYPH.skull}</span>`
+        : `<span class="daily-top-mark is-out" role="img" aria-label="ran out of guesses" title="ran out of guesses">${GLYPH.cross}</span>`;
     return `<li class="daily-top-row${mine ? " is-you" : ""}${opts.pinned ? " is-pinned" : ""}">
       <span class="daily-top-rank" aria-hidden="true">${badge}</span>
       <a class="daily-top-name" href="/@${u}" data-profile="${u}">${label}</a>
