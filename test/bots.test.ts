@@ -136,3 +136,18 @@ describe("bots.ts blindness", () => {
     expect(code).not.toMatch(/from\s+["']\.\/room/);
   });
 });
+
+describe("projectPlayerForClient — pendingWord disguise", () => {
+  it("strips the bot's pending (decided-but-uncommitted) word", () => {
+    const bot: PlayerState = {
+      username: "maya", connected: true, guesses: [], status: "playing",
+      isBot: true, ready: true, role: "duelist", points: 0, pointsSpent: 0,
+      nextGuessAt: 123, pendingWord: "CRANE",
+    };
+    const out = projectPlayerForClient(bot) as Record<string, unknown>;
+    expect("pendingWord" in out).toBe(false);
+    expect("isBot" in out).toBe(false);
+    expect("nextGuessAt" in out).toBe(false);
+    expect(out.username).toBe("maya");
+  });
+});
