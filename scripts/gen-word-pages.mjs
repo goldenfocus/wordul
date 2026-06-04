@@ -4,6 +4,10 @@
 //   public/words.html         A–Z index (committed)
 //   dist/og/<slug>.png        OG card per word (gitignored; uploaded by upload-og.mjs)
 // Idempotent. Skips excluded words (no public page).
+//
+// Length: defaults to 5 (the live, indexed wiki — unchanged). Pass --length N to build
+// pages for another length's pool. Only the 5-letter run feeds the live sitemap; other
+// lengths are opt-in and don't touch the default path.
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
@@ -16,8 +20,22 @@ import { ogCardSvg } from "./lib/og-card.mjs";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ORIGIN = process.env.WIKI_ORIGIN || "https://wordul.com";
 
+const lengthArg = process.argv.indexOf("--length");
+const LENGTH = lengthArg >= 0 ? parseInt(process.argv[lengthArg + 1], 10) || 5 : 5;
+
+// Answer pool for LENGTH. Length 5 uses the existing lib/words.mjs answerWords() verbatim
+// (unchanged default path). Other lengths read WORDS_BY_SIZE[n].answers from the TS source —
+// stored as `const W<N> = "..."`, the same literal the worker unpacks for that length.
+function poolForLength(length) {
+  if (length === 5) return answerWords();
+  const src = readFileSync(join(ROOT, "src/wordsbysize.ts"), "utf8");
+  const m = src.match(new RegExp(`const W${length}\\s*=\\s*"([A-Z,]+)"`));
+  if (!m) { console.error(`No answer pool 'W${length}' for length ${length} in src/wordsbysize.ts`); process.exit(1); }
+  return [...new Set(m[1].split(",").filter(Boolean))];
+}
+
 const { WORD_INTEL } = await import(pathToFileURL(join(ROOT, "data/word-intel-rich.js")).href);
-const words = answerWords();
+const words = poolForLength(LENGTH);
 const excluded = exclusions();
 const graph = buildWordGraph(words);
 
@@ -55,4 +73,4 @@ writeFileSync(join(ROOT, "public/words.html"), `<!doctype html>
 <body class="wp"><header class="wp-head"><a class="wp-home" href="/">Wordul</a></header>
 <main class="wp-main"><h1>The Wordul word wiki</h1><p>${indexed.length} words.</p>${indexBody}</main></body></html>`);
 
-console.log(`wrote ${pages} word pages + index + ${pages} OG cards`);
+console.log(`wrote ${pages} ${LENGTH}-letter word pages + index + ${pages} OG cards`);

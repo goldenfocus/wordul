@@ -2,8 +2,19 @@
 import { WORDS_BY_SIZE } from "./wordsbysize.ts";
 import { WORD_EXCLUSIONS } from "./word-exclusions.ts";
 
-/** Every 5-letter answer word, uppercase. The wiki has one page per answer word. */
+/** Every 5-letter answer word, uppercase. The wiki has one page per answer word.
+ *  This stays 5-letter only — it backs the live, indexed sitemap. */
 export const ANSWER_WORDS: Set<string> = new Set(WORDS_BY_SIZE[5].answers);
+
+/** Answer pool for a given word length, uppercase. Length 5 returns the same set as
+ *  ANSWER_WORDS; other lengths return WORDS_BY_SIZE[n].answers (which doubles as that
+ *  length's answer + valid-guess pool). Returns an empty set for unsupported lengths.
+ *  Additive helper for the multi-length wiki generators — does NOT feed ANSWER_WORDS,
+ *  isWordPage, or the sitemap, so 5-letter behavior is unchanged. */
+export function answerWordsForLength(n: number): Set<string> {
+  const pool = WORDS_BY_SIZE[n];
+  return pool ? new Set(pool.answers) : new Set<string>();
+}
 
 const EXCLUDED = new Set(WORD_EXCLUSIONS.map((w) => w.toUpperCase()));
 

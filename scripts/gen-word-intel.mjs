@@ -12,9 +12,13 @@
 //   node scripts/gen-word-intel.mjs            # generate everything still missing
 //   node scripts/gen-word-intel.mjs --limit 50 # cap this run (batch in chunks)
 //   node scripts/gen-word-intel.mjs WORD WORD2 # just these words
+//   node scripts/gen-word-intel.mjs --length 4 # target the 4-letter answer pool (default 5)
 //   # Local (Ollama) — free, no key:
 //   node scripts/gen-word-intel.mjs --local                    # default model
 //   node scripts/gen-word-intel.mjs --local --model qwen3:14b  # higher quality, slower
+//   # Offline self-check (no API, no spend) — proves --length selects the right pool:
+//   node scripts/gen-word-intel.mjs --check          # checks default length 5
+//   node scripts/gen-word-intel.mjs --check --length 4
 //
 // Quotes: in cloud mode the prompt demands REAL, correctly-attributed quotes (omit if
 // unsure). In --local mode quotes are NEVER generated and are hard-blanked — a local
@@ -32,15 +36,40 @@ const WORDS_PATH = join(ROOT, "src/wordsbysize.ts");
 
 function die(msg) { console.error(msg); process.exit(1); }
 
-// Pull the answer pools (the words that can actually be the solution) out of the TS
-// module: each `const A<len> = "WORD,WORD,..."` literal is an answers list.
-function answerWords() {
+// Pull the answer pool for a given length out of the TS module by reading the literal that
+// backs WORDS_BY_SIZE[length].answers. Length 5 keeps a dedicated answers list in
+// `const A5 = "..."` (the classic game); every other length N uses a single pool declared as
+// `const W<N> = "..."` that doubles as answers + valid guesses. Default length = 5 keeps the
+// historical behavior (was a blanket scan of every `const A\d+`, of which only A5 exists).
+function poolVarFor(length) {
+  return length === 5 ? "A5" : `W${length}`;
+}
+function answerWords(length = 5) {
   const src = readFileSync(WORDS_PATH, "utf8");
+  const name = poolVarFor(length);
+  const re = new RegExp(`const ${name}\\s*=\\s*"([A-Z,]+)"`);
+  const m = src.match(re);
+  if (!m) die(`No answer pool '${name}' found in ${WORDS_PATH} for length ${length}.`);
   const out = new Set();
-  for (const m of src.matchAll(/const A\d+\s*=\s*"([A-Z,]+)"/g)) {
-    for (const w of m[1].split(",")) if (w) out.add(w);
-  }
+  for (const w of m[1].split(",")) if (w) out.add(w);
   return [...out];
+}
+
+// Offline proof that --length picks the correct pool. Compares the words this script would
+// generate intel for against src/words.ts's answerWordsForLength(n) — no API call, no spend.
+async function selfCheck(length) {
+  const { answerWordsForLength } = await import(`file://${join(ROOT, "src/words.ts")}`);
+  const fromScript = new Set(answerWords(length));
+  const fromSrc = answerWordsForLength(length);
+  const wrong = [...fromScript].filter((w) => w.length !== length);
+  const missing = [...fromSrc].filter((w) => !fromScript.has(w));
+  const extra = [...fromScript].filter((w) => !fromSrc.has(w));
+  if (wrong.length || missing.length || extra.length || fromScript.size === 0) {
+    die(`✗ length ${length} pool mismatch: size=${fromScript.size} ` +
+        `wrongLen=${wrong.length} missing=${missing.length} extra=${extra.length}`);
+  }
+  console.log(`✓ length ${length}: ${fromScript.size} words, all ${length} letters, ` +
+              `matches src/words.ts answerWordsForLength(${length}). (pool var '${poolVarFor(length)}')`);
 }
 
 // Read the words already covered so we can skip them (resume-friendly).
@@ -156,6 +185,10 @@ async function main() {
   let limit = Infinity;
   const li = args.indexOf("--limit");
   if (li >= 0) { limit = parseInt(args[li + 1], 10) || Infinity; args.splice(li, 2); }
+  let length = 5;
+  const ni = args.indexOf("--length");
+  if (ni >= 0) { length = parseInt(args[ni + 1], 10) || 5; args.splice(ni, 2); }
+  if (args.includes("--check")) { args.splice(args.indexOf("--check"), 1); return selfCheck(length); }
   const local = args.includes("--local");
   if (local) args.splice(args.indexOf("--local"), 1);
   let model = process.env.OLLAMA_MODEL || "qwen2.5:7b-instruct";
@@ -165,12 +198,12 @@ async function main() {
   const intelFor = local ? (w) => intelForLocal(w, model) : intelForAnthropic;
 
   const have = existingWords();
-  const todo = (explicit.length ? explicit : answerWords())
+  const todo = (explicit.length ? explicit : answerWords(length))
     .filter((w) => explicit.length || !have.has(w))
     .slice(0, limit);
 
   if (!todo.length) return console.log("Nothing to generate — all answers covered.");
-  console.log(`Generating intel for ${todo.length} words via ${local ? `Ollama (${model})` : `Claude (${ANTHROPIC_MODEL})`}…`);
+  console.log(`Generating intel for ${todo.length} ${length}-letter words via ${local ? `Ollama (${model})` : `Claude (${ANTHROPIC_MODEL})`}…`);
 
   const map = await loadMap();
   let done = 0;
