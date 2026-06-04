@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { WORDS_BY_SIZE, isSupportedSize } from "./wordsbysize.ts";
 import { scoreGuess, countVowels, revealUngreened, type Color } from "./color.ts";
 import { computeNextGuess } from "./solver.ts";
-import { noobGuess, NOOB } from "./noob.ts";
+import { noobGuess, mistakeRateFor } from "./noob.ts";
 import { projectPlayerForClient } from "./bots.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { buildGameRecords, summarizeRoomGame, encodeSolveGrid } from "./records.ts";
@@ -786,7 +786,9 @@ export class Room extends DurableObject<Env> {
     // Seeded rooms play through the fallible noob; labeled /robots rooms stay sharp.
     // `state.seed` is falsy until Slice D, so every existing room keeps the sharp path.
     const view = { wordLength: this.state.wordLength, ownGuesses: bot.guesses };
-    const word = this.state.seed ? noobGuess(view, NOOB, Math.random()) : computeNextGuess(view);
+    const word = this.state.seed
+      ? noobGuess(view, { mistakeRate: mistakeRateFor(this.state.wordLength) }, Math.random())
+      : computeNextGuess(view);
     if (word) await this.applyGuess(bot, word);
     await this.persistAndBroadcast();
     const stillGoing = this.state.players.some((p) => p.isBot && p.status === "playing");
