@@ -1737,6 +1737,16 @@ function renderDailyUnlock(snap, me) {
   const done = me && me.status !== "playing";
   box.hidden = !done;
   if (!done) return;
+  // The curated day's name (vibeTitle) crowns the reveal — a palette-gradient hero on a
+  // themed day (see .daily-vibe-title), inserted once above the goody. Absent on legacy days.
+  if (snap.vibeTitle && !box.dataset.vibeTitled) {
+    const h = document.createElement("h2");
+    h.className = "daily-vibe-title";
+    h.id = "dailyVibeTitle";
+    h.textContent = snap.vibeTitle;
+    box.insertBefore(h, box.firstChild);
+    box.dataset.vibeTitled = "1";
+  }
   const won = me.status === "won";
   // Only a CONFIRMED gold mint sets player.goldAwarded (a number). Drive both the
   // copy and the celebration off it — never claim/float gold the server didn't grant.
@@ -1881,7 +1891,7 @@ function render() {
   if (game.isDaily) {
     document.body.classList.add("daily");
     const tabs = $("#roomTabs"); if (tabs) tabs.hidden = dailyLocked; // no leaderboard/games until done
-    const nameBtn = $("#roomName"); if (nameBtn) nameBtn.textContent = snap.vibeTitle || t("daily.boardTitle", { date: game.dailyDate });
+    const nameBtn = $("#roomName"); if (nameBtn) nameBtn.textContent = t("daily.boardTitle", { date: game.dailyDate });
     // The lobby bar's controls (choose-mode / start / play-again) are all meaningless for
     // the daily (it auto-starts, never resets) — hide the otherwise-empty bar entirely.
     const lobbyBar = $(".lobby-bar"); if (lobbyBar) lobbyBar.hidden = true;
