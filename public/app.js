@@ -15,7 +15,8 @@ import { getSettings, saveSettings, applySettings, openSettings, openHub } from 
 import { buildShareCardModel, renderShareCard } from "/share-card.js";
 import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
 import { mountArenaList, pickNextGame } from "/arena-panel.js";
-import { computeDailyStatsView } from "/daily-stats.js";
+import { computeDailyStatsView, computeRosterView } from "/daily-stats.js";
+import { fmtDuration, goldValue } from "/daily-card.js";
 import { computeFeedStreamView, computeFeedPostView } from "/feed.js";
 import { EDITIONS, getEdition } from "/editions/index.js";
 import { MODES, isAvailableMode } from "/modes.js";
@@ -911,6 +912,40 @@ async function showDailyStats(date) {
   } catch (_) { /* offline / cold day — render the empty state */ }
   if (parseRoute().kind !== "daily-stats") return; // navigated away mid-fetch
   renderDailyStatsBody(summary);
+  void renderDailyRoster(date);
+}
+
+// Append the full ranked roster (names, gold, guesses, duration) below the aggregates.
+// Source is the Room DO leaderboard (public usernames) — NOT the anonymized SCIENCE feed.
+async function renderDailyRoster(date) {
+  const me = getUsername();
+  let full = null;
+  try {
+    const res = await fetch(`/api/daily/${date}/leaderboard?full=1&username=${encodeURIComponent(me)}`);
+    if (res.ok) full = await res.json();
+  } catch (_) { /* offline / cold day — show the empty line */ }
+  if (parseRoute().kind !== "daily-stats") return; // navigated away mid-fetch
+  const host = $("#dailyRoster");
+  if (!host) return;
+  const view = computeRosterView(full, me);
+  if (!view.rows.length) {
+    host.innerHTML = `<p class="muted small">No finishers yet today.</p>`;
+    return;
+  }
+  host.innerHTML = `<ul class="daily-roster-list">${view.rows.map((r) => {
+    const u = String(r.username).replace(/[^a-z0-9_-]/gi, "");
+    const dur = fmtDuration(r.durationMs);
+    return `<li class="daily-roster-row${r.isYou ? " is-you" : ""}">
+      <span class="daily-roster-rank">${r.rank}</span>
+      <a class="daily-roster-name" href="/@${u}" data-profile="${u}">${r.isYou ? `you (@${u})` : `@${u}`}</a>
+      <span class="daily-roster-gold">${goldValue(r.gold)}</span>
+      <span class="daily-roster-guesses">${r.won ? `in ${r.guesses}` : "missed"}</span>
+      ${dur ? `<span class="daily-roster-time">${dur}</span>` : `<span class="daily-roster-time"></span>`}
+    </li>`;
+  }).join("")}</ul>`;
+  host.querySelectorAll("a[data-profile]").forEach((a) => {
+    a.addEventListener("click", (e) => { e.preventDefault(); navigate("/@" + a.getAttribute("data-profile")); });
+  });
 }
 
 function renderDailyStatsBody(summary) {
@@ -936,7 +971,9 @@ function renderDailyStatsBody(summary) {
     </div>
     <h2 class="daily-stats-sub">Guess distribution</h2>
     <div class="ddist">${rows || '<p class="muted small">No solves yet.</p>'}</div>
-    <p class="daily-stats-foot muted small">Failed today: ${fmt(v.losses)} · Top-10 leaderboard coming soon.</p>`;
+    <p class="daily-stats-foot muted small">Failed today: ${fmt(v.losses)}</p>
+    <h2 class="daily-stats-sub">Players</h2>
+    <div class="daily-roster" id="dailyRoster"><p class="muted small">Loading players…</p></div>`;
 }
 
 // The Living Lab reader — human-readable, blog-style discoveries over the same
