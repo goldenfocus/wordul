@@ -94,3 +94,51 @@ describe("speakLine", () => {
     expect(plays).toEqual([`/voice/ed_5xx/${file}`]);    // cloned clip now plays
   });
 });
+
+describe("robotic answer voice (loss reveal)", () => {
+  // Regression: the answer is the session's first speechSynthesis call (the line's
+  // prefix/suffix are mp3 clips). Chrome's getVoices() returns [] on that cold first
+  // call, then loads asynchronously. voice.js must trigger the load at import so the
+  // reveal picks the robot voice instead of falling to the pitch-mangle that turned a
+  // short word into a "grshhh" distortion. We model that: getVoices() is empty on its
+  // first (cold) call, then returns the robot voice once the load has been kicked off.
+  it("warms voices at import so the answer uses the robot voice, not the distorted mangle", async () => {
+    const zarvox = { name: "Zarvox" };
+    let calls = 0;
+    const spoken = [];
+    global.SpeechSynthesisUtterance = class {
+      constructor(t) { this.text = t; this.pitch = 1; this.rate = 1; this.voice = null; }
+    };
+    window.speechSynthesis = {
+      getVoices: () => (++calls === 1 ? [] : [zarvox]), // first (cold) call empty, then loaded
+      addEventListener() {},
+      speak: (u) => spoken.push(u),
+      cancel() {},
+    };
+    vi.resetModules();
+    const { speakRobotic } = await import("/voice.js"); // import-time warm fires the cold getVoices()
+    speakRobotic("SNACK");
+    const u = spoken.at(-1);
+    expect(u.voice).toBe(zarvox); // robot voice selected — not the pitched-down default
+    expect(u.pitch).toBe(1);      // untouched: no garbling pitch-mangle
+  });
+
+  it("keeps the word legible when no novelty voice exists (mangle not below 0.6)", async () => {
+    const spoken = [];
+    global.SpeechSynthesisUtterance = class {
+      constructor(t) { this.text = t; this.pitch = 1; this.rate = 1; this.voice = null; }
+    };
+    window.speechSynthesis = {
+      getVoices: () => [{ name: "Samantha" }, { name: "Daniel" }], // no robot/novelty voice
+      addEventListener() {},
+      speak: (u) => spoken.push(u),
+      cancel() {},
+    };
+    vi.resetModules();
+    const { speakRobotic } = await import("/voice.js");
+    speakRobotic("SNACK");
+    const u = spoken.at(-1);
+    expect(u.voice).toBe(null);             // no special voice to assign
+    expect(u.pitch).toBeGreaterThanOrEqual(0.6); // legible, not the old 0.3 growl
+  });
+});

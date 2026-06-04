@@ -41,10 +41,31 @@ function fallbackSpeak(text) {
   try { window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch { /* ignore */ }
 }
 
+// Chrome (and other engines) populate getVoices() ASYNCHRONOUSLY: the first
+// synchronous call after page load returns [] while it kicks off loading, then
+// fires `voiceschanged` once the list is ready. The loss reveal's answer is usually
+// the session's FIRST speechSynthesis call — the line's prefix/suffix play as
+// pre-rendered mp3 clips, so nothing warms the voice list before it. That cold call
+// returned [], pickRoboticVoice() found no robot voice, and the answer fell to the
+// pitch-mangle below — a one-syllable word at pitch 0.3 comes out as a low garbled
+// growl, not the word. ("It didn't say the word, just a distortion" bug.)
+// Fix: trigger the load at module import and cache the list on `voiceschanged`, so by
+// the time a game ends the robot voice is ready.
+let voiceCache = [];
+function refreshVoiceCache() {
+  try { voiceCache = window.speechSynthesis?.getVoices?.() ?? []; } catch { voiceCache = []; }
+}
+if (typeof window !== "undefined" && window.speechSynthesis) {
+  refreshVoiceCache(); // first call returns [] but kicks off the async load
+  try { window.speechSynthesis.addEventListener("voiceschanged", refreshVoiceCache); } catch { /* ignore */ }
+}
+
 // Pick the most mechanical voice the browser offers, so the answer reveal sounds
 // deliberately uncanny against Yan's warm frame. Falls back to pitch/rate mangling.
 function pickRoboticVoice() {
-  const voices = window.speechSynthesis?.getVoices?.() ?? [];
+  // Prefer the cached list; if it's still empty (very early in the session), retry a
+  // live fetch — by now the load triggered at import has usually completed.
+  const voices = voiceCache.length ? voiceCache : (window.speechSynthesis?.getVoices?.() ?? []);
   const wanted = ["Zarvox", "Trinoids", "Cellos", "Bad News", "Boing", "Albert"];
   for (const name of wanted) {
     const v = voices.find((x) => x.name && x.name.includes(name));
@@ -57,7 +78,10 @@ function roboticUtterance(text) {
   const u = new SpeechSynthesisUtterance(text);
   const v = pickRoboticVoice();
   if (v) u.voice = v;
-  else { u.pitch = 0.3; u.rate = 0.85; } // no robot voice available → mangle the default
+  // No novelty voice on this platform (e.g. Chrome on Windows/Linux/Android): lower
+  // the default voice for an uncanny edge, but not so far it garbles. 0.3 turned short
+  // words into noise; 0.6 keeps the word legible while still sounding off.
+  else { u.pitch = 0.6; u.rate = 0.85; }
   return u;
 }
 
