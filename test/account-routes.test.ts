@@ -18,3 +18,36 @@ describe("public GET shape (user.ts GET → publicProfile)", () => {
     expect(body).toContain("\"gold\":3");
   });
 });
+
+describe("User DO route ordering (no new /account/* route shadows the money paths)", () => {
+  // Mirror the EXACT endsWith predicates from user.ts fetch(), in route order.
+  const appendMatch = (p: string) => p.endsWith("/append") && !p.endsWith("/ledger/append");
+  const ledgerMatch = (p: string) => p.endsWith("/ledger/append");
+  const h2hMatch = (p: string) => p.endsWith("/h2h");
+  const previewMatch = (p: string) => p.endsWith("/account/preview");
+  const claimMatch = (p: string) => p.endsWith("/account/claim");
+  const loginMatch = (p: string) => p.endsWith("/account/login");
+  const revokeMatch = (p: string) => p.endsWith("/account/sessions/revoke");
+  const meMatch = (p: string) => p.endsWith("/account/me");
+  const verifyMatch = (p: string) => p.endsWith("/account/verify-session");
+
+  const all = { appendMatch, ledgerMatch, h2hMatch, previewMatch, claimMatch, loginMatch, revokeMatch, meMatch, verifyMatch };
+  function onlyMatches(path: string, key: keyof typeof all) {
+    for (const [name, fn] of Object.entries(all)) {
+      expect(`${name}:${fn(path)}`).toBe(`${name}:${name === key}`);
+    }
+  }
+
+  it("each account route matches ONLY itself, never an /append or /h2h path", () => {
+    onlyMatches("/account/preview", "previewMatch");
+    onlyMatches("/account/claim", "claimMatch");
+    onlyMatches("/account/login", "loginMatch");
+    onlyMatches("/account/sessions/revoke", "revokeMatch");
+    onlyMatches("/account/me", "meMatch");
+    onlyMatches("/account/verify-session", "verifyMatch");
+  });
+  it("the money paths still match only themselves", () => {
+    onlyMatches("/users/zang/ledger/append", "ledgerMatch");
+    onlyMatches("/users/zang/h2h", "h2hMatch");
+  });
+});

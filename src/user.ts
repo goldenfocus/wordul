@@ -3,11 +3,13 @@ import { DurableObject } from "cloudflare:workers";
 import type { Env, UserProfile, OwnedRoom } from "./types.ts";
 import { applyGame, appendCapped } from "./stats.ts";
 import { healProfile, freshProfile, applyH2H } from "./user-core.ts";
-import { publicProfile } from "./account-core.ts";
+import { publicProfile, makePassphrase, canClaim, addSession, projectDirectory } from "./account-core.ts";
+import { hashPassphrase, mintToken, hashToken } from "./account-crypto.ts";
 import type { GameRecord } from "./records.ts";
 
 const HISTORY_CAP = 100;
 const ROOMS_CAP = 100;
+const PENDING_TTL_MS = 10 * 60 * 1000; // a previewed-but-uncommitted passphrase expires in 10 min
 
 export class User extends DurableObject<Env> {
   private async load(username: string): Promise<UserProfile> {
@@ -79,6 +81,50 @@ export class User extends DurableObject<Env> {
       applyH2H(profile.h2h!, personaId, result); // load() guarantees h2h via healProfile
       await this.ctx.storage.put("profile", profile);
       return new Response("ok");
+    }
+
+    // Accounts P0 — preview a wordul-passphrase. The DO generates + hashes it, stashes the
+    // HASH (never the raw words) in an ephemeral pendingClaim, and returns the raw phrase
+    // + a nonce ONCE. Re-roll = call again (overwrites pendingClaim). No state is claimed yet.
+    if (req.method === "POST" && url.pathname.endsWith("/account/preview")) {
+      const profile = await this.load(username);
+      const decision = canClaim(profile, username);
+      if (!decision.ok) return Response.json({ error: decision.reason }, { status: decision.reason === "already_claimed" ? 409 : 400 });
+      const words = makePassphrase();
+      const phrase = words.join(" ");
+      const { salt, hash } = await hashPassphrase(phrase);
+      const nonce = mintToken();
+      profile.pendingClaim = { salt, phraseHash: hash, nonce, createdAt: Date.now() };
+      await this.ctx.storage.put("profile", profile);
+      return Response.json({ passphrase: phrase, nonce });
+    }
+
+    // Accounts P0 — commit the previewed claim. Echoes the nonce from /preview; promotes the
+    // pending hash into auth, mints the first session, writes the public KV projection.
+    // Single-writer DO ⇒ this whole transition is race-free with no lock.
+    if (req.method === "POST" && url.pathname.endsWith("/account/claim")) {
+      const { nonce } = (await req.json()) as { nonce?: string };
+      const profile = await this.load(username);
+      const decision = canClaim(profile, username);
+      if (!decision.ok) return Response.json({ error: decision.reason }, { status: decision.reason === "already_claimed" ? 409 : 400 });
+      const pending = profile.pendingClaim;
+      if (!pending || pending.nonce !== nonce || Date.now() - pending.createdAt > PENDING_TTL_MS) {
+        return Response.json({ error: "no_valid_preview" }, { status: 400 });
+      }
+      const token = mintToken();
+      const tokenHash = await hashToken(token);
+      const now = Date.now();
+      profile.claimed = true;
+      profile.auth = { v: 1, salt: pending.salt, phraseHash: pending.phraseHash, methods: {}, sessions: {}, claimedAt: now };
+      addSession(profile.auth.sessions, tokenHash, { createdAt: now, lastSeen: now });
+      delete profile.pendingClaim;
+      await this.ctx.storage.put("profile", profile);
+      // Public projection — written by the authority so /@username can render the badge
+      // without waking the DO twice and without ever touching secrets. Best-effort.
+      try {
+        await this.env.DIRECTORY.put(`auth:${username}`, JSON.stringify(projectDirectory(profile)));
+      } catch (e) { console.error("auth projection failed", username, (e as Error).message); }
+      return Response.json({ sessionToken: token, history: { games: profile.games.length, since: profile.createdAt } });
     }
 
     return new Response("not found", { status: 404 });
