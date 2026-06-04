@@ -113,6 +113,7 @@ export function apply(state: ArenaState, event: ArenaEvent): ArenaState {
   switch (event.type) {
     case "mint":
       return {
+        ...state, // preserve desiredOpen (the breathing-arena drift) — was dropped on mint
         seedCount: state.seedCount + 1,
         seeded: { ...state.seeded, [event.rec.path]: { ...event.rec, status: "minted" } },
       };

@@ -82,6 +82,13 @@ describe("apply", () => {
     s = apply(s, { type: "close", path: "arena/maya-0" });
     expect(s.seeded["arena/maya-0"].status).toBe("closed");
   });
+
+  it("mint preserves desiredOpen (the breathing-arena drift survives a mint)", () => {
+    const s0: ArenaState = { ...emptyArenaState(), desiredOpen: 5 };
+    const s1 = apply(s0, { type: "mint", rec: rec() });
+    expect(s1.desiredOpen).toBe(5);
+    expect(s1.seedCount).toBe(1);
+  });
 });
 
 describe("liveCount", () => {
