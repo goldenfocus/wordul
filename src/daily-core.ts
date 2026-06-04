@@ -50,7 +50,9 @@ export function houseWorld(date: string, nowMs: number): World {
   return {
     date,
     word,
-    edition: "default",
+    // Coherent house vibe: gold edition + gold voice. (Was default(UV)+yang(gold),
+    // which clashed with the warm companion and the daily-unlock chrome.)
+    edition: "yang",
     voice: "yang",
     story: {
       title: `Today's word`,

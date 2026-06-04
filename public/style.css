@@ -2403,9 +2403,9 @@ body.hub-home .topbar-stats { display: flex; }
   max-width: 520px;
   margin: 14px auto 8px;
   padding: 24px 22px 20px;
-  background: rgba(20, 14, 40, 0.55);
+  background: rgba(12, 11, 16, 0.55); /* neutral dark glass — was UV-tinted rgba(20,14,40,.55) */
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(124, 58, 237, 0.22);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
   border-radius: 22px;
   overflow: hidden;
   /* dissolve the bottom edge into the page, like the hero */
@@ -2414,10 +2414,11 @@ body.hub-home .topbar-stats { display: flex; }
   /* the veil lifts: same easing/feel as home-rise, a touch longer for ceremony */
   animation: daily-veil-rise 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-/* a soft ultraviolet rim-glow blooming from the top, matching .daily-hero::before */
+/* a soft rim-glow blooming from the top, in the active edition's accent
+   (ultraviolet on default, gold on yang) — keeps the veil coherent with the board */
 .daily-unlock::before {
   content: ""; position: absolute; inset: 0; border-radius: 22px; pointer-events: none;
-  background: radial-gradient(ellipse 85% 55% at 50% 0%, rgba(124,58,237,0.20) 0%, transparent 70%);
+  background: radial-gradient(ellipse 85% 55% at 50% 0%, color-mix(in srgb, var(--accent) 20%, transparent) 0%, transparent 70%);
 }
 @keyframes daily-veil-rise {
   from { opacity: 0; transform: translateY(22px) scale(0.985); }
