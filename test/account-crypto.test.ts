@@ -30,6 +30,10 @@ describe("hashPassphrase / verifyPassphrase", () => {
     const b = await hashPassphrase("wordul a b c d e", salt);
     expect(a.hash).toBe(b.hash);
   });
+
+  it("rejects an odd-length salt rather than silently truncating it", async () => {
+    await expect(verifyPassphrase("wordul a b c d e", "abc", "0".repeat(64))).rejects.toThrow(/odd-length/);
+  });
 });
 
 describe("session tokens", () => {
