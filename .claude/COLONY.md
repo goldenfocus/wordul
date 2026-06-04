@@ -56,7 +56,7 @@ npm run deploy
 
 | 2026-06-03 18:30 | claude (lab-reader) | **in-app Living Lab reader**: `/feed` + `/feed/<date>` render blog-style human-readable discoveries in the SPA (over live /feed.json) instead of bouncing to home; entry link on the daily Stats page. Frontend-only (new `public/feed.js` + `app.js` routes + `style.css`). 342 tests green. Smoke: home/feed/stats/arena-open 200, feed.js+app.js feed tokens live in bundle. | 0f4042dc-4726-4f3f-8e40-9fe61b2cb678 | ✅ |
 
-| 2026-06-04 05:36 | claude (tm-scrub) | 🔒 deploying: literal "Wordle" trademark scrub on top of `origin/main` e279da9 — `README.md`, `package.json` name+desc, one `style.css` comment (only style.css is a served asset; README/package.json don't touch runtime). Tier C, 374 tests green. Done from an isolated worktree off origin/main. | — | 🔒 deploying |
+| 2026-06-04 05:36 | claude (tm-scrub) | literal "Wordle" trademark scrub on top of `origin/main` e279da9 — `README.md`, `package.json` name+desc, one `style.css` comment (only style.css is a served asset; README/package.json don't touch runtime). Tier C, 374 tests green. Done from an isolated worktree off origin/main. Deploy uploaded 1 file (style.css only). Smoke: home/room/feed 200, served style.css has 0 "Wordle". | b122777d-eda9-440b-9810-467ac565d4f2 | ✅ |
 
 > Benign collision: both sessions fixed the same daily-leave crash within ~2 min. Final prod `3a07553` carries **both** defenses (render `#boards` guard + session teardown). NOTE: local `main` checkout is stale/orphaned at `bde11dd` (never on origin/main) — origin/main + prod are the truth.
 
