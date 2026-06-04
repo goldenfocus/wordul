@@ -2,16 +2,23 @@
 
 **Date:** 2026-06-04
 **Status:** Design approved, pending spec review
-**Surface:** Home page post-play daily card (`public/daily-card.js`)
+**Surface:** Home page post-play daily card (`public/daily-card.js`) +
+Today's stats page (`/daily/<date>/stats`, `public/app.js`)
 
 ## Problem
 
 The post-play daily card shows a single hero — your own solved board — above the
-"Today's Top" leaderboard. Two asks:
+"Today's Top" leaderboard. Asks:
 
+**v1 (home card):**
 1. **Add "time completed"** to a player's card (how long the solve took).
 2. **Tap another player's leaderboard row to swap the featured card to theirs** —
    *except* tapping the `@username`, which still opens their profile.
+
+**v2 (Today's stats page):**
+3. **Show the full list of all players with their scores** on the Today's stats page —
+   the page currently shows only anonymized aggregates and a literal
+   `"Top-10 leaderboard coming soon"` placeholder (`app.js:910`). This delivers that.
 
 ## Decisions (resolved during brainstorming)
 
@@ -21,6 +28,7 @@ The post-play daily card shows a single hero — your own solved board — above
 | What a swapped card shows | **Stat card + letterless color grid** |
 | Return from a swapped card | **Tap your own row** (no × button, no auto-revert) |
 | Missing duration | **Omit the chip**; a genuine 1-guess solve shows `<1s` |
+| Stats-page full list rows (v2) | **Lean ranked list** — `rank · @name · gold · in N · duration`, tap name → profile, your row highlighted. No grids, no swap (scales to hundreds). |
 
 ## Shape
 
@@ -124,16 +132,61 @@ durationMs: p.firstGuessAt != null && p.finishedAt != null
 - Your own duration fills in when the leaderboard resolves (the hero still renders
   instantly — same progressive-fill the gold value and "N played" count already use).
 
+## v2 — Today's stats: full player roster
+
+The stats page (`/daily/<date>/stats`) renders anonymized aggregates from the SCIENCE
+DO (`/api/science/daily/<date>`) and ends with a `"Top-10 leaderboard coming soon"`
+placeholder (`app.js:910`). v2 replaces that placeholder with the **full ranked roster**.
+
+**Source split (important).** The roster comes from the **Room DO** leaderboard path —
+*not* SCIENCE. SCIENCE stays strictly anonymized (`noUsernames: true`); named per-player
+data already lives in the Room DO, which is the correct, already-public source for a
+named leaderboard. The two never mix.
+
+**New full-list query.** `topDaily` clamps `n` to 1–10, so it can't return everyone. Add
+a sibling pure function:
+
+```ts
+// leaderboard-core.ts
+export type RosterEntry = LeaderEntry & { rank: number };           // 1-based, lean (no grid)
+export type FullLeaderboardView = { players: RosterEntry[]; youRank: number | null; total: number };
+export function fullDaily(players: RankablePlayer[], username: string): FullLeaderboardView;
+```
+
+`fullDaily` runs the **same filter + sort** as `topDaily` (non-bot, confirmed mint;
+gold desc → fewer guesses → username), then returns *every* ranked player with a rank,
+plus the viewer's rank for highlighting. `durationMs` is included (cheap); **`grid` is
+omitted** to keep a hundreds-of-players payload lean.
+
+**Endpoint.** Extend the Room DO `GET /leaderboard` handler: when `?full=1`, return
+`fullDaily(...)` instead of `topDaily(...)`. Map `durationMs` exactly as v1; skip `grid`.
+Extend the worker route `/api/daily/<date>/leaderboard` (`worker.ts:73`) to forward a
+`full=1` param (today it hardcodes `n=3`).
+
+**Render (`public/app.js` `showDailyStats`).** After the aggregates render, fetch
+`/api/daily/<date>/leaderboard?full=1&username=<me>` and render the roster where the
+placeholder is. Each row: `rank · @name · gold · in N · duration`; `@name` → `onProfile`;
+the viewer's row gets `is-you`. A pure `computeRosterView`/render helper lives alongside
+`daily-stats.js`; `fmtDuration` is shared with the home card (exported from `daily-card.js`
+or a tiny shared util — extracted once, used in both places).
+
+**Empty / loading.** Mirror the aggregates' own loading + empty states: while the roster
+fetch is in flight show nothing extra; if it returns `total: 0`, show a quiet
+"No finishers yet today." line instead of an empty list.
+
 ## Files
 
-| File | Change |
-|---|---|
-| `src/types.ts` | `PlayerState` += `firstGuessAt?: number`, `finishedAt?: number` |
-| `src/room.ts` | `applyGuess`: stamp the two timestamps; `/leaderboard` handler: map `grid` + `durationMs` |
-| `src/leaderboard-core.ts` | `RankablePlayer` + `LeaderEntry` += `grid?`, `durationMs?`; `topDaily` threads them |
-| `public/daily-card.js` | featured-card region + swap logic + `fmtDuration` + letterless render |
-| `public/style.css` | featured-card, `is-selected` row, swapped-card styles |
-| `test/leaderboard-core.test.ts` | cover `grid` + `durationMs` passthrough (and undefined case) |
+| File | Change | Ver |
+|---|---|---|
+| `src/types.ts` | `PlayerState` += `firstGuessAt?: number`, `finishedAt?: number` | v1 |
+| `src/room.ts` | `applyGuess`: stamp the two timestamps; `/leaderboard` handler: map `grid` + `durationMs`; `?full=1` → `fullDaily` (lean) | v1+v2 |
+| `src/leaderboard-core.ts` | `RankablePlayer` + `LeaderEntry` += `grid?`, `durationMs?`; `topDaily` threads them; add `fullDaily` + `FullLeaderboardView`/`RosterEntry` | v1+v2 |
+| `src/worker.ts` | `/api/daily/<date>/leaderboard` route: forward `full=1` param | v2 |
+| `public/daily-card.js` | featured-card region + swap logic + `fmtDuration` (exported) + letterless render | v1 |
+| `public/app.js` | `showDailyStats`: fetch full roster, render list in place of the "coming soon" placeholder | v2 |
+| `public/daily-stats.js` | `computeRosterView` (pure) + lean row render helper | v2 |
+| `public/style.css` | featured-card, `is-selected` row, swapped-card styles (v1); roster list rows (v2) | v1+v2 |
+| `test/leaderboard-core.test.ts` | cover `grid` + `durationMs` passthrough; `fullDaily` ordering/rank/`youRank`/filtering | v1+v2 |
 
 ## Safety: no answer leak
 
@@ -143,6 +196,11 @@ durationMs: p.firstGuessAt != null && p.finishedAt != null
   leaderboard API never sends letters for anyone.
 - The `/leaderboard` endpoint is already public and already filters out bots
   (`topDaily`). Adding letterless grids does not change the leak surface.
+- **v2 roster:** exposes `username · gold · guesses · duration` for every ranked player —
+  the same fields already public for the top rows, and usernames are already public
+  (profiles at `/@name`, sitemap). `fullDaily` carries **no grid and no letters**, so the
+  full roster adds zero answer-leak surface. The SCIENCE aggregates remain anonymized and
+  untouched — the roster is a separate Room-DO read.
 
 ## Back-compat
 
@@ -154,5 +212,8 @@ durationMs: p.firstGuessAt != null && p.finishedAt != null
 ## Out of scope
 
 - Per-player "board open" timing / true stopwatch from first paint.
-- Showing cards for players outside the top N who aren't you (they aren't in the payload).
+- Showing cards for players outside the top N who aren't you (they aren't in the home-card payload).
 - Any change to the play (pre-result) state of the card.
+- **v2:** swap-to-card / letterless grids on the stats-page roster (it's a lean ranked
+  list); pagination/infinite-scroll of the roster (render the full list; revisit only if a
+  day's count makes the payload genuinely heavy).
