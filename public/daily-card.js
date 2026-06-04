@@ -9,6 +9,19 @@ import { GLYPH } from "/hub-glyphs.js";
 
 function escAttr(s) { return String(s).replace(/[^a-z0-9_-]/gi, ""); } // usernames are [a-z0-9_-]
 
+// Format a solve duration. null/undefined → "" (caller omits the chip). A genuine
+// sub-second solve reads "<1s" rather than a confusing "0s".
+export function fmtDuration(ms) {
+  if (ms == null) return "";
+  if (ms < 1000) return "<1s";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60), rs = s % 60;
+  if (m < 60) return rs ? `${m}m ${rs}s` : `${m}m`;
+  const h = Math.floor(m / 60), rm = m % 60;
+  return rm ? `${h}h ${rm}m` : `${h}h`;
+}
+
 // "The precious" — a small struck gold coin. Inline fills (no gradient <defs>, so it
 // repeats safely down the list); the soft glow lives in CSS.
 const COIN = `<svg class="wcoin" viewBox="0 0 24 24" aria-hidden="true">` +
@@ -37,7 +50,7 @@ function medalGlyph(rank) {
 }
 
 // A gold value: number + coin. Warm-gold styling lives in CSS.
-function goldValue(n) { return `${Number(n).toLocaleString()}${COIN}`; }
+export function goldValue(n) { return `${Number(n).toLocaleString()}${COIN}`; }
 
 // A crystallized stamp of a solved board: one tiny glass tile per cell, mirroring the
 // real board's precious-gold / champagne / obsidian treatment. grid is an array of row
@@ -55,6 +68,30 @@ function renderStamp(grid, words) {
       `<span class="stamp-cell ${STAMP_CLS[ch] || "is-absent"}">${w[ci] ? `<span class="stamp-ch">${escLetter(w[ci])}</span>` : ""}</span>`).join("")}</div>`;
   }).join("");
   return `<div class="daily-stamp${hasLetters ? " has-letters" : ""}">${rows}</div>`;
+}
+
+// The featured card at the top of the post-play recap. For YOU, render your stamp WITH
+// letters (from this browser's own solve) + a "Solved in N · 2m 14s" caption. For anyone
+// else, render their color grid with NO letters + an "@name · #rank · gold · in N · time"
+// stat line. Letters are never passed for another player.
+function renderFeaturedCard(entry, { isYou, yourWords, rank }) {
+  const won = !!entry.won;
+  const grid = renderStamp(entry.grid, isYou ? yourWords : undefined);
+  const dur = fmtDuration(entry.durationMs);
+  if (isYou) {
+    const verb = won ? `Solved in ${entry.guesses}` : "Missed today";
+    const cap = dur ? `${verb} · ${dur}` : verb;
+    return `${grid}<div class="daily-featured-cap">${cap}</div>`;
+  }
+  const u = escAttr(entry.username);
+  const bits = [
+    `<a class="daily-featured-name" href="/@${u}" data-profile="${u}">@${u}</a>`,
+    `<span class="daily-featured-rank">#${rank}</span>`,
+    `<span class="daily-featured-gold">${goldValue(entry.gold)}</span>`,
+    `<span class="daily-featured-guesses">${won ? `in ${entry.guesses}` : "missed"}</span>`,
+  ];
+  if (dur) bits.push(`<span class="daily-featured-time">${dur}</span>`);
+  return `${grid}<div class="daily-featured-cap is-other">${bits.join("")}</div>`;
 }
 
 // Build the leaderboard HTML from a LeaderboardView ({ top, you, total }) and the
