@@ -89,10 +89,12 @@ export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker,
   const cb = document.getElementById("setColorBlind");
   const rm = document.getElementById("setReducedMotion");
   const cs = document.getElementById("setCommunityScience");
+  const cc = document.getElementById("setCompanionComments");
   if (hm) hm.checked = s.hardMode;
   if (cb) cb.checked = s.colorBlind;
   if (rm) rm.checked = s.reducedMotion;
   if (cs) cs.checked = s.communityScience;
+  if (cc) cc.checked = s.companionComments;
 
   // Wire toggles every open (idempotent — replace old listeners by cloning so a
   // re-open never stacks duplicate change handlers that double-fire).
@@ -111,6 +113,7 @@ export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker,
   wire(cb, "colorBlind");
   wire(rm, "reducedMotion");
   wire(cs, "communityScience");
+  wire(cc, "companionComments");
 
   // Theme/edition picker. The theme is bound to the room, so a pick re-applies settings
   // locally AND notifies the caller (onEditionPick → set_edition for everyone). Locked
