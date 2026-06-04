@@ -5,7 +5,7 @@ import { computeNextGuess } from "./solver.ts";
 import { noobGuess, NOOB } from "./noob.ts";
 import { projectPlayerForClient } from "./bots.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
-import { buildGameRecords, summarizeRoomGame } from "./records.ts";
+import { buildGameRecords, summarizeRoomGame, encodeSolveGrid } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
 import { pointsEarned, goldFromPoints, POINTS } from "./economy.ts";
 import { topDaily } from "./leaderboard-core.ts";
@@ -1140,6 +1140,9 @@ export class Room extends DurableObject<Env> {
       players: [{ username: player.username, status: player.status, guesses: player.guesses.length }],
     });
     const record = records[player.username];
+    // Stamp the daily record with the player's color grid (the home's crystallized
+    // solve stamp reads this back; letters stay server-side).
+    if (record) record.solveGrid = encodeSolveGrid(player.guesses);
     const gold = goldFromPoints(player.points) + DAILY_GOLD_BONUS; // score mint + goody
     const stub = this.env.USER.get(this.env.USER.idFromName(player.username));
     // Record append is best-effort but observable (FIX 10): log a non-2xx, never throw.
