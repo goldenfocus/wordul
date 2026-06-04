@@ -40,6 +40,9 @@
 - Game room: `/@<username>/<room-name>` (e.g. `/@yan/friday-night`)
 - Profile data (machine-readable JSON): `/api/user/<username>`
 
+## Accounts
+- Accounts: a username can be secured with a 6-word "wordul-passphrase" (no email/password required); secured names are marked 🔒. Securing is opt-in — casual play needs no account.
+
 ## Community Science
 - Wordul publishes privacy-preserving aggregate research data from gameplay.
 - Public science JSON does not include usernames, chat text, IP addresses, raw personal timelines, or active daily answer-level stats.
