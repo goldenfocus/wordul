@@ -2940,6 +2940,9 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .stamp-cell.is-correct { background: linear-gradient(135deg, #ffe7a3, #e9b23d 55%, #a87a1f); box-shadow: 0 0 0 1px rgba(255,231,163,.5), 0 0 7px rgba(233,178,61,.3); }
 .stamp-cell.is-present { background: rgba(216,201,122,.10); box-shadow: 0 0 0 1px rgba(207,214,227,.35) inset; }
 .stamp-cell.is-absent { background: #0d0d0f; box-shadow: 0 0 0 1px #1f1f23 inset; }
+/* Empty padding rows — keep every board a constant height; faint, glyph-less, no gloss. */
+.stamp-cell.is-empty { background: transparent; box-shadow: 0 0 0 1px rgba(255,255,255,.07) inset; }
+.stamp-cell.is-empty::after { display: none; }
 @media (prefers-reduced-motion: no-preference) { .wmedal-1 { animation: medal-breathe 7.5s ease-in-out infinite; } }
 @keyframes medal-breathe {
   0%, 100% { filter: drop-shadow(0 0 2px rgba(233,178,61,.4)); }

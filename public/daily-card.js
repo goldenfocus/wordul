@@ -60,15 +60,29 @@ export function goldValue(n) { return `${Number(n).toLocaleString()}${COIN}`; }
 // viewer never receives them, so today's answer can't leak. Empty → nothing.
 const STAMP_CLS = { g: "is-correct", y: "is-present", x: "is-absent" };
 function escLetter(c) { return String(c || "").replace(/[^a-zA-Z]/g, ""); }
-export function renderStamp(grid, words) {
+// Rows a board has for a given word length — mirrors the server's guessesFor (room.ts):
+// length+1, capped at 8 (5-letter → 6). Used to pad every featured stamp to a FULL board so
+// the frame is the same height for a solve-in-3 and a miss-in-6 (no resize when swapping).
+export function boardRows(wordLength) { return Math.min((wordLength || 5) + 1, 8); }
+// minRows pads the stamp up to a constant height with faint empty rows. Default 0 = no pad
+// (profile letter-cards call it that way, so they're untouched).
+export function renderStamp(grid, words, minRows = 0) {
   if (!Array.isArray(grid) || grid.length === 0) return "";
   const hasLetters = Array.isArray(words) && words.length > 0;
+  const cols = String(grid[0] ?? "").length || 5;
   const rows = grid.map((r, ri) => {
     const w = hasLetters ? String(words[ri] || "") : "";
     return `<div class="stamp-row">${[...String(r)].map((ch, ci) =>
       `<span class="stamp-cell ${STAMP_CLS[ch] || "is-absent"}">${w[ci] ? `<span class="stamp-ch">${escLetter(w[ci])}</span>` : ""}</span>`).join("")}</div>`;
-  }).join("");
-  return `<div class="daily-stamp${hasLetters ? " has-letters" : ""}">${rows}</div>`;
+  });
+  // Pad to a constant board height: empty rows are faint, glyph-less shells the same size as
+  // played cells (sized in CSS), so every player's stamp is one fixed frame.
+  const pad = Math.max(0, minRows - grid.length);
+  if (pad > 0) {
+    const emptyRow = `<div class="stamp-row">${`<span class="stamp-cell is-empty"></span>`.repeat(cols)}</div>`;
+    for (let i = 0; i < pad; i++) rows.push(emptyRow);
+  }
+  return `<div class="daily-stamp${hasLetters ? " has-letters" : ""}">${rows.join("")}</div>`;
 }
 
 // The featured card at the top of the post-play recap. For YOU, render your OWN board WITH
@@ -86,7 +100,9 @@ function renderFeaturedCard(entry, { isYou, yourGrid, yourWords, rank }) {
   const hasLocal = isYou && Array.isArray(yourWords) && yourWords.length > 0;
   const gridRows = hasLocal && yourGrid && yourGrid.length ? yourGrid : entry.grid;
   const wordRows = hasLocal ? yourWords : entry.words;
-  const grid = renderStamp(gridRows, wordRows);
+  // Pad to the full board (constant frame across every player you can swap to).
+  const cols = Array.isArray(gridRows) && gridRows[0] ? String(gridRows[0]).length : 5;
+  const grid = renderStamp(gridRows, wordRows, boardRows(cols));
   const dur = fmtDuration(entry.durationMs);
   if (isYou) {
     const verb = won ? `Solved in ${entry.guesses}` : "Missed today";
@@ -188,7 +204,8 @@ export function renderDailyCard({ themeId, result }) {
   if (result) {
     const won = !!result.won;
     const caption = won ? `Solved in ${result.guesses}` : "Missed today";
-    const stamp = renderStamp(result.solveGrid, result.solveWords);
+    const cols0 = Array.isArray(result.solveGrid) && result.solveGrid[0] ? String(result.solveGrid[0]).length : 5;
+    const stamp = renderStamp(result.solveGrid, result.solveWords, boardRows(cols0));
     // Featured card region — JS fills it (defaults to your own card) once wired. The
     // immediate render shows your stamp so the recap never flashes empty.
     const heroInner = stamp
