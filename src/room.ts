@@ -10,7 +10,7 @@ import { everyoneReady, COUNTDOWN_MS } from "./duel.ts";
 import { nextSeatRole, applyKothRotation } from "./rotation.ts";
 import { buildGameRecords, summarizeRoomGame, encodeSolveGrid } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
-import { pointsEarned, goldFromPoints, POINTS } from "./economy.ts";
+import { pointsEarned, goldFromPoints, speedBonusPoints, POINTS } from "./economy.ts";
 import { topDaily, fullDaily } from "./leaderboard-core.ts";
 import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
 import { activeDate } from "./daily-core.ts";
@@ -940,8 +940,13 @@ export class Room extends DurableObject<Env> {
     const hadWinner = this.state.winner !== null;
     const mask = scoreGuess(word, this.state.word!);
     player.guesses.push({ word, mask });
+    // Per-player solve clock: stamp on the FIRST accepted guess (start of the daily
+    // solve duration + the wall-clock time bonus at mint). Never overwrite once set.
     if (player.firstGuessAt == null) player.firstGuessAt = now;
-    player.points = pointsEarned(player.guesses, this.state.maxGuesses) - player.pointsSpent;
+    // Spend accounting (spec §A): in WOTD power-ups cost real gold only, NOT round score —
+    // so the daily round score EXCLUDES pointsSpent. Race rooms still net out the spend.
+    const earned = pointsEarned(player.guesses, this.state.maxGuesses);
+    player.points = this.state.isDaily ? earned : earned - player.pointsSpent;
     const allGreen = mask.every((c) => c === "green");
     if (allGreen) {
       player.status = "won";
@@ -1529,8 +1534,16 @@ export class Room extends DurableObject<Env> {
     // solve stamp reads this back; letters stay server-side).
     if (record) record.solveGrid = encodeSolveGrid(player.guesses);
     // Resigners forfeited to 0 (points were zeroed in onResign); everyone else gets the
-    // score mint + flat daily goody. The record above still captures their solveGrid.
-    const gold = player.resigned ? 0 : goldFromPoints(player.points) + DAILY_GOLD_BONUS;
+    // score mint + flat daily goody + a wall-clock time bonus (faster solve → more gold).
+    // elapsedMs spans the player's first accepted guess (firstGuessAt) → finish (finishedAt,
+    // or now as a fallback); null/unstarted (e.g. never guessed) yields 0 bonus. The record
+    // above still captures their solveGrid.
+    const endMs = player.finishedAt ?? Date.now();
+    const elapsedMs = player.firstGuessAt != null ? Math.max(0, endMs - player.firstGuessAt) : null;
+    const timeBonusGold = elapsedMs == null ? 0 : goldFromPoints(speedBonusPoints(elapsedMs));
+    const gold = player.resigned
+      ? 0
+      : goldFromPoints(player.points) + DAILY_GOLD_BONUS + timeBonusGold;
     const stub = this.env.USER.get(this.env.USER.idFromName(player.username));
     // Record append is best-effort but observable (FIX 10): log a non-2xx, never throw.
     try {

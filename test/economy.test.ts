@@ -124,6 +124,33 @@ describe("goldFromPoints", () => {
   });
 });
 
+describe("daily mint formula (spec §B + §C)", () => {
+  // room.ts scorePlayer mints, for a non-resigner:
+  //   gold = goldFromPoints(points) + DAILY_GOLD_BONUS + goldFromPoints(speedBonusPoints(elapsedMs))
+  // DAILY_GOLD_BONUS is a room.ts constant (100); we verify the two economy-owned legs here
+  // and the composition. Server wiring (startedAt stamp, isDaily branch) is covered manually
+  // (no DO harness for the RoomDO class in this suite).
+  const DAILY_GOLD_BONUS = 100; // mirror of room.ts constant
+  const mint = (points: number, elapsedMs: number | null) =>
+    goldFromPoints(points) + DAILY_GOLD_BONUS + (elapsedMs == null ? 0 : goldFromPoints(speedBonusPoints(elapsedMs)));
+
+  it("adds the score mint + flat daily goody + a wall-clock time bonus", () => {
+    // 3500 pts → 35 gold; +100 goody; instant solve (0ms) → speedBonus 500 → 5 gold = 140.
+    expect(mint(3500, 0)).toBe(35 + 100 + 5);
+  });
+  it("time bonus decays to 0 at the window edge (just score + goody)", () => {
+    expect(mint(3500, SPEED_WINDOW_MS)).toBe(35 + 100 + 0);
+  });
+  it("a null solve clock (never stamped) contributes no time bonus", () => {
+    expect(mint(3500, null)).toBe(35 + 100);
+  });
+  it("half-window solve earns half the speed bonus in gold", () => {
+    // speedBonusPoints(90000)=250 → goldFromPoints(250)=round(2.5)=2 (banker's: 3? round=3) gold.
+    expect(mint(0, 90000)).toBe(0 + 100 + goldFromPoints(speedBonusPoints(90000)));
+    expect(goldFromPoints(speedBonusPoints(90000))).toBe(3); // 250/100 → 2.5 → round → 3
+  });
+});
+
 describe("balance", () => {
   it("sums signed deltas for a token and allows negative", () => {
     const led = [
