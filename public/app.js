@@ -33,7 +33,7 @@ import { pickInspire, pickForfeit } from "/inspire.js";
 import { renderSettlement } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
-import { triesFor } from "/lobby-view.js";
+import { triesFor, seatModel } from "/lobby-view.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
 
@@ -624,6 +624,7 @@ const game = {
   // Chat state: how many entries we'd already rendered so we can flag new ones for
   // the unread badge while the panel is collapsed.
   lastChatLen: 0,
+  lastSeatCount: 0, // # of taken seats last "Your table" render — new seats get a pop (seatin)
   unreadChat: 0,
   chatCollapsed: false,
   exploding: false,
@@ -2523,6 +2524,44 @@ function gameRow(g) {
   return row;
 }
 
+// "Your table" lobby strip: a seat for you (seat 0), one per other joined player, and
+// empty placeholders up to room capacity, plus a taken/capacity count. New seats since
+// the last render get a `seatin` class so CSS can pop them in. Seats are built with
+// createElement/textContent (never innerHTML) — usernames are server-validated but DOM
+// construction keeps it XSS-proof regardless.
+function renderMyTable(snap) {
+  const seatsEl = $("#myTableSeats");
+  const countEl = $("#myTableCount");
+  if (!seatsEl) return;
+  const model = seatModel(snap, getUsername());
+  // A seat is "new" if it's a taken seat beyond the count we last rendered (front-loaded:
+  // you=seat0, then takens in order), so freshly-joined players pop while existing ones stay put.
+  const prevTaken = game.lastSeatCount || 0;
+  let takenSeen = 0;
+  seatsEl.replaceChildren();
+  for (const s of model.seats) {
+    const el = document.createElement("div");
+    if (s.kind === "you") {
+      el.className = "seat you";
+      const me = getUsername();
+      el.textContent = me ? me[0].toUpperCase() : "◆";
+    } else if (s.kind === "taken") {
+      el.className = "seat taken";
+      takenSeen++;
+      // takenSeen counts taken seats 1..N; new ones are those past the previous render's count.
+      if (takenSeen > prevTaken) el.classList.add("seatin");
+      const name = s.username || "";
+      el.textContent = name ? name[0].toUpperCase() : "◆";
+    } else {
+      el.className = "seat empty";
+      el.textContent = "＋";
+    }
+    seatsEl.appendChild(el);
+  }
+  game.lastSeatCount = takenSeen;
+  if (countEl) countEl.textContent = `${model.taken}/${model.capacity}`;
+}
+
 function render() {
   if (!game.snapshot) return;
   // A late snapshot can land after we've left the room view: tpl-room is unmounted
@@ -2617,6 +2656,16 @@ function render() {
     const tbX = $("#tbX"); if (tbX) tbX.textContent = `×${triesFor(len)}`;
     const tbLetters = $("#tbLetters"); if (tbLetters) tbLetters.textContent = `${len} letters`;
     triesBadge.classList.toggle("locked", !canEditLength(snap));
+  }
+
+  // "Your table" seat strip rides alongside the tries badge — lobby-only. Reveal + paint
+  // it while waiting; hide (and reset the new-seat tracker) in any other phase.
+  const myTable = $("#myTable");
+  if (myTable) {
+    const inLobby = snap.phase === "lobby";
+    myTable.hidden = !inLobby;
+    if (inLobby) renderMyTable(snap);
+    else game.lastSeatCount = 0;
   }
 
   // Lobby rail: only while genuinely waiting in a multiplayer lobby (not the daily, which

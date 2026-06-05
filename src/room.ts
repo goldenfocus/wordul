@@ -118,6 +118,7 @@ export class Room extends DurableObject<Env> {
       chat: [],
       wordLength: DEFAULT_LENGTH,
       maxGuesses: guessesFor(DEFAULT_LENGTH),
+      capacity: MAX_PLAYERS, // placeholder; snapshotFor recomputes (seed?.capacity ?? MAX_PLAYERS) outbound
       mode: DEFAULT_MODE,
       scoreboard: [],
       history: [],
@@ -2005,6 +2006,9 @@ export class Room extends DurableObject<Env> {
     return {
       ...this.state,
       isDuel: duel,
+      // Seat capacity for the lobby "Your table" strip: seeded rooms expose their configured
+      // capacity; normal rooms expose the hard max (8). Computed outbound — never persisted stale.
+      capacity: this.state.seed?.capacity ?? MAX_PLAYERS,
       word: reveal ? this.state.word : null,
       // The daily story names the answer ("Why EMBER?") — gate it exactly like `word`,
       // else a still-playing viewer reads today's word straight off the WS payload.

@@ -93,6 +93,7 @@ export type RoomSnapshot = {
   chat: ChatEntry[];
   wordLength: number;      // letters per guess (4-12)
   maxGuesses: number;      // rows per board, derived from wordLength
+  capacity: number;        // max seats in this room — computed outbound: seed?.capacity ?? MAX_PLAYERS (8). Read-only; powers the lobby "Your table" strip.
   mode: RoomMode;          // room game format; "race" today, more later
   scoreboard: RoomScore[];
   history: RoomGame[];     // finished games in this room, newest last (capped)
