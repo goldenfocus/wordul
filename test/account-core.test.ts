@@ -11,7 +11,9 @@ import {
   touchSession,
   projectDirectory,
   publicProfile,
+  goldHistory,
 } from "../src/account-core.ts";
+import type { LedgerTx } from "../src/economy.ts";
 import { secureIndex } from "../src/account-crypto.ts";
 import type { UserProfile } from "../src/types.ts";
 
@@ -173,5 +175,62 @@ describe("publicProfile (secret stripper — load-bearing security guarantee)", 
       games: [{ roomPath: "daily/2026-06-05", finishedAt: 9, wordLength: 5, word: "CRANK", result: "won", guesses: 1, opponents: [], words: ["CRANK"] }],
     });
     expect(publicProfile(p, "").games[0].words).toEqual(["CRANK"]);
+  });
+
+  it("ships goldHistory (newest-first) and NO raw ledger; still strips auth/pendingClaim", () => {
+    const ledger: LedgerTx[] = [
+      { token: "gold", delta: 10, reason: "mint:cashout", ts: 1 },
+      { token: "scrap", delta: 5, reason: "mint:other", ts: 2 },
+      { token: "gold", delta: 133, reason: "mint:daily", ts: 3, parts: [{ label: "score", delta: 28 }, { label: "daily", delta: 100 }, { label: "speed", delta: 5 }] },
+    ];
+    const p = baseProfile({
+      ledger,
+      auth: { v: 1, salt: "SECRET_SALT", phraseHash: "SECRET_HASH", sessions: {}, claimedAt: 5 },
+      pendingClaim: { salt: "PSALT", phraseHash: "PHASH", nonce: "NONCE", createdAt: 9 },
+    });
+    const pub = publicProfile(p);
+    // Raw ledger no longer leaves the server.
+    expect((pub as Record<string, unknown>).ledger).toBeUndefined();
+    // goldHistory: gold-only, newest-first, parts preserved verbatim.
+    expect(pub.goldHistory.map((t) => t.delta)).toEqual([133, 10]);
+    expect(pub.goldHistory[0].parts).toEqual([{ label: "score", delta: 28 }, { label: "daily", delta: 100 }, { label: "speed", delta: 5 }]);
+    // Secrets still stripped.
+    const json = JSON.stringify(pub);
+    expect(json).not.toContain("SECRET_SALT");
+    expect(json).not.toContain("NONCE");
+    expect((pub as Record<string, unknown>).auth).toBeUndefined();
+    expect((pub as Record<string, unknown>).pendingClaim).toBeUndefined();
+  });
+});
+
+describe("goldHistory (pure projection)", () => {
+  it("filters to gold only, newest-first", () => {
+    const p = baseProfile({
+      ledger: [
+        { token: "gold", delta: 1, reason: "mint:daily", ts: 1 },
+        { token: "scrap", delta: 9, reason: "x", ts: 2 },
+        { token: "gold", delta: 2, reason: "mint:cashout", ts: 3 },
+      ],
+    });
+    const out = goldHistory(p);
+    expect(out.every((t) => t.token === "gold")).toBe(true);
+    expect(out.map((t) => t.delta)).toEqual([2, 1]); // newest-first
+  });
+
+  it("caps to the last `limit` gold entries (before reversing)", () => {
+    const ledger: LedgerTx[] = [];
+    for (let i = 0; i < 80; i++) ledger.push({ token: "gold", delta: i, reason: "mint:daily", ts: i });
+    const p = baseProfile({ ledger });
+    const out = goldHistory(p, 50);
+    expect(out.length).toBe(50);
+    // Keeps the chronological TAIL (deltas 30..79), newest-first → 79 down to 30.
+    expect(out[0].delta).toBe(79);
+    expect(out[49].delta).toBe(30);
+  });
+
+  it("tolerates a missing ledger", () => {
+    const p = baseProfile({});
+    (p as Record<string, unknown>).ledger = undefined;
+    expect(goldHistory(p)).toEqual([]);
   });
 });

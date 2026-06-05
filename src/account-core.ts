@@ -2,6 +2,7 @@
 // Mirrors the user-core.ts pattern: the USER DO calls these; the DO owns persistence
 // and all crypto (account-crypto.ts). Everything here is unit-tested in isolation.
 import type { UserProfile } from "./types.ts";
+import type { LedgerTx } from "./economy.ts";
 import { type PublicGameRecord, toPublicGame } from "./records.ts";
 import { isValidUsername, isReserved } from "./identity.ts";
 
@@ -21,9 +22,11 @@ export type AuthRecord = {
 export type PendingClaim = { salt: string; phraseHash: string; nonce: string; createdAt: number };
 
 export type DirectoryProjection = { claimed: boolean; verified: boolean; ownerSince: number };
-// A profile with secrets removed + the public auth flags surfaced.
-export type PublicProfile = Omit<UserProfile, "auth" | "pendingClaim" | "games"> & {
+// A profile with secrets removed + the public auth flags surfaced. The raw 500-row `ledger`
+// is omitted (payload hygiene) and replaced by the trimmed, gold-only `goldHistory` projection.
+export type PublicProfile = Omit<UserProfile, "auth" | "pendingClaim" | "games" | "ledger"> & {
   games: PublicGameRecord[];  // answer word stripped per record — see toPublicGame()
+  goldHistory: LedgerTx[];    // gold-only, newest-first, ≤ limit — see goldHistory()
   claimed: boolean;
   verified: boolean;
 };
@@ -111,9 +114,25 @@ export function projectDirectory(profile: UserProfile): DirectoryProjection {
 /** Strip ALL secret material and surface the public auth flags. The DO's GET handler MUST
  *  pass profiles through this before serializing — otherwise the salt/hash/session map leak. */
 export function publicProfile(profile: UserProfile, liveDailyPath = ""): PublicProfile {
-  const { auth, pendingClaim, games, ...rest } = profile;
-  void auth; void pendingClaim;
+  const { auth, pendingClaim, games, ledger, ...rest } = profile;
+  void auth; void pendingClaim; void ledger;
   // Project each game: drops the redundant top-level word, and strips the LIVE daily's
   // letters so /api/user can never hand out today's answer. Past games keep their letters.
-  return { ...rest, games: games.map((g) => toPublicGame(g, liveDailyPath)), claimed: !!profile.claimed, verified: false };
+  // The raw `ledger` is replaced by the trimmed, gold-only `goldHistory` projection.
+  return {
+    ...rest,
+    games: games.map((g) => toPublicGame(g, liveDailyPath)),
+    goldHistory: goldHistory(profile),
+    claimed: !!profile.claimed,
+    verified: false,
+  };
+}
+
+/** Pure projection of the gold ledger for the public profile: gold-only, the last `limit`
+ *  entries, newest-first. Each entry keeps its optional `parts` breakdown verbatim. */
+export function goldHistory(profile: UserProfile, limit = 50): LedgerTx[] {
+  return (profile.ledger ?? [])
+    .filter((tx) => tx.token === "gold")
+    .slice(-limit)            // last N (chronological tail)
+    .reverse();               // newest-first
 }

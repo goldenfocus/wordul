@@ -46,7 +46,7 @@ describe("public GET shape (user.ts GET → publicProfile)", () => {
     // If it's a SECRET, it must be stripped in publicProfile() — and this test will fail until it is.
     const EXPECTED_PUBLIC_KEYS = new Set([
       "username", "createdAt", "stats", "games", "ownedRooms",
-      "ledger", "balances", "h2h", "claimed", "verified", "gold",
+      "goldHistory", "balances", "h2h", "claimed", "verified", "gold",
     ]);
     expect(keys).toEqual(EXPECTED_PUBLIC_KEYS);
   });
@@ -103,5 +103,38 @@ describe("User DO route ordering (no new /account/* route shadows the money path
     // /account/me must fall through to the /me handler, NOT the profile GET.
     expect(profileGetMatch("/account/me")).toBe(false);
     expect(meGetMatch("/account/me")).toBe(true);
+  });
+});
+
+describe("/ledger/append stores parts (mirrors user.ts append body)", () => {
+  // Replicates the EXACT push expression from user.ts /ledger/append so the parts
+  // store-through is locked the same way the route-ordering test locks predicates.
+  function append(profile: UserProfile, tx: { token: string; delta: number; reason: string; ref?: string; parts?: { label: string; delta: number }[] }, now: number) {
+    profile.balances[tx.token] = (profile.balances[tx.token] ?? 0) + tx.delta;
+    profile.ledger.push({ token: tx.token, delta: tx.delta, reason: tx.reason, ts: now, ref: tx.ref, parts: tx.parts });
+    if (profile.ledger.length > 500) profile.ledger = profile.ledger.slice(-500);
+  }
+
+  it("persists parts alongside reason/ref and accrues balance", () => {
+    const p = {
+      username: "zang", createdAt: 1, stats: {} as UserProfile["stats"],
+      games: [], ownedRooms: [], ledger: [], balances: { gold: 3 }, h2h: {},
+    } satisfies UserProfile;
+    const parts = [{ label: "score", delta: 28 }, { label: "daily", delta: 100 }, { label: "speed", delta: 5 }];
+    append(p, { token: "gold", delta: 133, reason: "mint:daily", ref: "daily/x#zang", parts }, 999);
+    expect(p.balances.gold).toBe(136);
+    expect(p.ledger).toHaveLength(1);
+    expect(p.ledger[0]).toEqual({ token: "gold", delta: 133, reason: "mint:daily", ts: 999, ref: "daily/x#zang", parts });
+    // Σ parts === delta (the daily invariant).
+    expect(parts.reduce((s, x) => s + x.delta, 0)).toBe(133);
+  });
+
+  it("a partless tx (race cash-out) stores parts: undefined — flat total", () => {
+    const p = {
+      username: "zang", createdAt: 1, stats: {} as UserProfile["stats"],
+      games: [], ownedRooms: [], ledger: [], balances: {}, h2h: {},
+    } satisfies UserProfile;
+    append(p, { token: "gold", delta: 40, reason: "mint:cashout", ref: "crane/x#0" }, 5);
+    expect(p.ledger[0].parts).toBeUndefined();
   });
 });

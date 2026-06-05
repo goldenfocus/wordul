@@ -7,6 +7,7 @@ import { publicProfile, makePassphrase, canClaim, addSession, revokeSession, tou
 import { hashPassphrase, verifyPassphrase, mintToken, hashToken, secureIndex } from "./account-crypto.ts";
 import { activeDate } from "./daily-core.ts";
 import type { GameRecord } from "./records.ts";
+import type { LedgerPart } from "./economy.ts";
 
 const HISTORY_CAP = 100;
 const ROOMS_CAP = 100;
@@ -67,10 +68,10 @@ export class User extends DurableObject<Env> {
     }
 
     if (req.method === "POST" && url.pathname.endsWith("/ledger/append")) {
-      const tx = (await req.json()) as { token: string; delta: number; reason: string; ref?: string };
+      const tx = (await req.json()) as { token: string; delta: number; reason: string; ref?: string; parts?: LedgerPart[] };
       const profile = await this.load(username);
       profile.balances[tx.token] = (profile.balances[tx.token] ?? 0) + tx.delta;
-      profile.ledger.push({ token: tx.token, delta: tx.delta, reason: tx.reason, ts: Date.now(), ref: tx.ref });
+      profile.ledger.push({ token: tx.token, delta: tx.delta, reason: tx.reason, ts: Date.now(), ref: tx.ref, parts: tx.parts });
       if (profile.ledger.length > 500) profile.ledger = profile.ledger.slice(-500);
       await this.ctx.storage.put("profile", profile);
       return Response.json({ gold: profile.balances.gold ?? 0 });

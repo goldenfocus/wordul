@@ -1595,9 +1595,17 @@ export class Room extends DurableObject<Env> {
     const endMs = player.finishedAt ?? Date.now();
     const elapsedMs = player.firstGuessAt != null ? Math.max(0, endMs - player.firstGuessAt) : null;
     const timeBonusGold = elapsedMs == null ? 0 : goldFromPoints(speedBonusPoints(elapsedMs));
+    const scoreGold = goldFromPoints(player.points);
     const gold = player.resigned
       ? 0
-      : goldFromPoints(player.points) + DAILY_GOLD_BONUS + timeBonusGold;
+      : scoreGold + DAILY_GOLD_BONUS + timeBonusGold;
+    // Granular breakdown for the gold history — the three components already computed above,
+    // zero legs dropped (Σ parts === gold by construction). Race cash-out stays single-total.
+    const parts = [
+      { label: "score", delta: scoreGold },
+      { label: "daily", delta: DAILY_GOLD_BONUS },
+      { label: "speed", delta: timeBonusGold },
+    ].filter((p) => p.delta > 0);
     const stub = this.env.USER.get(this.env.USER.idFromName(player.username));
     // Record append is best-effort but observable (FIX 10): log a non-2xx, never throw.
     try {
@@ -1627,7 +1635,7 @@ export class Room extends DurableObject<Env> {
     try {
       const res = await stub.fetch(`https://do/ledger/append?username=${encodeURIComponent(player.username)}`, {
         method: "POST",
-        body: JSON.stringify({ token: "gold", delta: gold, reason: "mint:daily", ref: `${this.state.path}#${player.username}` }),
+        body: JSON.stringify({ token: "gold", delta: gold, reason: "mint:daily", ref: `${this.state.path}#${player.username}`, parts }),
       });
       if (res.ok) {
         player.scored = true;

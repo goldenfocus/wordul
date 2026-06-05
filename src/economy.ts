@@ -4,7 +4,10 @@
 import type { Color } from "./color.ts";
 
 export type GuessRow = { word: string; mask: Color[] };
-export type LedgerTx = { token: string; delta: number; reason: string; ts: number; ref?: string };
+// Optional per-component breakdown of a single earning (e.g. score / daily / speed).
+// Invariant: Σ parts.delta === delta when present.
+export type LedgerPart = { label: string; delta: number };
+export type LedgerTx = { token: string; delta: number; reason: string; ts: number; ref?: string; parts?: LedgerPart[] };
 
 export const POINTS = {
   green: 100,
