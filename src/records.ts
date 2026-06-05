@@ -16,6 +16,18 @@ export type GameRecord = {
                           // ("g"=correct, "y"=present, "x"=absent) — powers the home stamp
 };
 
+// The public projection of a finished game: identical to GameRecord EXCEPT the answer
+// `word` is removed. /api/user must never ship a solution — that would spoil today's daily
+// (or any room word a viewer hasn't solved yet). solveGrid (letterless colors) is kept on
+// purpose: it draws the board without revealing a single letter. See account-core's
+// publicProfile() and public/profile.js.
+export type PublicGameRecord = Omit<GameRecord, "word">;
+export function toPublicGame(g: GameRecord): PublicGameRecord {
+  const { word, ...rest } = g;
+  void word;
+  return rest;
+}
+
 // Pure: encode a player's guess masks into compact row strings for the home's solve
 // stamp. green→"g", yellow→"y", gray→"x". (The letters never leave the server.)
 const CELL: Record<Color, string> = { green: "g", yellow: "y", gray: "x" };

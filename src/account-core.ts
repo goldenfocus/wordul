@@ -2,6 +2,7 @@
 // Mirrors the user-core.ts pattern: the USER DO calls these; the DO owns persistence
 // and all crypto (account-crypto.ts). Everything here is unit-tested in isolation.
 import type { UserProfile } from "./types.ts";
+import { type PublicGameRecord, toPublicGame } from "./records.ts";
 import { isValidUsername, isReserved } from "./identity.ts";
 
 // ---- Shared auth shapes (imported by types.ts for UserProfile) ----
@@ -21,7 +22,11 @@ export type PendingClaim = { salt: string; phraseHash: string; nonce: string; cr
 
 export type DirectoryProjection = { claimed: boolean; verified: boolean; ownerSince: number };
 // A profile with secrets removed + the public auth flags surfaced.
-export type PublicProfile = Omit<UserProfile, "auth" | "pendingClaim"> & { claimed: boolean; verified: boolean };
+export type PublicProfile = Omit<UserProfile, "auth" | "pendingClaim" | "games"> & {
+  games: PublicGameRecord[];  // answer word stripped per record — see toPublicGame()
+  claimed: boolean;
+  verified: boolean;
+};
 
 // ---- The wordul-passphrase ----
 export const PHRASE_ANCHOR = "wordul";
@@ -106,7 +111,8 @@ export function projectDirectory(profile: UserProfile): DirectoryProjection {
 /** Strip ALL secret material and surface the public auth flags. The DO's GET handler MUST
  *  pass profiles through this before serializing — otherwise the salt/hash/session map leak. */
 export function publicProfile(profile: UserProfile): PublicProfile {
-  const { auth, pendingClaim, ...rest } = profile;
+  const { auth, pendingClaim, games, ...rest } = profile;
   void auth; void pendingClaim;
-  return { ...rest, claimed: !!profile.claimed, verified: false };
+  // Strip the answer word from every game record so /api/user can never leak a solution.
+  return { ...rest, games: games.map(toPublicGame), claimed: !!profile.claimed, verified: false };
 }

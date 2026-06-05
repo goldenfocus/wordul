@@ -142,4 +142,23 @@ describe("publicProfile (secret stripper — load-bearing security guarantee)", 
     expect(pub.username).toBe("zang");      // non-secret fields must survive the strip
     expect(pub.createdAt).toBe(1000);
   });
+
+  it("strips the answer `word` from every game (no daily/room spoiler leak) but keeps the letterless grid", () => {
+    const p = baseProfile({
+      games: [
+        { roomPath: "daily/2026-06-04", finishedAt: 7, wordLength: 5, word: "CRANK", result: "won", guesses: 3, opponents: [], solveGrid: ["yxxxx", "gyxyx", "ggggg"] },
+        { roomPath: "crane/snappy-moose", finishedAt: 8, wordLength: 5, word: "BRAVE", result: "lost", guesses: 6, opponents: [{ username: "yan", result: "won", guesses: 4 }] },
+      ],
+    });
+    const pub = publicProfile(p);
+    expect(JSON.stringify(pub)).not.toContain("CRANK");
+    expect(JSON.stringify(pub)).not.toContain("BRAVE");
+    for (const g of pub.games) expect((g as Record<string, unknown>).word).toBeUndefined();
+    // Everything non-leaking survives — colors carry the board without revealing letters.
+    expect(pub.games[0].solveGrid).toEqual(["yxxxx", "gyxyx", "ggggg"]);
+    expect(pub.games[0].result).toBe("won");
+    expect(pub.games[0].guesses).toBe(3);
+    expect(pub.games[0].roomPath).toBe("daily/2026-06-04");
+    expect(pub.games[1].opponents[0].username).toBe("yan");
+  });
 });
