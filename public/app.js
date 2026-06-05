@@ -3879,6 +3879,7 @@ function leaveRoom() {
   stopHeartbeat();
   game.challengeId = null;
   game.challengeMeta = null;
+  pendingRoomEdition = null; // discard any pending one-shot edition from a failed/aborted create
   clearPayoutTimers(); // cancel any pending payout/drain so it can't fire off-screen + mutate gold
   clearReconnectNotice();
   clearTimeout(game.reconnectTimer);
