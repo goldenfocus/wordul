@@ -3,7 +3,7 @@ import { WORDS_BY_SIZE, isSupportedSize } from "./wordsbysize.ts";
 import { scoreGuess, countVowels, revealUngreened, type Color } from "./color.ts";
 import { computeNextGuess } from "./solver.ts";
 import { noobGuess, mistakeRateFor } from "./noob.ts";
-import { planKeystrokes, timelineMs, NOOB_HAND, SHARP_HAND, type KeyStep } from "./rhythm.ts";
+import { planKeystrokes, NOOB_HAND, SHARP_HAND, type KeyStep } from "./rhythm.ts";
 import { projectPlayerForClient } from "./bots.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { everyoneReady, COUNTDOWN_MS } from "./duel.ts";
@@ -725,7 +725,6 @@ export class Room extends DurableObject<Env> {
       p.pointsSpent = 0;
       p.revealHints = 0;
       p.vowelHints = 0;
-      p.pendingWord = undefined;
       p.firstGuessAt = undefined;
       p.finishedAt = undefined;
     }
@@ -917,12 +916,19 @@ export class Room extends DurableObject<Env> {
     }
   }
 
-  // Animate a decided word as cosmetic ghost-fill pulses over the planned timeline. Best-effort:
-  // these setTimeouts are ephemeral (a hibernating DO may drop them) — the durable nextGuessAt
-  // COMMIT in alarm() still lands the word, so a dropped animation degrades to today's instant pop.
-  private scheduleBotTyping(username: string, steps: KeyStep[]): void {
+  // Type a decided word out as real-time ghost-fill pulses, pausing between keystrokes. This is
+  // AWAITED by alarm(), so the DO stays awake the whole time and the setTimeout pauses actually
+  // fire — a dormant DO (between alarm fires) never runs timers, which is why scheduling pulses
+  // and returning collapsed the whole word into one burst. Stops early if the round ends mid-type.
+  // Ephemeral: emitBotTyping does no storage writes.
+  private async typeOutBot(username: string, steps: KeyStep[]): Promise<void> {
+    let prev = 0;
     for (const step of steps) {
-      setTimeout(() => this.emitBotTyping(username, step.len), step.atMs);
+      const gap = Math.max(0, step.atMs - prev);
+      prev = step.atMs;
+      if (gap) await new Promise<void>((resolve) => setTimeout(resolve, gap));
+      if (this.state.phase !== "playing") return; // round ended — stop typing
+      this.emitBotTyping(username, step.len);
     }
   }
 
@@ -1097,26 +1103,23 @@ export class Room extends DurableObject<Env> {
       if (this.state.phase !== "playing") break;          // a first-solve mid-batch ended it
       if (b.status !== "playing") continue;               // outpaced→lost by an earlier bot this batch
 
-      if (b.pendingWord) {
-        // COMMIT: the bot "finished typing" the word it decided last fire — land it now.
-        const word = b.pendingWord;
-        b.pendingWord = undefined;
-        await this.applyGuess(b, word);
-        b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random()); // think before next row
-        acted = true;
-        continue;
-      }
-
-      // DECIDE: pick the word, then "type" it (cosmetic pulses) and commit on the next fire.
+      // Decide the word, then TYPE it out in real time. typeOutBot awaits a real pause between
+      // keystrokes — and because alarm() is still awaiting, the DO stays awake, so the pulses
+      // actually stream out (a dormant DO never runs setTimeout, which is why scheduling-and-
+      // returning collapsed the whole word into one burst). Then commit, still in this same fire.
       const view = { wordLength: this.state.wordLength, ownGuesses: b.guesses };
       const word = this.state.seed
         ? noobGuess(view, { mistakeRate: mistakeRateFor(this.state.wordLength, opponents) }, Math.random())
         : computeNextGuess(view);
       if (!word) { b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random()); continue; }
-      const steps = planKeystrokes(word, seeded ? NOOB_HAND : SHARP_HAND, Math.random);
-      b.pendingWord = word;                               // durable truth (stripped outbound)
-      b.nextGuessAt = Date.now() + Math.max(1, timelineMs(steps)); // commit when the typing span elapses
-      this.scheduleBotTyping(b.username, steps);
+      await this.typeOutBot(b.username, planKeystrokes(word, seeded ? NOOB_HAND : SHARP_HAND, Math.random));
+      if (this.state.phase !== "playing" || b.status !== "playing") {
+        // the round ended (or this bot went out) while it was typing — drop the guess, no commit
+        b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random());
+        continue;
+      }
+      await this.applyGuess(b, word);
+      b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random()); // think before next row
       acted = true;
     }
     if (acted) await this.persistAndBroadcast();

@@ -223,64 +223,42 @@ describe("duel room — full DO integration (seats → ready → countdown → K
     expect(pulse!.len).toBe(3);
   });
 
-  it("the worduler decides+types first (pendingWord set, no guess yet), then commits next beat", async () => {
-    const { room, bot } = await liveRobotRoom();
-    // keep this a pure durable-path test: don't fire the cosmetic timers
-    vi.spyOn(room as unknown as { scheduleBotTyping: () => void }, "scheduleBotTyping").mockImplementation(() => {});
-
-    bot.nextGuessAt = Date.now() - 1;          // force DECIDE due
-    await room.alarm();
-    expect(typeof bot.pendingWord).toBe("string");
-    expect((bot.pendingWord as string).length).toBe(5);
-    expect(bot.guesses.length).toBe(0);        // typed, but has NOT committed
-    expect(bot.nextGuessAt!).toBeGreaterThan(Date.now()); // commit scheduled ahead
-
-    const pending = bot.pendingWord as string;
-    bot.nextGuessAt = Date.now() - 1;          // force COMMIT due
-    await room.alarm();
-    expect(bot.guesses.length).toBe(1);
-    expect(bot.guesses[0].word).toBe(pending); // the exact decided word lands (proves it was stashed)
-    expect(bot.pendingWord).toBeUndefined();
+  it("streams ordered ghost pulses while typing, then commits — all within ONE awake alarm fire", async () => {
+    // This is the regression guard for the dormant-DO bug: the bot must emit its keystroke
+    // pulses spread across a single (still-awaited) alarm and commit in that same fire, NOT
+    // schedule timers and return (which a real Durable Object would never run while dormant).
+    const { room, sockets, bot } = await liveRobotRoom();
+    const lens: number[] = [];
+    (sockets[0] as unknown as { send: (s: string) => void }).send = (s: string) => {
+      const m = JSON.parse(s); if (m.type === "typing") lens.push(m.len);
+    };
+    vi.useFakeTimers();
+    try {
+      bot.nextGuessAt = Date.now() - 1;
+      const fire = room.alarm();                 // alarm types out inline (awaited), then commits
+      await vi.advanceTimersByTimeAsync(8000);   // let the inter-key pauses elapse
+      await fire;
+      expect(bot.guesses.length).toBe(1);                 // committed in this single alarm fire
+      expect(lens.length).toBeGreaterThanOrEqual(2);      // multiple ghost pulses streamed, not one burst
+      expect(Math.max(...lens)).toBeGreaterThanOrEqual(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it("commits even if no cosmetic pulse ever fires (hibernation fallback)", async () => {
+  it("abandons its in-progress guess if the round ends while it is typing", async () => {
     const { room, bot } = await liveRobotRoom();
-    vi.spyOn(room as unknown as { scheduleBotTyping: () => void }, "scheduleBotTyping").mockImplementation(() => {});
-    bot.nextGuessAt = Date.now() - 1; await room.alarm(); // decide (no pulses scheduled at all)
-    bot.nextGuessAt = Date.now() - 1; await room.alarm(); // commit
-    expect(bot.guesses.length).toBe(1);
-  });
-
-  it("never leaks the worduler's pending word to clients", async () => {
-    const { room, bot } = await liveRobotRoom();
-    vi.spyOn(room as unknown as { scheduleBotTyping: () => void }, "scheduleBotTyping").mockImplementation(() => {});
-    bot.nextGuessAt = Date.now() - 1; await room.alarm();
-    expect(bot.pendingWord).toBeTruthy();
-
-    const snap = (room as unknown as { snapshotFor: (v: string | null) => { players: Array<Record<string, unknown>> } }).snapshotFor("alice");
-    const view = snap.players.find((p) => p.username === bot.username)!;
-    expect("pendingWord" in view).toBe(false);
-    expect("isBot" in view).toBe(false);
-    expect("nextGuessAt" in view).toBe(false);
-  });
-
-  it("on decide, schedules a non-empty ghost-fill timeline for the worduler", async () => {
-    const { room, bot } = await liveRobotRoom();
-    const spy = vi.spyOn(room as unknown as { scheduleBotTyping: (u: string, s: unknown[]) => void }, "scheduleBotTyping").mockImplementation(() => {});
-    bot.nextGuessAt = Date.now() - 1;
-    await room.alarm();
-    expect(spy).toHaveBeenCalledTimes(1);
-    const [username, steps] = spy.mock.calls[0];
-    expect(username).toBe(bot.username);
-    expect((steps as unknown[]).length).toBeGreaterThan(0);
-  });
-
-  it("clears a stale pendingWord when a new round starts", async () => {
-    const { room, bot } = await liveRobotRoom();
-    room.state.phase = "finished";             // the round ended while the bot was mid-type
-    bot.pendingWord = "STALE";
-    await (room as unknown as { runStart: (who: string) => Promise<boolean> }).runStart("alice");
-    expect(room.state.phase).toBe("playing");  // the new round actually started
-    expect(bot.pendingWord).toBeUndefined();
+    vi.useFakeTimers();
+    try {
+      bot.nextGuessAt = Date.now() - 1;
+      const fire = room.alarm();                 // bot starts typing...
+      await vi.advanceTimersByTimeAsync(150);     // ...partway through the word
+      room.state.phase = "finished";              // the round ends mid-type (e.g. the human won)
+      await vi.advanceTimersByTimeAsync(8000);
+      await fire;
+      expect(bot.guesses.length).toBe(0);         // never committed — the guess was abandoned
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
