@@ -3086,3 +3086,202 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
    Ghosts are now visually indistinguishable from live opponents during the race.
    (WON/OUT status badges still land at the exact recorded finish times.)
    The .ghost/.ghost-cursor tile rules for live typing pulses remain (earlier in file). */
+/* ───────────────────────────────────────────────────────────────────────────
+   Neon Floor lobby (Task 7b) — ported from /tmp/lobby-neon-floor-v2.html.
+   Every prototype hex is remapped onto the app's theme vars so all 7 editions
+   (incl. the light Tin-Bot) survive. The prototype's "dark text on the accent
+   chip/button" (#06120c) maps to var(--bg): on a dark theme that's near-black
+   on the bright accent; on Tin-Bot it's the light page bg on the dark-green
+   accent — correct contrast either way. Pure-black shadows / #fff glows are
+   kept verbatim (decorative, theme-agnostic — matches existing CSS).
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* 1 ── Two-zone layout, gated to the lobby phase ────────────────────────────
+   Default (NOT lobby): the wrappers vanish from the box tree so #boards and the
+   reparented nodes flow exactly as they did pre-redesign during play/finished. */
+.lobby-grid, .lobby-left, .lobby-right { display: contents; }
+body.lobby .lobby-grid {
+  display: grid;
+  grid-template-columns: 1.06fr 0.94fr;
+  gap: 14px;
+  align-items: start;
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+}
+body.lobby .lobby-left {
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  min-width: 0;
+}
+body.lobby .lobby-right {
+  display: flex; flex-direction: column; gap: 14px;
+  min-width: 0;
+}
+@media (max-width: 880px) {
+  body.lobby .lobby-grid { grid-template-columns: 1fr; }
+}
+/* In lobby the header owns the room name + the two-zone layout owns the screen,
+   so the in-bar title card + the Play/Games/Players tabs collapse away.
+   (JS already sets #roomTabs.hidden; this is belt-and-suspenders.) */
+body.lobby .lobby-bar .room-info { display: none; }
+body.lobby #roomTabs { display: none; }
+/* #lobbyControls is reparented into .lobby-left — center it and give the Start
+   button the prototype's full-width "deal" feel. Scoped to body.lobby so the
+   global .btn.primary is untouched everywhere else. */
+body.lobby .lobby-left .lobby-controls {
+  flex-direction: column; align-items: center; gap: 10px;
+  width: 100%; max-width: 320px;
+}
+body.lobby .lobby-left .lobby-controls .btn.primary {
+  width: 100%; height: 50px; font-size: 17px;
+}
+
+/* 6 ── Header icon buttons (share / gear). They share .icon-btn; add only the
+   square-iconbtn look from the prototype's .iconbtn. */
+.room-icon-btn {
+  width: 38px; height: 38px; padding: 0;
+  border: 1px solid var(--border); border-radius: 11px;
+  display: inline-grid; place-items: center;
+  background: transparent; color: var(--fg);
+  transition: border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+.room-icon-btn:hover {
+  border-color: var(--accent); color: var(--accent);
+  background: transparent; transform: translateY(-1px);
+}
+/* Hide the room-chrome icons in the immersive playing view, like the room name. */
+body.playing .room-icon-btn { display: none; }
+
+/* 2 ── Tries badge = word-length control ────────────────────────────────────*/
+.tries-badge {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 12px 10px; min-width: 96px;
+  border: 1px solid transparent; border-radius: 14px;
+  cursor: ns-resize; user-select: none; -webkit-user-select: none;
+  touch-action: none; /* drag adjusts length — must not scroll the page */
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+.tries-badge:hover, .tries-badge.editing {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+  background: color-mix(in oklab, var(--accent) 7%, transparent);
+}
+.tries-badge.locked { opacity: 0.55; cursor: default; }
+.tries-badge .tb-x {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 40px; line-height: 0.95; color: var(--accent);
+  text-shadow: 0 0 18px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+.tries-badge.bump .tb-x { animation: tb-bump 0.2s; }
+@keyframes tb-bump { 50% { transform: scale(1.18); } }
+.tries-badge small {
+  color: var(--muted); font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.12em;
+}
+.tries-badge .tb-lethint {
+  font-size: 11px; font-weight: 600; color: var(--accent);
+  height: 0; opacity: 0; overflow: hidden; transition: height 0.18s ease, opacity 0.18s ease;
+}
+.tries-badge.editing .tb-lethint { height: 15px; opacity: 1; margin-top: 3px; }
+.tries-badge .tb-pm {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid var(--accent); background: var(--bg-card); color: var(--accent);
+  font-size: 16px; font-weight: 700; line-height: 1; padding-bottom: 2px;
+  display: grid; place-items: center; cursor: pointer;
+  opacity: 0; pointer-events: none; transition: opacity 0.16s ease;
+}
+.tries-badge.editing .tb-pm { opacity: 1; pointer-events: auto; }
+.tries-badge .tb-minus { left: -14px; }
+.tries-badge .tb-plus  { right: -14px; }
+.tries-badge .tb-pm:active { transform: translateY(-50%) scale(0.88); }
+
+/* 3 ── Your table seat strip ───────────────────────────────────────────────*/
+.mytable {
+  width: 100%; max-width: 340px;
+  display: flex; align-items: center; gap: 12px;
+  border-top: 1px solid var(--border); padding-top: 16px;
+}
+.mytable-lab {
+  font-size: 10.5px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.12em;
+  white-space: nowrap; line-height: 1.15;
+}
+/* Capacity is up to 8 — wrap so seats never overflow on mobile. */
+.mytable-seats { display: flex; flex-wrap: wrap; gap: 7px; flex: 1; }
+.seat {
+  width: 32px; height: 32px; flex: none;
+  border-radius: 9px; display: grid; place-items: center; font-size: 16px;
+}
+.seat.you {
+  background: linear-gradient(135deg, var(--accent), var(--warm));
+  color: var(--bg);
+}
+.seat.taken { background: color-mix(in oklab, var(--accent) 16%, transparent); }
+.seat.empty {
+  border: 1.5px dashed var(--cold); background: transparent; color: var(--cold);
+}
+.seat.seatin { animation: seatin 0.35s ease; }
+@keyframes seatin { from { opacity: 0; transform: scale(0.6); } }
+.mytable-cnt {
+  font-family: var(--font-display); font-weight: 700; font-size: 15px;
+  white-space: nowrap;
+}
+
+/* 4 ── Compact floor rows (the existing .arena-row / .lobby-rail base stays). */
+.arena-row-tries { color: var(--accent); font-weight: 600; }
+.arena-count {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  padding: 2px 4px 8px;
+}
+/* Cap the floor's scroll height so a busy arena scrolls instead of growing. */
+body.lobby .lobby-rail .lobby-rail-list,
+body.lobby #lobbyRailList { max-height: 248px; overflow: auto; }
+
+/* 5 ── Chat tabs (Global / Table) — no prior CSS; ported from .tabs/.tab. */
+.chat-tabs { display: flex; gap: 4px; padding: 12px 14px 0; }
+.chat-tab {
+  position: relative; background: none; border: 0;
+  color: var(--muted); font-family: var(--font-display); font-weight: 700;
+  font-size: 14px; padding: 6px 12px 9px; cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.chat-tab.is-active { color: var(--fg); border-color: var(--accent); }
+.chat-tab-ping {
+  position: absolute; top: 4px; right: 4px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--warm); box-shadow: 0 0 8px var(--warm);
+  animation: chat-ping-blink 1.2s infinite;
+}
+@keyframes chat-ping-blink { 50% { opacity: 0.35; } }
+
+/* 7 ── Bloom-on-start: stagger the full grid's rows in when leaving lobby. */
+.boards.blooming .grid-row {
+  animation: bloomRow 0.45s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+.boards.blooming .grid-row:nth-child(2) { animation-delay: 0.06s; }
+.boards.blooming .grid-row:nth-child(3) { animation-delay: 0.12s; }
+.boards.blooming .grid-row:nth-child(4) { animation-delay: 0.18s; }
+.boards.blooming .grid-row:nth-child(5) { animation-delay: 0.24s; }
+.boards.blooming .grid-row:nth-child(6) { animation-delay: 0.30s; }
+.boards.blooming .grid-row:nth-child(7) { animation-delay: 0.36s; }
+.boards.blooming .grid-row:nth-child(8) { animation-delay: 0.42s; }
+@keyframes bloomRow {
+  from { opacity: 0; transform: translateY(-10px) scale(0.96); }
+}
+
+/* Reduced motion — disable the badge bump, seat pop, chat ping, and bloom.
+   Honor BOTH the OS query and the app's body.reduced-motion toggle. */
+@media (prefers-reduced-motion: reduce) {
+  .tries-badge.bump .tb-x,
+  .seat.seatin,
+  .chat-tab-ping,
+  .boards.blooming .grid-row { animation: none; }
+  .boards.blooming .grid-row { opacity: 1; transform: none; }
+}
+body.reduced-motion .tries-badge.bump .tb-x,
+body.reduced-motion .seat.seatin,
+body.reduced-motion .chat-tab-ping,
+body.reduced-motion .boards.blooming .grid-row { animation: none !important; }
+body.reduced-motion .boards.blooming .grid-row { opacity: 1 !important; transform: none !important; }
