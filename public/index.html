@@ -195,8 +195,12 @@
            sacred ◆ gold wallet (which never moves from daily play; the mint is cashed out once
            at the end). Hidden in race rooms, where #goldHud takes the live ticks. -->
       <div id="roundScore" class="round-score" hidden aria-live="polite"></div>
-      <!-- Lobby two-zone scaffold. Hidden until app.js reveals it in the lobby phase (later task). -->
-      <div id="lobbyGrid" class="lobby-grid" hidden>
+      <!-- Lobby two-zone scaffold. NOT hidden — it permanently wraps #boards, which must stay
+           visible in every phase. The two-zone GRID layout is gated to the lobby phase by CSS
+           (Task 7: `.lobby-grid`/`.lobby-left`/`.lobby-right` default to `display:contents` so
+           the board flows as before during play; `body.lobby` activates the grid). Lobby-only
+           children (#triesBadge, #myTable, the #lobbyRight zone) are individually hidden. -->
+      <div id="lobbyGrid" class="lobby-grid">
         <div class="lobby-left">
           <!-- #boards (the player board grid) is relocated here so the single-row lobby board
                sits in the left zone; the tries badge + your-table sit beneath it. -->
