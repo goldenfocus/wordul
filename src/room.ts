@@ -1095,43 +1095,68 @@ export class Room extends DurableObject<Env> {
       return;
     }
     if (this.state.phase !== "playing" || !this.state.word) return;
-    // Per-bot heartbeat: advance every DUE bot in this fire, then re-arm to the soonest.
-    // One broadcast after the batch (not per bot). The solver/noob see ONLY a BotView
-    // (length + own masks) — never this.state.word; the cheat-isolation wall is unchanged.
-    // Seeded rooms play the fallible noob (mistakeRate scaled by length AND field size);
-    // /robots stays sharp. `state.seed` is falsy for non-seeded rooms.
-    const now = Date.now();
-    const seeded = !!this.state.seed;
-    const opponents = this.state.players.length - 1;
-    let acted = false;
-    for (const b of dueBots(this.state.players, now)) {
-      if (this.state.phase !== "playing") break;          // a first-solve mid-batch ended it
-      if (b.status !== "playing") continue;               // outpaced→lost by an earlier bot this batch
+    await this.runBotPump();
+  }
 
-      // Decide the word, then TYPE it out in real time. typeOutBot awaits a real pause between
-      // keystrokes — and because alarm() is still awaiting, the DO stays awake, so the pulses
-      // actually stream out (a dormant DO never runs setTimeout, which is why scheduling-and-
-      // returning collapsed the whole word into one burst). Then commit, still in this same fire.
-      const view = { wordLength: this.state.wordLength, ownGuesses: b.guesses };
-      const word = this.state.seed
-        ? noobGuess(view, { mistakeRate: mistakeRateFor(this.state.wordLength, opponents) }, Math.random())
-        : computeNextGuess(view);
-      if (!word) { b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random()); continue; }
-      await this.typeOutBot(b.username, planKeystrokes(word, seeded ? NOOB_HAND : SHARP_HAND, Math.random));
-      if (this.state.phase !== "playing" || b.status !== "playing") {
-        // the round ended (or this bot went out) while it was typing — drop the guess, no commit
-        b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random());
-        continue;
+  // The typing pump: run every due bot's turn CONCURRENTLY, launching each the moment its
+  // nextGuessAt arrives — even while other bots are mid-word — so ghost-fills overlap like a
+  // real room of humans (the old sequential loop made bot B wait out bot A's whole type-out).
+  // alarm() awaits this, keeping the DO awake while any turn is in flight (a dormant DO never
+  // runs setTimeout — the same constraint typeOutBot documents). Exits when nothing is in
+  // flight and no bot is due, then re-arms the single DO alarm to the soonest nextGuessAt.
+  private async runBotPump(): Promise<void> {
+    const inflight = new Map<string, Promise<void>>();
+    while (this.state.phase === "playing") {
+      const now = Date.now();
+      for (const b of dueBots(this.state.players, now)) {
+        if (inflight.has(b.username)) continue; // nextGuessAt is stale until its turn commits
+        const turn = this.runBotTurn(b)
+          .catch((err) => {
+            // Push the bot forward so a thrown turn can't become a tight relaunch loop.
+            console.error("bot turn failed", b.username, err);
+            b.nextGuessAt = Date.now() + botDelay(false, !!this.state.seed, Math.random());
+          })
+          .finally(() => { inflight.delete(b.username); });
+        inflight.set(b.username, turn);
       }
-      await this.applyGuess(b, word);
-      b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random()); // think before next row
-      acted = true;
+      if (inflight.size === 0) break;
+      // Wake when a turn finishes OR the next NOT-in-flight bot comes due. In-flight bots
+      // keep a past nextGuessAt until they commit — including them would make this race
+      // resolve instantly and busy-spin.
+      const waits: Promise<unknown>[] = [...inflight.values()];
+      const wakeAt = nextBotAlarmAt(this.state.players.filter((p) => !inflight.has(p.username)));
+      if (wakeAt != null) waits.push(new Promise<void>((r) => setTimeout(r, Math.max(0, wakeAt - now))));
+      await Promise.race(waits);
     }
-    if (acted) await this.persistAndBroadcast();
     if (this.state.phase === "playing") {
       const at = nextBotAlarmAt(this.state.players);
       if (at != null) void this.ctx.storage.setAlarm(at);
     }
+  }
+
+  // One bot's full turn: decide → type out in real time → commit. Self-contained so the pump
+  // can run many turns concurrently. The solver/noob see ONLY a BotView (length + own masks)
+  // — never this.state.word; the cheat-isolation wall is unchanged. Seeded rooms play the
+  // fallible noob (mistakeRate scaled by length AND field size); /robots stays sharp.
+  // Winner safety: applyGuess is synchronous up to its final await, so two turns finishing
+  // near-simultaneously can't both claim state.winner.
+  private async runBotTurn(b: PlayerState): Promise<void> {
+    const seeded = !!this.state.seed;
+    const opponents = this.state.players.length - 1;
+    const view = { wordLength: this.state.wordLength, ownGuesses: b.guesses };
+    const word = this.state.seed
+      ? noobGuess(view, { mistakeRate: mistakeRateFor(this.state.wordLength, opponents) }, Math.random())
+      : computeNextGuess(view);
+    if (!word) { b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random()); return; }
+    await this.typeOutBot(b.username, planKeystrokes(word, seeded ? NOOB_HAND : SHARP_HAND, Math.random));
+    if (this.state.phase !== "playing" || b.status !== "playing") {
+      // the round ended (or this bot was outpaced) while it was typing — drop the guess, no commit
+      b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random());
+      return;
+    }
+    await this.applyGuess(b, word);
+    b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random()); // think before next row
+    await this.persistAndBroadcast();
   }
 
   // Process whichever rematch deadlines are due, then re-arm for any that remain.
