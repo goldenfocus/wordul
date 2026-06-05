@@ -1235,11 +1235,26 @@ function showCompanion(event, ctx = {}) {
     toast(text, { duration: big ? 4200 : 3200 });
   }
   // The wipe aside is text-only — it fires often enough that voicing it would grate.
-  if (!speak || event === "wipe") return;
+  // The win QUIP is text-only too: the spoken slot on a solve belongs to the winReveal
+  // announcement ("Congratulations — you found the word, {answer}", speakWinReveal),
+  // and two voices back-to-back would cut each other off (speakTemplated stops prior audio).
+  if (!speak || event === "wipe" || event === "win") return;
   // Templated lines (the loss reveal): full robot voice by default; a world/room can
   // opt into "split" (Yan's cloned frame + robot answer) via sound.voice.reveal.
   if (raw.includes("{answer}")) speakTemplated(VOICE_EDITION, raw, ctx, revealVoice);
   else speakLine(VOICE_EDITION, raw, text);
+}
+
+// The spoken WIN ANNOUNCEMENT — "Congratulations — you found the word [1s beat] TAFFY".
+// Voice-only (no toast — the screen already shows the word: the broadsheet reveal in a
+// daily, the end card in a race). Honors the world's reveal mode like the loss reveal
+// (full robot by default, "split" = cloned frame + robot answer via sound.voice.reveal);
+// ctx.pauseMs stretches the pre-word beat to a full dramatic second in either mode.
+// Line bank: yang.js companion.lines.winReveal (per-edition + rung-2 room tweakable).
+function speakWinReveal(answer) {
+  if (!answer) return;
+  const { raw, speak, revealVoice } = companionReact("winReveal", { answer });
+  if (speak && raw) speakTemplated(VOICE_EDITION, raw, { answer, pauseMs: 1000 }, revealVoice);
 }
 
 // --- Idle taunts: the companion checks in when you go quiet mid-game. ---
@@ -1956,6 +1971,16 @@ function onServerMessage(msg) {
     if (game.isDaily && (personallyWon || personallyLost)) {
       game.pendingCashOut = true; // ARM on the transition edge (this session earned it)…
       captureDailySolve(game.dailyDate, me); // client-only — powers the home's letter stamp
+      // The win moment: a chime + the spoken announcement, timed to land as the final
+      // row's flip completes (same 1500ms pacing handleGameOver uses for races). The
+      // transition edge fires this exactly once; reloads of a finished daily stay quiet.
+      if (personallyWon) {
+        const answer = msg.room.word || me.guesses[me.guesses.length - 1]?.word; // a win's last guess IS the word
+        setTimeout(() => {
+          playChime([[523, 0], [659, 0.1], [784, 0.2], [1047, 0.32]]); // the race-win arpeggio
+          speakWinReveal(answer);
+        }, 1500);
+      }
     }
     // …FIRE once the mint confirms. The arm/fire split matters twice over: a reloaded
     // already-finished daily has goldAwarded on its first snapshot but no transition (no
@@ -2091,24 +2116,38 @@ function renderDailyUnlock(snap, me) {
   // copy and the celebration off it — never claim/float gold the server didn't grant.
   const confirmed = me && typeof me.goldAwarded === "number";
   const award = confirmed ? me.goldAwarded : 0;
-  const goody = $("#dailyGoody");
-  // Fill on the early "fast board flip" snapshot (no goldAwarded yet → NoGold copy), then
-  // UPGRADE once when the mint-confirmed snapshot lands — without this the pre-mint copy
-  // stuck forever and a real award never showed (the ◆0 race, papa Jun 5 2026).
-  if (goody && (!goody.dataset.filled || (confirmed && goody.dataset.confirmed !== "1"))) {
-    const word = snap.word || "";
-    goody.textContent = won
-      ? (award > 0 ? t("daily.goodySolved", { word, gold: award }) : t("daily.goodySolvedNoGold", { word }))
-      : (award > 0 ? t("daily.goodyMissed", { word, gold: award }) : t("daily.goodyMissedNoGold", { word }));
-    if (won) goody.classList.add("is-win"); // gold halo (CSS) — solve only
-    goody.dataset.filled = "1";
-    if (confirmed) goody.dataset.confirmed = "1";
-    // GOLD-FLIGHT: celebrate a confirmed gold solve once — bump the HUD + send a few
-    // floaters rising toward it. Reuses the existing .gold-floater / gold-bump system;
-    // skip entirely under reduced motion (the calm CSS appear covers that case), and
-    // skip when the mint credited 0 (no coins for a zero/failed award). Fires at most
-    // once: only the confirmed pass has award > 0, and it sets dataset.confirmed.
-    if (won && award > 0 && !getSettings().reducedMotion) celebrateDailyUnlock();
+  // — The Broadsheet reveal (replaces the old #dailyGoody line): kicker → the word as a
+  // serif headline → dictionary entry → credit. Word, entry, and the credit's story link
+  // all lead into /word/<word>. Fills once the word is on the wire (it always is once
+  // you're done); the minted credit upgrades separately when the server confirms.
+  const reveal = $("#dailyReveal");
+  const word = (snap.word || "").toUpperCase();
+  if (reveal && word && !reveal.dataset.filled) {
+    reveal.hidden = false;
+    const wiki = `/word/${word.toLowerCase()}`;
+    $("#dailyRevealKicker").textContent = t(won ? "daily.revealKickerWon" : "daily.revealKickerLost");
+    const wordEl = $("#dailyRevealWord");
+    wordEl.textContent = word;
+    wordEl.href = wiki;
+    wordEl.setAttribute("aria-label", `${word} — ${t("daily.revealStory", { word })}`);
+    const entry = $("#dailyRevealEntry");
+    const intel = wordIntel(word);
+    if (intel?.def) { entry.textContent = intel.def; entry.href = wiki; } else entry.hidden = true;
+    const storyLink = $("#dailyRevealStory");
+    storyLink.textContent = t("daily.revealStory", { word });
+    storyLink.href = wiki;
+    reveal.dataset.filled = "1";
+  }
+  // The minted credit — same mint-confirmed contract as cashOutDaily: appears only once
+  // the server's goldAwarded lands (the ◆0 race fix, papa Jun 5 2026), never fabricated.
+  const mintEl = $("#dailyRevealMint");
+  if (mintEl && confirmed && award > 0 && !mintEl.dataset.filled) {
+    mintEl.textContent = t("daily.revealMint", { gold: award });
+    mintEl.hidden = false;
+    mintEl.dataset.filled = "1";
+    // GOLD-FLIGHT: celebrate the confirmed gold solve once — bump the HUD + send a few
+    // floaters rising toward it. Skipped under reduced motion and on a 0-gold mint.
+    if (won && !getSettings().reducedMotion) celebrateDailyUnlock();
   }
   const story = $("#dailyStory");
   if (story && snap.story && !story.dataset.filled) {
@@ -2119,10 +2158,17 @@ function renderDailyUnlock(snap, me) {
     if (snap.story.tip) { const tip = document.createElement("p"); tip.className = "daily-tip"; tip.textContent = "💡 " + snap.story.tip; story.appendChild(tip); }
     story.dataset.filled = "1";
   }
-  const bridge = $("#dailyBridgeBtn");
-  if (bridge && !bridge.dataset.wired) {
-    bridge.textContent = "▶ " + t("daily.keepPlaying");
-    bridge.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); }); bridge.dataset.wired = "1";
+  const share = $("#dailyShareBtn");
+  if (share && !share.dataset.wired) {
+    share.textContent = t("daily.share");
+    // shareDailyResult is gesture-safe here: this listener runs on the tap itself.
+    share.addEventListener("click", () => shareDailyResult({ won, guesses: me.guesses.length }));
+    share.dataset.wired = "1";
+  }
+  const home = $("#dailyHomeLink");
+  if (home && !home.dataset.wired) {
+    home.textContent = t("daily.home");
+    home.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); }); home.dataset.wired = "1";
   }
   const arch = $("#dailyArchiveLink");
   if (arch && !arch.dataset.wired) {
@@ -2137,8 +2183,7 @@ function renderDailyUnlock(snap, me) {
 function celebrateDailyUnlock() {
   const hud = $("#goldHud");
   if (hud) { hud.classList.remove("gold-bump"); void hud.offsetWidth; hud.classList.add("gold-bump"); }
-  const goody = $("#dailyGoody");
-  const origin = (goody || $("#dailyUnlock"))?.getBoundingClientRect();
+  const origin = ($("#dailyRevealWord") || $("#dailyUnlock"))?.getBoundingClientRect();
   if (!origin) return;
   // a small, intentional flight — 5 coins, staggered, drifting up (the .gold-floater
   // keyframe rises and fades; that reads as coins lifting toward the HUD).
@@ -3371,7 +3416,11 @@ function handleGameOver(snap) {
     }
     triggerWinCelebration();
     playChime([[523, 0], [659, 0.1], [784, 0.2], [1047, 0.32]]);
-    showCompanion("win", { guessesUsed: me.guesses.length });
+    showCompanion("win", { guessesUsed: me.guesses.length }); // text-only quip (voice yields to the reveal)
+    // "Congratulations — you found the word… [beat] {answer}". snap.word can be absent
+    // while others still race (no leaks to the wire) — but the winner's own last accepted
+    // guess IS the word, so the announcement never goes silent on a live-race solve.
+    speakWinReveal(snap.word || me.guesses[me.guesses.length - 1]?.word);
     // Same gentle pacing as before — wait for the final row's flip to finish.
     setTimeout(
       () => openStats({ snap, me, won, justFinished: true, lastGuessCount: guessCount }),

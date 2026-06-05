@@ -117,11 +117,15 @@ export async function speakTemplated(editionId, rawLine, ctx = {}, mode = "robot
   }
   const { prefix, suffix } = splitTemplate(rawLine);
 
+  // The beat before the word: ½s by default; the WIN reveal passes ctx.pauseMs=1000
+  // for a full dramatic second ("Congratulations — you found the word [beat] TAFFY").
+  const beatMs = ctx.pauseMs > 0 ? ctx.pauseMs : REVEAL_BEAT_MS;
+
   if (mode !== "split") {
     stopSpeaking(); // clear any clip/TTS from a prior reaction
     await sayRobotic(prefix);
     if (isMuted()) return;
-    await new Promise((r) => setTimeout(r, REVEAL_BEAT_MS));
+    await new Promise((r) => setTimeout(r, beatMs));
     await sayRobotic(ctx.answer);
     if (isMuted()) return;
     await sayRobotic(suffix);
@@ -156,6 +160,9 @@ export async function speakTemplated(editionId, rawLine, ctx = {}, mode = "robot
   });
 
   await playSegment(prefix);
+  if (isMuted()) return;
+  // Same dramatic beat in split mode — the cloned frame lands, silence, then the robot.
+  if (ctx.pauseMs > 0) await new Promise((resolve) => setTimeout(resolve, ctx.pauseMs));
   if (isMuted()) return;
   await sayRobotic(ctx.answer);
   if (isMuted()) return;

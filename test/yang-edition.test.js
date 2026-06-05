@@ -46,3 +46,18 @@ describe("yang edition", () => {
     expect(typeof ed.fonts.body).toBe("string");
   });
 });
+
+// The spoken win reveal ("Congratulations — you found the word… {answer}") must ALWAYS
+// say the word: speakTemplated only routes the answer to the robot voice when the line
+// carries {answer}, so a reveal line without it would silently skip the announcement.
+describe("winReveal bank (the spoken announcement)", () => {
+  it("exists as a flat bank on the voice edition", () => {
+    const bank = getEdition("yang").companion?.lines?.winReveal;
+    expect(Array.isArray(bank)).toBe(true);
+    expect(bank.length).toBeGreaterThan(0);
+  });
+  it("every line contains {answer} — the robot must always say the word", () => {
+    const bank = getEdition("yang").companion?.lines?.winReveal ?? [];
+    for (const line of bank) expect(line).toContain("{answer}");
+  });
+});

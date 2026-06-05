@@ -91,6 +91,16 @@ export const edition = {
           "Look at you, suddenly a genius.",
         ],
       },
+      // The spoken WIN ANNOUNCEMENT — always played on a solve (daily + rooms), distinct
+      // from the `win` quips above (those stay written toasts). Every line MUST carry
+      // {answer}: speakTemplated splits on it so the word itself lands in the robot
+      // voice after a beat. Test-enforced in yang-edition.test.js.
+      winReveal: [
+        "Congratulations — you found the word, {answer}.",
+        "Congratulations, dear specimen. The word, of course, was {answer}.",
+        "You found it. The infamous word is {answer}.",
+        "Solved. For the record, the word was {answer}.",
+      ],
       loss: [
         "The word was {answer}. We'll cry together.",
         "Out of guesses, never out of charm.",

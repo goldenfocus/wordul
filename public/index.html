@@ -199,14 +199,27 @@
         <div id="lobbyRailList" class="lobby-rail-list"></div>
       </aside>
       <section id="dailyUnlock" class="daily-unlock" hidden>
-        <p class="daily-goody" id="dailyGoody"></p>
+        <!-- The Broadsheet reveal (design ritual winner, Jun 5 2026): kicker → the word as
+             a front-page serif headline → dictionary entry → minted credit. The word, the
+             entry, and the credit link ALL lead into the word's wiki page (/word/<word>).
+             Replaces the old #dailyGoody line; filled by renderDailyUnlock. -->
+        <div id="dailyReveal" class="daily-reveal" hidden>
+          <p class="daily-reveal-kicker" id="dailyRevealKicker"></p>
+          <a class="daily-reveal-word" id="dailyRevealWord"></a>
+          <a class="daily-reveal-entry" id="dailyRevealEntry"></a>
+          <p class="daily-reveal-credit">
+            <span class="daily-reveal-mint" id="dailyRevealMint" hidden></span>
+            <a class="daily-reveal-story" id="dailyRevealStory"></a>
+          </p>
+        </div>
         <!-- §B cash-out: an honest line-by-line breakdown of the minted gold (score → +N,
              daily +100, speed +X), populated by cashOutDaily once the server confirms the
              mint. Sums to me.goldAwarded; hidden until there's a confirmed positive mint. -->
         <ul class="daily-cashout" id="dailyCashout" hidden aria-live="polite"></ul>
         <article class="daily-story" id="dailyStory"></article>
         <div class="daily-bridge">
-          <a href="/" class="btn primary block daily-bridge-btn" id="dailyBridgeBtn"></a>
+          <button type="button" class="btn primary block daily-bridge-btn" id="dailyShareBtn"></button>
+          <a href="/" class="link daily-home-link" id="dailyHomeLink"></a>
           <a href="/daily/archive" class="link daily-bridge-link" id="dailyArchiveLink"></a>
         </div>
       </section>
