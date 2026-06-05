@@ -211,3 +211,7 @@ $("harmonyBtn").addEventListener("click", () => {
 // --- boot ---
 syncInputs();
 renderAll();
+
+// --- publish seam: forge the current draft into a published wordul ---
+import { publishWordul } from "/wordul-publish.js";
+document.getElementById("publish-wordul")?.addEventListener("click", () => publishWordul(vibe));
