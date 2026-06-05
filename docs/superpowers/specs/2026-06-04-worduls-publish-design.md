@@ -20,6 +20,20 @@ A **wordul** is a *world* — Gollum-era pun, "worlds" → "worduls". It is a **
 P1 ships the artifact, sharing, and **solo play**. 1v1 (P3) and arena (P4) reference the *same* world
 later with **no refactor**, because the world is stored independently of any single play session.
 
+### Naming reconciliation (resolves a 3-way clash)
+The codebase already uses "world" twice: `World` (`daily-core.ts`) is the daily-puzzle bundle, and
+`WorldDef` (`worlds.ts`) is the global **editions browser** at `/w/<slug>` (Jackpot, Arcade, …). The
+user-authored creation is a *third* thing, so it takes the brand name in code to stay unambiguous:
+
+| Concept | Code name | Lives at |
+|---|---|---|
+| Daily-puzzle bundle (a day's word+theme+story) | `World` | served to rooms by date |
+| Global themed editions/skins | `WorldDef` | `/w/<slug>` |
+| **User-authored published creation (this spec)** | **`Wordul`** in the **`Worduls` DO** | `/@you/<slug>`, gallery `/@you/worduls` |
+
+Throughout this doc, where earlier drafts said "Worlds DO"/`OwnedWorld`, read **`Worduls` DO** /
+**`Wordul`**. A `Wordul` *carries* a playable `World`-bundle subset; it is not a `World`.
+
 ---
 
 ## 2. The decomposition (context)
