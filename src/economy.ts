@@ -22,32 +22,53 @@ export function comboMultiplier(discoveries: number): number {
   return discoveries >= 2 ? 1 + (discoveries - 1) * 0.5 : 1;
 }
 
+// --- Time bonus (section C): a wall-clock speed reward, separate from the
+// per-guess speedPerGuessLeft bonus baked into pointsEarned. Linear decay from
+// SPEED_CAP at 0ms down to 0 once the window elapses; clamped to >= 0.
+export const SPEED_CAP = 500;
+export const SPEED_WINDOW_MS = 180000; // 3 minutes
+export function speedBonusPoints(elapsedMs: number): number {
+  return Math.max(0, Math.round(SPEED_CAP * (1 - elapsedMs / SPEED_WINDOW_MS)));
+}
+
 // 1st reuse of a dead letter = base, 2nd = 2x base, ...
 export function escalatedPenalty(base: number, reuseCount: number): number {
   return base * (Math.max(0, reuseCount) + 1);
 }
 
 // New discoveries in the LATEST guess — yellows first, then greens, ascending index.
-// Dup-safe: a color already seen at that index in an earlier guess is not re-counted.
+// NO DOUBLE-PAY (section D):
+//   • GREEN dedups by POSITION — a column pays its green once, even if a yellow→green
+//     upgrade lands there (the upgrade still earns, because that position was never green).
+//   • YELLOW dedups by LETTER — a yellow pays only if that LETTER wasn't already proven
+//     present (yellow OR green at any position) in a prior guess. A "moving" yellow that
+//     just relocates a known-present letter earns nothing.
 export function orderedDiscoveriesInLast(
   guesses: GuessRow[],
 ): { index: number; kind: "yellow" | "green"; letter: string }[] {
   if (!guesses || guesses.length === 0) return [];
   const last = guesses[guesses.length - 1];
   if (!last || !last.mask) return [];
-  const wasGreen = new Set<number>();
-  const wasYellow = new Set<number>();
+  const wasGreen = new Set<number>();        // positions already green
+  const provenPresent = new Set<string>();   // letters already proven present (yellow OR green)
   for (let g = 0; g < guesses.length - 1; g++) {
     const mask = guesses[g].mask || [];
+    const w = guesses[g].word || "";
     for (let i = 0; i < mask.length; i++) {
-      if (mask[i] === "green") wasGreen.add(i);
-      else if (mask[i] === "yellow") wasYellow.add(i);
+      if (mask[i] === "green") {
+        wasGreen.add(i);
+        provenPresent.add((w[i] || "").toUpperCase());
+      } else if (mask[i] === "yellow") {
+        provenPresent.add((w[i] || "").toUpperCase());
+      }
     }
   }
   const word = last.word || "";
   const out: { index: number; kind: "yellow" | "green"; letter: string }[] = [];
   for (let i = 0; i < last.mask.length; i++) {
-    if (last.mask[i] === "yellow" && !wasYellow.has(i)) out.push({ index: i, kind: "yellow", letter: word[i] });
+    if (last.mask[i] === "yellow" && !provenPresent.has((word[i] || "").toUpperCase())) {
+      out.push({ index: i, kind: "yellow", letter: word[i] });
+    }
   }
   for (let i = 0; i < last.mask.length; i++) {
     if (last.mask[i] === "green" && !wasGreen.has(i)) out.push({ index: i, kind: "green", letter: word[i] });
