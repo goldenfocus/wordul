@@ -99,6 +99,12 @@ function sayRobotic(text) {
     try {
       const u = roboticUtterance(text);
       u.addEventListener("end", resolve, { once: true });
+      // An utterance the engine drops (iOS) fires "error", not "end" — resolve on
+      // either so the reveal's await chain can't hang on a silent segment.
+      u.addEventListener("error", resolve, { once: true });
+      // iOS leaves the engine stuck "paused" after backgrounding; resume() is a no-op
+      // everywhere else and un-sticks it there.
+      window.speechSynthesis.resume?.();
       window.speechSynthesis.speak(u);
     } catch { resolve(); }
   });
