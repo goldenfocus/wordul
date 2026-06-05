@@ -197,7 +197,7 @@ export function paintEditionVars(el, id) {
   for (const [k, cssVar] of Object.entries(CARD_VARS)) {
     if (ed.palette[k] != null) el.style.setProperty(cssVar, ed.palette[k]);
   }
-  if (ed.fonts?.display) el.style.setProperty("--font-display", ed.fonts.display);
+  if (ed.fonts.display) el.style.setProperty("--font-display", ed.fonts.display);
   el.dataset.edition = ed.id;
 }
 

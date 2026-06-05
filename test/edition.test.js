@@ -214,6 +214,9 @@ describe("paintEditionVars — per-element edition chrome", () => {
     expect(el.style.getPropertyValue("--accent")).toBe(ed.palette.accent);
     expect(el.style.getPropertyValue("--bg-card")).toBe(ed.palette.bgCard);
     expect(el.style.getPropertyValue("--font-display")).toBe(ed.fonts.display);
+    expect(el.style.getPropertyValue("--fg")).toBe(ed.palette.fg);
+    expect(el.style.getPropertyValue("--border")).toBe(ed.palette.border);
+    expect(el.style.getPropertyValue("--muted")).toBe(ed.palette.muted);
     expect(el.dataset.edition).toBe("jackpot");
     // It must NOT mutate the global <html> default.
     expect(document.documentElement.dataset.edition === "jackpot").toBe(false);
