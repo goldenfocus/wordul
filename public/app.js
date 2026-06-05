@@ -1874,7 +1874,9 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) reco
 function send(msg) {
   if (game.ws && game.ws.readyState === WebSocket.OPEN) {
     game.ws.send(JSON.stringify(msg));
+    return true;
   }
+  return false;
 }
 
 // Pull the server-authoritative gold balance into the HUD cache. The server (USER
@@ -2757,11 +2759,21 @@ function render() {
   if (chatPanel) chatPanel.hidden = !showSocial;
   if (chatTopBtn) chatTopBtn.hidden = !showSocial;
   if (!showSocial) closeChatSheet();
-  // Reveal the Global/Table tabs whenever the panel is shown, and paint the active
-  // channel's body (placeholder vs. real log + input enable/disable).
+  // The Global/Table tabs + the Global "coming soon" placeholder are a LOBBY-ONLY
+  // affordance. Outside the lobby (an active 2-player race, or a finished daily) there's
+  // no Global channel — so hide the tabs and force the real table chat, or the Global
+  // default would hide #chatLog and disable #chatInput, silently breaking working chat.
   const chatTabs = $("#chatTabs");
-  if (chatTabs) chatTabs.hidden = !showSocial;
-  if (showSocial) renderChatChannel();
+  if (!showSocial) {
+    if (chatTabs) chatTabs.hidden = true;
+  } else if (inLobbyPhase) {
+    if (chatTabs) chatTabs.hidden = false;
+    renderChatChannel(); // respect the user's chosen Global/Table channel
+  } else {
+    if (chatTabs) chatTabs.hidden = true;
+    if (game.chatChannel !== "table") switchChatChannel("table"); // real log + enabled input
+    else renderChatChannel();
+  }
 
   // Immersive UI (C5): mid-play, the in-game header collapses to just avatar +
   // username + gold. Room name, ✎ rename, Share ↗, and the scoreboard hide while
@@ -2854,7 +2866,12 @@ function arrangeLobbyLayout(isLobby) {
     if (chat) right.appendChild(chat);          // chat on the right, under the floor
   } else {
     for (const el of [controls, rail, chat]) {
-      if (el && el._origParent) el._origParent.insertBefore(el, el._origNext);
+      if (el && el._origParent) {
+        // If the saved sibling has since detached (or moved out of the original parent),
+        // insertBefore would throw or misplace — fall back to append (ref = null).
+        const ref = el._origNext && el._origNext.parentNode === el._origParent ? el._origNext : null;
+        el._origParent.insertBefore(el, ref);
+      }
     }
   }
 }
@@ -2913,6 +2930,10 @@ function renderChat(snap) {
   // Capture "a genuinely new, meaningful table message arrived" BEFORE we mutate
   // lastChatLen — seeding existing history on first render has appended>0 too, so we
   // key the auto-pop on notifyCount (system join/quit or someone else's non-empty line).
+  // The FIRST render seeds room history (incl. the host's own "X joined" line) with
+  // lastChatLen 0, which would otherwise yank the solo host off the Global default
+  // immediately — so flag the initial seed and skip the auto-pop on it.
+  const isInitialSeed = game.lastChatLen === 0 && appended > 0;
   const hadNewTableMsg = notifyCount > 0;
   game.lastChatLen = chat.length;
   if (appended > 0) {
@@ -2928,7 +2949,7 @@ function renderChat(snap) {
   }
   // Auto-pop the Table tab on a new table message so it's not buried under the Global
   // placeholder. Only on a real new message (notifyCount), and only if not already there.
-  if (hadNewTableMsg && game.chatChannel !== "table") {
+  if (hadNewTableMsg && !isInitialSeed && game.chatChannel !== "table") {
     switchChatChannel("table");
   }
 }
@@ -3076,8 +3097,10 @@ function setLen(n) {
   const max = SUPPORTED_LENGTHS[SUPPORTED_LENGTHS.length - 1];
   const clamped = Math.max(min, Math.min(max, n));
   if (clamped === snap.wordLength) return;
-  setPreferredLength(clamped);
-  send({ type: "set_length", wordLength: clamped });
+  setPreferredLength(clamped); // remember the user's local pref regardless of socket state
+  // Only optimistically repaint the badge if the change actually went out. If the socket
+  // is down, leave the badge alone and let the next server snapshot drive it.
+  if (!send({ type: "set_length", wordLength: clamped })) return;
   const tbX = $("#tbX"); if (tbX) tbX.textContent = `×${triesFor(clamped)}`;
   const tbLetters = $("#tbLetters"); if (tbLetters) tbLetters.textContent = `${clamped} letters`;
 }
@@ -3107,6 +3130,14 @@ function wireTriesBadge() {
     if (!dragging) return;
     dragging = false;
     if (moved < 6) badge.classList.toggle("editing"); // a tap (no real drag) toggles edit mode
+    else badge.classList.remove("editing");           // a real drag closes the expanded UI
+  });
+  badge.addEventListener("pointercancel", () => {
+    // A cancelled gesture (e.g. iOS scroll takeover) must clear dragging, or the next
+    // pointermove would change the length unintentionally.
+    if (!dragging) return;
+    dragging = false;
+    badge.classList.remove("editing");
   });
   $("#tbMinus")?.addEventListener("click", (e) => { e.stopPropagation(); setLen(curLen() - 1); });
   $("#tbPlus")?.addEventListener("click", (e) => { e.stopPropagation(); setLen(curLen() + 1); });
