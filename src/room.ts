@@ -15,6 +15,8 @@ import { topDaily, fullDaily } from "./leaderboard-core.ts";
 import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
 import { activeDate } from "./daily-core.ts";
 import { countMask, maskToPattern, type ScienceBaseEvent, type ScienceEvent, type ScienceOutcome, type ScienceRoomKind } from "./science.ts";
+import { makeChallengeId } from "./challenge-core.ts";
+import { newTape, tapePush, type GhostTape } from "./ghost-core.ts";
 import {
   outpacedLosers,
   rematchReduce,
@@ -93,6 +95,9 @@ export class Room extends DurableObject<Env> {
   private state: RoomSnapshot;
   /** In-memory only — fine if hibernation wipes it; we just reset throttle. */
   private chatThrottle = new Map<string, number>();
+  /** Ghost tape for the current seeded round. In-memory only — a mid-race eviction
+   *  loses it (replay degrades to no ghosts); typing must never hammer DO storage. */
+  private tape: GhostTape | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -122,6 +127,7 @@ export class Room extends DurableObject<Env> {
       isDaily: false,
       story: null,
       challengeId: null,
+      shareChallengeId: null,
     };
     // Async restore — DO ctor can't await, so we kick it off and gate writes via blockConcurrencyWhile.
     ctx.blockConcurrencyWhile(async () => {
@@ -135,6 +141,7 @@ export class Room extends DurableObject<Env> {
         if (!restored.mode) restored.mode = DEFAULT_MODE;
         if (!restored.edition) restored.edition = "default"; // pre-theme rooms
         if (restored.isDaily === undefined) restored.isDaily = false;
+        if (restored.shareChallengeId === undefined) restored.shareChallengeId = null;
         for (const p of restored.players) {
           if (typeof p.points !== "number") p.points = 0;
           if (typeof p.pointsSpent !== "number") p.pointsSpent = 0;
@@ -315,6 +322,25 @@ export class Room extends DurableObject<Env> {
     }
   }
 
+  // A seeded room seats exactly 1 human — but its word is published as a challenge.
+  // Instead of a dead-end "room full", hand the visitor the challenge id: same word,
+  // the original field's ghosts, the host's score to beat. Falls back to the legacy
+  // error only when the mint failed or the race hasn't produced a host yet.
+  private sendArenaHandoffOrFull(ws: WebSocket): void {
+    const id = this.state.shareChallengeId;
+    const host = this.state.players.find((p) => !p.isBot);
+    if (!id || !host) {
+      this.send(ws, { type: "error", message: "room full" });
+      return;
+    }
+    this.send(ws, {
+      type: "arena_handoff",
+      challengeId: id,
+      host: host.username,
+      hostDone: host.status !== "playing" || this.state.phase === "finished",
+    });
+  }
+
   /** Read username from this WS's serialized attachment (survives hibernation). */
   private userFor(ws: WebSocket): string | null {
     try {
@@ -396,7 +422,7 @@ export class Room extends DurableObject<Env> {
     // else the `existing` lookup below would treat them as the bot reconnecting. Reject
     // before that lookup. (Review fix, defect 19.)
     if (this.state.seed && this.state.seed.personaIds.includes(username)) {
-      this.send(ws, { type: "error", message: "room full" });
+      this.sendArenaHandoffOrFull(ws);
       return;
     }
     // Auth seam (P0): if the client presented a session token, ask the owning User DO whether
@@ -423,9 +449,10 @@ export class Room extends DurableObject<Env> {
       existing.scienceOptOut = !!scienceOptOut;
       if (wasOffline) this.pushSystem(`${username} reconnected`);
     } else {
-      // Seeded room = exactly 1 persona (bot) + 1 human. Reject a 2nd distinct human.
+      // Seeded room = exactly 1 persona (bot) + 1 human. A 2nd distinct human gets
+      // handed the share challenge (same word + ghosts) instead of a dead-end.
       if (this.state.seed && this.state.players.some((p) => !p.isBot)) {
-        this.send(ws, { type: "error", message: "room full" });
+        this.sendArenaHandoffOrFull(ws);
         return;
       }
       if (!this.state.isDaily && this.state.players.length >= MAX_PLAYERS) {
@@ -512,15 +539,17 @@ export class Room extends DurableObject<Env> {
     }
     this.ensureBots();
     // Seeded Arena room: the instant a human is connected, FILL the remaining seats with bots
-    // (to capacity) and start the N-player race — no host "start" click, instant GO!. runStart
-    // closes the room out of the open index (a human committed; the 1-human cap rejects a 2nd).
+    // (to capacity) and enter the 3-2-1 — the countdown alarm flips the race live through
+    // runStart (the duel machinery, reused; the client overlay keys off the phase). Delist
+    // from the open index NOW: a human committed; the 1-human cap hands off any 2nd visitor.
     if (
       this.state.seed &&
       this.state.phase === "lobby" &&
       this.state.players.some((p) => !p.isBot && p.connected)
     ) {
       this.ensureBots(this.state.seed.capacity);
-      await this.runStart("arena");
+      this.closeArena();
+      await this.beginCountdown();
     }
     // Public human Arena room: list it in the open index while it waits in the lobby.
     // runStart/finishGame close it. Best-effort; a refresh just re-asserts the listing.
@@ -723,6 +752,27 @@ export class Room extends DurableObject<Env> {
       this.state.word = pool.answers[Math.floor(Math.random() * pool.answers.length)] ?? null;
     }
     if (!this.state.word) return false;
+    // Seeded Arena: publish this round's word as a challenge so a late visitor to the
+    // shared link races the same word (+ the field's ghost tape, filed at finish).
+    // Awaited — the handoff path needs the id now — but a mint hiccup only costs the
+    // late-visitor experience; the race itself starts regardless.
+    if (this.state.seed && !this.state.challengeId) {
+      this.state.shareChallengeId = null;
+      const host = this.state.players.find((p) => !p.isBot)?.username ?? this.state.owner;
+      const id = makeChallengeId();
+      try {
+        const cs = this.env.CHALLENGE.get(this.env.CHALLENGE.idFromName(id));
+        const res = await cs.fetch(new Request("https://do/", {
+          method: "POST",
+          body: JSON.stringify({ id, word: this.state.word, wordLength: this.state.wordLength, owner: host, ownerScore: "", ownerGrid: [] }),
+          headers: { "content-type": "application/json" },
+        }));
+        if (res.ok) this.state.shareChallengeId = id;
+        else console.error("share-challenge mint non-ok", res.status);
+      } catch (e) { console.error("share-challenge mint failed", (e as Error).message); }
+      this.tape = newTape(this.state.wordLength, this.state.maxGuesses,
+        this.state.players.map((p) => ({ username: p.username, host: !p.isBot })));
+    }
     this.state.phase = "playing";
     this.state.winner = null;
     this.state.startedAt = Date.now();
@@ -807,7 +857,7 @@ export class Room extends DurableObject<Env> {
   private async goLive(): Promise<void> {
     const goAt = this.state.goAt;
     this.state.goAt = null;
-    const ok = await this.runStart(this.state.throne?.username ?? "the duel");
+    const ok = await this.runStart(this.state.seed ? "arena" : (this.state.throne?.username ?? "the duel"));
     if (ok) {
       if (goAt) { this.state.startedAt = goAt; await this.persistAndBroadcast(); }
     } else {
@@ -901,6 +951,9 @@ export class Room extends DurableObject<Env> {
     if (!player || player.status !== "playing") return;
     const n = Number.isFinite(lenRaw) ? Math.floor(lenRaw) : 0;
     const len = Math.max(0, Math.min(this.state.wordLength, n));
+    if (this.tape && this.state.seed && this.state.startedAt) {
+      tapePush(this.tape, { t: this.tapeT(Date.now()), u: username, k: "typing", len });
+    }
     const payload = JSON.stringify({ type: "typing", username, len } satisfies ServerMessage);
     for (const other of this.ctx.getWebSockets()) {
       if (other === ws) continue; // never echo a player their own typing
@@ -920,6 +973,9 @@ export class Room extends DurableObject<Env> {
     const bot = this.state.players.find((p) => p.username === username);
     if (!bot || !bot.isBot || bot.status !== "playing") return;
     const n = Math.max(0, Math.min(this.state.wordLength, Math.floor(len)));
+    if (this.tape && this.state.seed && this.state.startedAt) {
+      tapePush(this.tape, { t: this.tapeT(Date.now()), u: username, k: "typing", len: n });
+    }
     const payload = JSON.stringify({ type: "typing", username, len: n } satisfies ServerMessage);
     for (const ws of this.ctx.getWebSockets()) {
       try { ws.send(payload); } catch { /* socket may be closing; ignore */ }
@@ -968,10 +1024,16 @@ export class Room extends DurableObject<Env> {
     } else if (player.guesses.length >= this.state.maxGuesses) {
       player.status = "lost";
     }
+    if (this.tape && this.state.seed && this.state.startedAt) {
+      tapePush(this.tape, { t: this.tapeT(now), u: player.username, k: "guess", mask, status: player.status });
+    }
     this.emitAcceptedGuess(player, mask, now);
     if (priorStatus === "playing" && player.status !== "playing") {
       player.finishedAt = now;
       this.emitPlayerFinished(player, player.status === "won" ? "won" : "lost", now);
+      if (this.tape && this.state.seed && this.state.startedAt) {
+        tapePush(this.tape, { t: this.tapeT(now), u: player.username, k: "finish", status: player.status === "won" ? "won" : "lost", guesses: player.guesses.length });
+      }
     }
     // First solve ends the race for everyone (live, non-daily rooms — Arena AND
     // Friends). Flip the still-playing others to `lost` so they carry a real status
@@ -985,18 +1047,33 @@ export class Room extends DurableObject<Env> {
           other.status = "lost";
           if (other.finishedAt == null) other.finishedAt = now;
           this.emitPlayerFinished(other, "lost", now);
+          if (this.tape && this.state.seed && this.state.startedAt) {
+            tapePush(this.tape, { t: this.tapeT(now), u: other.username, k: "finish", status: "lost", guesses: other.guesses.length });
+          }
         }
       }
     }
-    if (this.state.challengeId && (player.status === "won" || player.status === "lost") && !player.isBot) {
+    // Post the finished human's result: to the pinned challenge this room is PLAYING
+    // (challengeId), or to the challenge this seeded room PUBLISHED (shareChallengeId).
+    const cid = this.state.challengeId ?? this.state.shareChallengeId;
+    if (cid && (player.status === "won" || player.status === "lost") && !player.isBot) {
       const solved = player.status === "won";
       const score = solved ? `${player.guesses.length}/${this.state.maxGuesses}` : `X/${this.state.maxGuesses}`;
-      const cs = this.env.CHALLENGE.get(this.env.CHALLENGE.idFromName(this.state.challengeId));
+      const cs = this.env.CHALLENGE.get(this.env.CHALLENGE.idFromName(cid));
       this.ctx.waitUntil(cs.fetch(new Request("https://do/attempt", {
         method: "POST",
         body: JSON.stringify({ username: player.username, score, solved, guesses: player.guesses.length }),
         headers: { "content-type": "application/json" },
       })));
+      // Seeded share-challenge: the human IS the challenge owner — stamp their real
+      // result + color grid onto the card late visitors see.
+      if (cid === this.state.shareChallengeId) {
+        this.ctx.waitUntil(cs.fetch(new Request("https://do/owner-result", {
+          method: "POST",
+          body: JSON.stringify({ ownerScore: score, ownerGrid: encodeSolveGrid(player.guesses) }),
+          headers: { "content-type": "application/json" },
+        })));
+      }
     }
     await this.afterPlayerStatus(player);
   }
@@ -1357,6 +1434,11 @@ export class Room extends DurableObject<Env> {
     return this.state.startedAt ? Math.max(0, now - this.state.startedAt) : null;
   }
 
+  /** Tape clock: ms since GO (startedAt is aligned to goAt by goLive). */
+  private tapeT(at: number): number {
+    return Math.max(0, at - (this.state.startedAt ?? at));
+  }
+
   private emitScience(event: ScienceEvent): void {
     const stub = this.env.SCIENCE.get(this.env.SCIENCE.idFromName(event.date));
     this.ctx.waitUntil(
@@ -1473,6 +1555,16 @@ export class Room extends DurableObject<Env> {
         const result = this.state.winner === p.username ? "w" : "l";
         for (const personaId of personaIds) this.writeH2H(p.username, personaId, result);
       }
+    }
+    // Seeded Arena: file the race's ghost tape with the share challenge so late
+    // visitors race the original field in replay. The DO is first-write-wins, so a
+    // re-entry can't double-file; best-effort like every other post-finish write.
+    if (this.state.seed && this.state.shareChallengeId && this.tape && this.tape.events.length) {
+      const cs = this.env.CHALLENGE.get(this.env.CHALLENGE.idFromName(this.state.shareChallengeId));
+      const body = JSON.stringify({ ghosts: this.tape });
+      this.ctx.waitUntil(cs.fetch(new Request("https://do/tape", {
+        method: "POST", body, headers: { "content-type": "application/json" },
+      })).catch((e) => console.error("tape file failed", (e as Error).message)));
     }
     // Backstop: ensure a finished seeded room is gone from the open index (close-on-join
     // already removed it; close is idempotent in arena-core).
