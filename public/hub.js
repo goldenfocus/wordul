@@ -3,6 +3,8 @@
 // shared icon set in hub-glyphs.js. This file orchestrates the shell + topbar stats.
 import { GLYPH } from "/hub-glyphs.js";
 import { dayTheme, renderDailyCard, wireDailyCard } from "/daily-card.js";
+import { featuredWorlds } from "/worlds.js";
+import { renderWorldCard } from "/world-card.js";
 
 // Re-exported for back-compat: app.js and tests import dayTheme from here.
 export { dayTheme };
@@ -74,6 +76,13 @@ function renderDaily() {
       </div>
     </section>
 
+    <section class="hub-worlds" aria-label="Worlds">
+      <div class="hub-worlds-head">
+        <span class="section-label">Worlds</span>
+      </div>
+      <div class="worlds-strip" id="worldsStrip"></div>
+    </section>
+
     <section class="daily-recent" id="dailyRecent" hidden>
       <span class="section-label">Recent</span>
       <ul id="hubRoomList" class="room-list"></ul>
@@ -103,6 +112,28 @@ function wireDaily() {
   if (pvp && hubCallbacks.onPvP) pvp.addEventListener("click", () => hubCallbacks.onPvP());
   const arena = document.getElementById("modeArena");
   if (arena && hubCallbacks.onArena) arena.addEventListener("click", () => hubCallbacks.onArena());
+
+  const strip = document.getElementById("worldsStrip");
+  if (strip) {
+    strip.textContent = "";
+    for (const w of featuredWorlds()) {
+      const card = renderWorldCard(w);
+      card.addEventListener("click", (e) => {
+        if (hubCallbacks.onWorld) { e.preventDefault(); hubCallbacks.onWorld(w.slug); }
+      });
+      strip.appendChild(card);
+    }
+    // Trailing "Browse all →" card → /worlds theater.
+    const all = document.createElement("a");
+    all.id = "worldsBrowseAll";
+    all.className = "world-card world-card-more";
+    all.href = "/worlds";
+    all.textContent = "Browse all →";
+    all.addEventListener("click", (e) => {
+      if (hubCallbacks.onBrowseWorlds) { e.preventDefault(); hubCallbacks.onBrowseWorlds(); }
+    });
+    strip.appendChild(all);
+  }
 
   const recent = document.getElementById("dailyRecent");
   const list = document.getElementById("hubRoomList");

@@ -265,6 +265,8 @@ function renderHomeIdentity() {
       onStats: () => navigate("/daily/" + todayUTC() + "/stats"),
       onShareDaily: () => shareDailyResult(cbs.dailyResult),
       onProfile: (name) => navigate("/@" + name),
+      onWorld: (slug) => navigate("/w/" + slug),
+      onBrowseWorlds: () => navigate("/worlds"),
       fetchLeaderboard: (username) =>
         fetch(`/api/daily/${todayUTC()}/leaderboard?username=${encodeURIComponent(username)}`)
           .then((r) => (r.ok ? r.json() : null))

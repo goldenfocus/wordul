@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHub, homeTypeLetter } from "../public/hub.js";
 import { fmtDuration } from "../public/daily-card.js";
+import { featuredWorlds } from "../public/worlds.js";
 
 // Minimal DOM the hub render touches (topbar stat glyphs + the mount points).
 function setupDom() {
@@ -171,6 +172,16 @@ describe("hub home (redesign)", () => {
     // Row selection unchanged — stopPropagation prevented the row swap.
     expect(adaRow.classList.contains("is-selected")).toBe(true);
     expect(yanRow.classList.contains("is-selected")).toBe(false);
+  });
+  it("renders a Worlds strip with a card per featured World + a Browse-all card", () => {
+    renderHub({ gold: 0, stats: { currentStreak: 0 } }, makeCallbacks());
+    const strip = document.getElementById("worldsStrip");
+    expect(strip).toBeTruthy();
+    // `.world-card:not(.world-card-more)` counts only the per-World themed cards,
+    // excluding the "Browse all →" card which also carries .world-card for Task 7 CSS.
+    const cards = strip.querySelectorAll(".world-card:not(.world-card-more)");
+    expect(cards.length).toBe(featuredWorlds().length);
+    expect(document.getElementById("worldsBrowseAll")).toBeTruthy();
   });
 });
 
