@@ -8,6 +8,7 @@ import { makeChallengeId } from "./challenge-core.ts";
 import type { Env } from "./types.ts";
 import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts";
 import { isWordPage, slugFor, wordOfTheDay, ANSWER_WORDS } from "./words.ts";
+import { getWorld, listWorlds } from "./worlds.ts";
 import { WordStats } from "./wordstats-do.ts";
 import { activeDate } from "./daily-core.ts";
 import type { World } from "./daily-core.ts";
@@ -430,11 +431,23 @@ export default {
       return env.ASSETS.fetch(new Request(`${url.origin}/words.html`));
     }
 
-    // World pages (/w/<slug>): serve the SPA shell; the client router renders the
-    // World and applies its skin. (No wrangler SPA fallback — see wrangler.jsonc.)
-    // SEO meta injection is added in Plan 2.
-    if (WORLD_RE.test(url.pathname)) {
-      return env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+    // World pages (/w/<slug>): SPA shell with per-World SEO meta. Unknown slug still
+    // serves the shell (the client router redirects to /worlds), with default meta.
+    const worldMatch = url.pathname.match(WORLD_RE);
+    if (worldMatch) {
+      const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+      const world = getWorld(worldMatch[1]);
+      const canonical = `${url.origin}/w/${worldMatch[1]}`;
+      const title = world ? `${world.name} — Wordul` : "Worlds — Wordul";
+      const desc = world ? world.blurb : "Browse themed Worlds on Wordul.";
+      return new HTMLRewriter()
+        .on('[data-meta="title"]', new TextSetter(title))
+        .on('[data-meta="og:title"]', new AttrSetter("content", title))
+        .on('[data-meta="description"]', new AttrSetter("content", desc))
+        .on('[data-meta="og:description"]', new AttrSetter("content", desc))
+        .on('[data-meta="canonical"]', new AttrSetter("href", canonical))
+        .on('[data-meta="og:url"]', new AttrSetter("content", canonical))
+        .transform(shell);
     }
 
     // Arena lobby (/arena): a real, refresh-survivable client route. Serve the SPA shell
@@ -445,9 +458,19 @@ export default {
       return env.ASSETS.fetch(new Request(url.origin + "/index.html"));
     }
 
-    // The Worlds theater (/worlds): serve the SPA shell; client renders the tabbed wall.
+    // The Worlds theater (/worlds): SPA shell + browse meta.
     if (url.pathname === "/worlds") {
-      return env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+      const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+      const title = "Browse Worlds — Wordul";
+      const desc = "Pick a World and play — themed places to race the same word.";
+      return new HTMLRewriter()
+        .on('[data-meta="title"]', new TextSetter(title))
+        .on('[data-meta="og:title"]', new AttrSetter("content", title))
+        .on('[data-meta="description"]', new AttrSetter("content", desc))
+        .on('[data-meta="og:description"]', new AttrSetter("content", desc))
+        .on('[data-meta="canonical"]', new AttrSetter("href", `${url.origin}/worlds`))
+        .on('[data-meta="og:url"]', new AttrSetter("content", `${url.origin}/worlds`))
+        .transform(shell);
     }
 
     // Profile + room + challenge pages: serve SPA shell with per-route meta injected.
@@ -475,6 +498,8 @@ async function sitemap(env: Env, origin: string): Promise<Response> {
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
 
+  urls.push(origin + "/worlds");
+  for (const w of listWorlds()) urls.push(`${origin}/w/${w.slug}`);
   urls.push(origin + "/words");
   // Word-wiki pages. Emit ALPHABETICALLY — iterating ANSWER_WORDS in pool order would
   // leak the secret answer-pool ordering (the daily answer is answers[fnv1a(date)%len]
