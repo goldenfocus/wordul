@@ -49,6 +49,11 @@ describe("newYellowsInLast", () => {
   it("ignores greens", () => {
     expect(newYellowsInLast([g("CRANE", [G, G, X, X, X])])).toBe(0);
   });
+  it("does not re-pay a moving yellow (letter already proven present)", () => {
+    // R proven present in guess1; relocating it in guess2 earns no new yellow.
+    const guesses = [g("CRANE", [X, Y, X, X, X]), g("RUMBA", [Y, X, X, X, X])];
+    expect(newYellowsInLast(guesses)).toBe(0);
+  });
 });
 
 describe("orderedDiscoveriesInLast", () => {
@@ -84,10 +89,10 @@ describe("orderedDiscoveriesInLast", () => {
       { index: 3, kind: "green", letter: "E" },
     ]);
   });
-  it("excludes yellows already discovered at that position in an earlier guess", () => {
+  it("excludes a yellow whose LETTER was already proven present in an earlier guess", () => {
     const guesses = [
-      g("CRANE", [Y, X, X, X, X]),   // col 0 yellow
-      g("COVEN", [Y, X, Y, X, X]),   // col 0 already yellow; col 2 is NEW
+      g("CRANE", [Y, X, X, X, X]),   // C proven present (yellow)
+      g("COVEN", [Y, X, Y, X, X]),   // C already present (dropped); V is NEW
     ];
     expect(orderedDiscoveriesInLast(guesses)).toEqual([
       { index: 2, kind: "yellow", letter: "V" },
@@ -101,6 +106,33 @@ describe("orderedDiscoveriesInLast", () => {
       { index: 0, kind: "green", letter: "S" },
     ]);
   });
+  // REGRESSION (F6): the client discovery list must match the SERVER mint
+  // (src/economy.ts) so the hacker-log never shows a line the server never paid.
+  // The server dedups yellows BY LETTER (a known-present letter relocating earns
+  // nothing); the client used to dedup BY POSITION and re-paid "moving" yellows,
+  // surfacing phantom "yellow X" lines that the authoritative mint never produced.
+  describe("no double-pay parity with the server mint (src/economy.ts)", () => {
+    it("CRANE → CRANK: guess2 yields ONLY the new green K (no phantom yellow, no re-paid greens)", () => {
+      const guesses = [g("CRANE", [G, G, G, G, X]), g("CRANK", [G, G, G, G, G])];
+      expect(orderedDiscoveriesInLast(guesses)).toEqual([
+        { index: 4, kind: "green", letter: "K" },
+      ]);
+    });
+    it("a moving yellow letter pays its yellow ONCE, not again at a new position", () => {
+      // R yellow at pos1 in guess1 (letter proven present). In guess2 R just relocates
+      // to pos0 — the server pays nothing; the client must NOT log a phantom yellow R.
+      const guesses = [g("CRANE", [X, Y, X, X, X]), g("RUMBA", [Y, X, X, X, X])];
+      expect(orderedDiscoveriesInLast(guesses)).toEqual([]);
+    });
+    it("a yellow letter that later lands green still pays its green (position never green)", () => {
+      // R yellow pos1 guess1 (present). guess2 BREAD: R green at pos1 → new green pays.
+      const guesses = [g("CRANE", [X, Y, X, X, X]), g("BREAD", [X, G, X, X, X])];
+      expect(orderedDiscoveriesInLast(guesses)).toEqual([
+        { index: 1, kind: "green", letter: "R" },
+      ]);
+    });
+  });
+
   it("matches newGreensInLast / newYellowsInLast counts (invariant)", () => {
     const fixtures = [
       [g("CRANE", [Y, X, X, G, X])],
