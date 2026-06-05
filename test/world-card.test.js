@@ -3,6 +3,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { getWorld } from "/worlds.js";
 import { renderWorldCard, pushRecentWorld, getRecentWorldSlugs } from "/world-card.js";
 
+beforeEach(() => localStorage.clear());
+
 describe("renderWorldCard", () => {
   it("builds an anchor to /w/<slug> painted in the World's edition, name via textContent", () => {
     const world = getWorld("jackpot");
@@ -15,11 +17,14 @@ describe("renderWorldCard", () => {
     // XSS-safe: name is text, not parsed HTML.
     expect(el.querySelector(".world-card-name").textContent).toBe("Jackpot");
   });
+
+  it("returns null for a missing world (never throws)", () => {
+    expect(renderWorldCard(null)).toBe(null);
+    expect(() => renderWorldCard(undefined)).not.toThrow();
+  });
 });
 
 describe("recent Worlds store", () => {
-  beforeEach(() => localStorage.clear());
-
   it("pushes most-recent-first, dedupes, and caps the list", () => {
     pushRecentWorld("jackpot");
     pushRecentWorld("arcade");

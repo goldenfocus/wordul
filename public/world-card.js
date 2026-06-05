@@ -8,6 +8,7 @@ import { paintEditionVars } from "/edition.js";
 // Build one card as an <a> to /w/<slug>, painted in the World's skin. Name via
 // textContent (XSS-safe; Plan 3 makes World names admin-editable).
 export function renderWorldCard(world) {
+  if (!world) return null;
   const a = document.createElement("a");
   a.className = "world-card";
   a.href = `/w/${world.slug}`;
