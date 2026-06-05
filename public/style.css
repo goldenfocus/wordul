@@ -3087,14 +3087,56 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
    (WON/OUT status badges still land at the exact recorded finish times.)
    The .ghost/.ghost-cursor tile rules for live typing pulses remain (earlier in file). */
 /* ───────────────────────────────────────────────────────────────────────────
-   Neon Floor lobby (Task 7b) — ported from /tmp/lobby-neon-floor-v2.html.
+   Aurora Flow lobby — ported from /tmp/lobby-aurora-flow.html.
+   A large soft aurora slowly rotates/morphs behind the lobby; panels are flat,
+   translucent + blurred with small (5–6px) corners; controls are square-ish (no
+   pill radii); glow appears only on hover/active, not as a constant neon outline.
    Every prototype hex is remapped onto the app's theme vars so all 7 editions
-   (incl. the light Tin-Bot) survive. The prototype's "dark text on the accent
-   chip/button" (#06120c) maps to var(--bg): on a dark theme that's near-black
-   on the bright accent; on Tin-Bot it's the light page bg on the dark-green
-   accent — correct contrast either way. Pure-black shadows / #fff glows are
-   kept verbatim (decorative, theme-agnostic — matches existing CSS).
+   (incl. the light Tin-Bot) survive. color-mix tints follow the existing pattern.
    ─────────────────────────────────────────────────────────────────────────── */
+
+/* 0 ── Aurora backdrop — LOBBY ONLY ─────────────────────────────────────────
+   Fixed, full-bleed, behind everything (z-index:0). Hidden (opacity:0) by
+   default; body.lobby fades it in, so it vanishes the instant a round starts.
+   The room is the stacking context (position:relative) and the lobby content
+   is lifted to z-index:1 so nothing the player touches is ever covered. */
+.screen.room { position: relative; }
+.lobby-aura {
+  position: fixed; inset: -50vmax; z-index: 0;
+  pointer-events: none; opacity: 0;
+  transition: opacity 0.5s ease;
+}
+body.lobby .lobby-aura { opacity: 1; }
+.lobby-aura span { position: fixed; pointer-events: none; }
+.lobby-aura .lobby-aura-a {
+  inset: -50vmax; opacity: 0.5; filter: blur(90px) saturate(1.1);
+  background: conic-gradient(from 120deg at 35% 40%,
+    color-mix(in oklab, var(--accent) 50%, transparent),
+    transparent 30%,
+    color-mix(in oklab, var(--warm) 30%, transparent) 55%,
+    transparent 75%,
+    color-mix(in oklab, var(--accent) 40%, transparent));
+  animation: lobby-aura-spin 34s linear infinite;
+}
+.lobby-aura .lobby-aura-b {
+  inset: -40vmax; opacity: 0.34; filter: blur(70px);
+  background: radial-gradient(40vmax 30vmax at 70% 65%,
+    color-mix(in oklab, var(--accent) 40%, transparent), transparent 60%);
+  animation: lobby-aura-drift 22s ease-in-out infinite alternate;
+}
+@keyframes lobby-aura-spin { to { transform: rotate(360deg) scale(1.05); } }
+@keyframes lobby-aura-drift { 50% { transform: translate(-4%, 3%) scale(1.1); } }
+/* Lift the real lobby content above the aura. */
+body.lobby .lobby-bar,
+body.lobby #roomTabs,
+body.lobby #tabPlay,
+body.lobby #chatPanel { position: relative; z-index: 1; }
+/* Reduced motion: freeze the aura (still visible, just static). Dual-guard. */
+@media (prefers-reduced-motion: reduce) {
+  .lobby-aura .lobby-aura-a, .lobby-aura .lobby-aura-b { animation: none; }
+}
+body.reduced-motion .lobby-aura .lobby-aura-a,
+body.reduced-motion .lobby-aura .lobby-aura-b { animation: none !important; }
 
 /* 1 ── Two-zone layout, gated to the lobby phase ────────────────────────────
    Default (NOT lobby): the wrappers vanish from the box tree so #boards and the
@@ -3125,6 +3167,12 @@ body.lobby .lobby-right {
    (JS already sets #roomTabs.hidden; this is belt-and-suspenders.) */
 body.lobby .lobby-bar .room-info { display: none; }
 body.lobby #roomTabs { display: none; }
+/* The lobby header is a translucent blurred panel (prototype .bar). */
+body.lobby .lobby-bar {
+  background: color-mix(in oklab, var(--bg-card) 55%, transparent);
+  border-color: color-mix(in oklab, var(--fg) 8%, var(--border));
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+}
 /* #lobbyControls is reparented into .lobby-left — center it and give the Start
    button the prototype's full-width "deal" feel. Scoped to body.lobby so the
    global .btn.primary is untouched everywhere else. */
@@ -3133,21 +3181,33 @@ body.lobby .lobby-left .lobby-controls {
   width: 100%; max-width: 320px;
 }
 body.lobby .lobby-left .lobby-controls .btn.primary {
-  width: 100%; height: 50px; font-size: 17px;
+  width: 100%; height: 50px; font-size: 16px;
+  border: none; border-radius: 5px; color: var(--bg);
+  font-family: var(--font-display); font-weight: 700;
+  background: linear-gradient(135deg, var(--accent),
+    color-mix(in oklab, var(--warm) 45%, var(--accent)));
+  box-shadow: 0 14px 40px -18px var(--accent);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+body.lobby .lobby-left .lobby-controls .btn.primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+body.lobby .lobby-left .lobby-controls .btn.primary:disabled {
+  opacity: 0.6; transform: none;
 }
 
 /* 6 ── Header icon buttons (share / gear). They share .icon-btn; add only the
    square-iconbtn look from the prototype's .iconbtn. */
 .room-icon-btn {
-  width: 38px; height: 38px; padding: 0;
-  border: 1px solid var(--border); border-radius: 11px;
+  width: 36px; height: 36px; padding: 0;
+  border: 1px solid color-mix(in oklab, var(--fg) 10%, transparent); border-radius: 5px;
   display: inline-grid; place-items: center;
   background: transparent; color: var(--fg);
-  transition: border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+  transition: border-color 0.16s ease, color 0.16s ease, background 0.16s ease;
 }
 .room-icon-btn:hover {
   border-color: var(--accent); color: var(--accent);
-  background: transparent; transform: translateY(-1px);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
 }
 /* Hide the room-chrome icons in the immersive playing view, like the room name. */
 body.playing .room-icon-btn { display: none; }
@@ -3156,21 +3216,21 @@ body.playing .room-icon-btn { display: none; }
 .tries-badge {
   position: relative;
   display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 12px 10px; min-width: 96px;
-  border: 1px solid transparent; border-radius: 14px;
+  padding: 10px 16px; min-width: 96px;
+  border: 1px solid transparent; border-radius: 5px;
   cursor: ns-resize; user-select: none; -webkit-user-select: none;
   touch-action: none; /* drag adjusts length — must not scroll the page */
-  transition: border-color 0.16s ease, background 0.16s ease;
+  transition: background 0.16s ease;
 }
 .tries-badge:hover, .tries-badge.editing {
-  border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
-  background: color-mix(in oklab, var(--accent) 7%, transparent);
+  background: radial-gradient(120% 130% at 50% 0,
+    color-mix(in oklab, var(--accent) 16%, transparent), transparent);
 }
 .tries-badge.locked { opacity: 0.55; cursor: default; }
 .tries-badge .tb-x {
   font-family: var(--font-display); font-weight: 700;
-  font-size: 40px; line-height: 0.95; color: var(--accent);
-  text-shadow: 0 0 18px color-mix(in oklab, var(--accent) 45%, transparent);
+  font-size: 42px; line-height: 0.95; color: var(--accent);
+  text-shadow: 0 0 24px color-mix(in oklab, var(--accent) 40%, transparent);
 }
 .tries-badge.bump .tb-x { animation: tb-bump 0.2s; }
 @keyframes tb-bump { 50% { transform: scale(1.18); } }
@@ -3185,15 +3245,15 @@ body.playing .room-icon-btn { display: none; }
 .tries-badge.editing .tb-lethint { height: 15px; opacity: 1; margin-top: 3px; }
 .tries-badge .tb-pm {
   position: absolute; top: 50%; transform: translateY(-50%);
-  width: 26px; height: 26px; border-radius: 50%;
+  width: 24px; height: 24px; border-radius: 50%;
   border: 1px solid var(--accent); background: var(--bg-card); color: var(--accent);
-  font-size: 16px; font-weight: 700; line-height: 1; padding-bottom: 2px;
+  font-size: 15px; font-weight: 700; line-height: 1; padding-bottom: 2px;
   display: grid; place-items: center; cursor: pointer;
   opacity: 0; pointer-events: none; transition: opacity 0.16s ease;
 }
 .tries-badge.editing .tb-pm { opacity: 1; pointer-events: auto; }
-.tries-badge .tb-minus { left: -14px; }
-.tries-badge .tb-plus  { right: -14px; }
+.tries-badge .tb-minus { left: -10px; }
+.tries-badge .tb-plus  { right: -10px; }
 .tries-badge .tb-pm:active { transform: translateY(-50%) scale(0.88); }
 
 /* 3 ── Your table seat strip ───────────────────────────────────────────────*/
@@ -3202,16 +3262,13 @@ body.playing .room-icon-btn { display: none; }
   display: flex; align-items: center; gap: 12px;
   border-top: 1px solid var(--border); padding-top: 16px;
 }
-.mytable-lab {
-  font-size: 10.5px; font-weight: 700; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.12em;
-  white-space: nowrap; line-height: 1.15;
-}
+/* Label trimmed to glyphs+count (aria-label="Your table" carries the meaning). */
+.mytable-lab { display: none; }
 /* Capacity is up to 8 — wrap so seats never overflow on mobile. */
-.mytable-seats { display: flex; flex-wrap: wrap; gap: 7px; flex: 1; }
+.mytable-seats { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
 .seat {
-  width: 32px; height: 32px; flex: none;
-  border-radius: 9px; display: grid; place-items: center; font-size: 16px;
+  width: 30px; height: 30px; flex: none;
+  border-radius: 5px; display: grid; place-items: center; font-size: 15px;
 }
 .seat.you {
   background: linear-gradient(135deg, var(--accent), var(--warm));
@@ -3234,9 +3291,28 @@ body.playing .room-icon-btn { display: none; }
   font-size: 11px; font-weight: 600; color: var(--muted);
   padding: 2px 4px 8px;
 }
+/* In lobby the floor is a translucent blurred panel in the right zone (prototype
+   .panel): the bare top-border base is replaced with a small-corner card. */
+body.lobby .lobby-rail {
+  position: relative; z-index: 1;
+  margin: 0; max-width: none;
+  border: 1px solid color-mix(in oklab, var(--fg) 7%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--bg-card) 60%, transparent);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  padding: 14px 12px 12px;
+}
 /* Cap the floor's scroll height so a busy arena scrolls instead of growing. */
 body.lobby .lobby-rail .lobby-rail-list,
 body.lobby #lobbyRailList { max-height: 248px; overflow: auto; }
+/* Floor rows: small radius + soft hover glow (prototype .t / .t.hot) instead of
+   the heavy neon outline. The .is-hot pulse is softened to a single warm glow. */
+body.lobby .arena-row { border-radius: 5px; }
+body.lobby .arena-row.is-hot {
+  border-color: color-mix(in oklab, var(--warm) 50%, transparent);
+  box-shadow: 0 0 30px -16px var(--warm);
+  animation: none;
+}
 
 /* 5 ── Chat tabs (Global / Table) — no prior CSS; ported from .tabs/.tab. */
 .chat-tabs { display: flex; gap: 4px; padding: 12px 14px 0; }
@@ -3274,15 +3350,17 @@ body.lobby #lobbyRailList { max-height: 248px; overflow: auto; }
    otherwise a fixed bottom sheet — pin it back in-flow so it sits in #lobbyRight and
    scrolls internally. Scoped to body.lobby so non-lobby (sheet) chat is untouched. */
 body.lobby #chatPanel {
-  position: static;
+  position: relative;
   transform: none;
   width: 100%;
   max-width: none;
   max-height: 320px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  border-radius: 6px;
+  border: 1px solid color-mix(in oklab, var(--fg) 7%, var(--border));
+  background: color-mix(in oklab, var(--bg-card) 60%, transparent);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   box-shadow: none;
-  z-index: auto;
+  z-index: 1;
   pointer-events: auto;
 }
 body.lobby #chatLog { max-height: 200px; }

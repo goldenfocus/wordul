@@ -152,6 +152,7 @@
 
 <template id="tpl-room">
   <section class="screen room">
+    <div class="lobby-aura" aria-hidden="true"><span class="lobby-aura-a"></span><span class="lobby-aura-b"></span></div>
     <div class="lobby-bar">
       <!-- The name IS the share: tap it to copy the room link. Rename + invite still
            live in the avatar hub; length + theme in the gear. Three things only. -->
@@ -207,12 +208,12 @@
           <div id="boards" class="boards"></div>
           <div class="tries-badge" id="triesBadge" hidden>
             <button class="tb-pm tb-minus" id="tbMinus" tabindex="-1" aria-label="Fewer letters">−</button>
-            <span class="tb-x" id="tbX">×6</span><small>tries</small>
+            <span class="tb-x" id="tbX">×6</span>
             <span class="tb-lethint" id="tbLetters">5 letters</span>
             <button class="tb-pm tb-plus" id="tbPlus" tabindex="-1" aria-label="More letters">+</button>
           </div>
-          <div class="mytable" id="myTable" hidden>
-            <span class="mytable-lab">Your table</span>
+          <div class="mytable" id="myTable" hidden aria-label="Your table">
+            <span class="mytable-lab"></span>
             <div class="mytable-seats" id="myTableSeats"></div>
             <span class="mytable-cnt" id="myTableCount">1/2</span>
           </div>
@@ -227,7 +228,7 @@
       <!-- Civ-3 lobby: while you wait, watch other open games fill up and defect into a
            hotter one. Mounted only during the lobby phase (app.js); polls /api/arena/open. -->
       <aside id="lobbyRail" class="lobby-rail" hidden>
-        <h3 class="lobby-rail-title">Other tables filling up</h3>
+        <h3 class="lobby-rail-title">Tables</h3>
         <div id="lobbyRailList" class="lobby-rail-list"></div>
       </aside>
       <section id="dailyUnlock" class="daily-unlock" hidden>
