@@ -802,11 +802,13 @@ async function showChallenge(id) {
     navigate("/");
     return;
   }
-  // Ghost tape (arena-published challenges only): the original field's replay. A miss
-  // or fetch hiccup just means a plain solo challenge — never a blocker.
+  // Ghost tape: a filed arena tape, OR (?vs=<sender> on a word challenge) the sender's
+  // stored run re-cut server-side — the dual-replay half of a wiki share. A miss or
+  // fetch hiccup just means a plain solo challenge — never a blocker.
+  const vs = normalizeVs(new URLSearchParams(location.search).get("vs"));
   let ghosts = null;
   try {
-    const gr = await fetch(`/api/challenge/${id}/ghosts`);
+    const gr = await fetch(`/api/challenge/${id}/ghosts${vs ? `?vs=${encodeURIComponent(vs)}` : ""}`);
     if (gr.ok) ghosts = (await gr.json()).ghosts;
   } catch { /* plain challenge — no ghosts */ }
   // Stand up the room view (same engine; challenge chrome instead of owner/slug).
@@ -816,7 +818,12 @@ async function showChallenge(id) {
   game.owner = meta.owner;
   game.slug = null;
   game.path = null;
-  game.name = `@${meta.owner}'s challenge`;
+  // A word challenge fronts as its sender ("@papa's challenge") when the link names
+  // one; bare word links read as what they are — the word's open challenge.
+  const isWordChallenge = meta.kind === "word";
+  game.name = isWordChallenge
+    ? (vs ? `@${vs}'s challenge` : "Word challenge")
+    : `@${meta.owner}'s challenge`;
   game.snapshot = null;
   game.pending = "";
   game.hasShownEndStats = false;
@@ -844,6 +851,13 @@ async function showChallenge(id) {
 
   if (game.ghostTape) {
     showGhostReadyOverlay();
+  } else if (isWordChallenge) {
+    // "@wordul is racing it right now" would be nonsense — the word's open challenge
+    // speaks for its record (or dares you to set it).
+    const target = meta.record
+      ? `@${meta.record.username} holds the record at ${meta.record.score}. Beat it.`
+      : `Set the first record.`;
+    toast(`${vs ? `@${vs} challenges you` : "A word challenge"} — ${target}`, { duration: 4200 });
   } else {
     const target = meta.record
       ? `${meta.record.username} holds the record at ${meta.record.score}`
@@ -853,6 +867,13 @@ async function showChallenge(id) {
     toast(`Challenge from @${meta.owner} — ${target}. Beat it.`, { duration: 4200 });
   }
   connectChallenge(id);
+}
+
+// A shared username from a query param — same charset as real usernames; anything
+// odd collapses to "" (no ghost lookup, no weird names in toasts).
+function normalizeVs(raw) {
+  const v = (raw || "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 20);
+  return v.length >= 3 ? v : "";
 }
 
 // No-username gate for a challenge link — pick a name, then resolve the challenge.
@@ -1144,10 +1165,10 @@ async function shareRoomInvite() {
   // A challenge view shares its own /c/<id>; a seeded arena room shares the challenge
   // it published (works for unlimited friends, with ghost replay) — never a null slug.
   const cid = game.challengeId || (game.snapshot && game.snapshot.shareChallengeId);
-  const inviteUrl = shareTargetUrl({
+  const inviteUrl = withMyVs(shareTargetUrl({
     origin: location.origin, challengeId: game.challengeId,
     shareChallengeId: game.snapshot?.shareChallengeId, owner: game.owner, slug: game.slug,
-  });
+  }));
   if (typeof navigator.share === "function") {
     try {
       await navigator.share({
@@ -1169,6 +1190,15 @@ async function shareRoomInvite() {
   }
 }
 
+// On a WORD challenge (the canonical per-word leaderboard), my share carries ?vs=me
+// so MY friend races MY ghost — the /c/<id> is shared by everyone; vs personalizes
+// the replay. Other links (rooms, personal challenges) pass through untouched.
+function withMyVs(url) {
+  if (game.challengeMeta?.kind !== "word") return url;
+  const u = getUsername();
+  return u ? `${url}?vs=${encodeURIComponent(u)}` : url;
+}
+
 // Render the room name. The name IS the share affordance — tapping it copies the
 // room link. Rename + invite live in the avatar hub now (nothing lost, just moved).
 function renderRoomHeader() {
@@ -1187,10 +1217,10 @@ function renderRoomHeader() {
 async function copyRoomLink() {
   // Same rule as shareRoomInvite: challenge views and seeded arena rooms hand out
   // their /c/<id> link (regression: this used to mint "/@papa/null" in a challenge).
-  const url = shareTargetUrl({
+  const url = withMyVs(shareTargetUrl({
     origin: location.origin, challengeId: game.challengeId,
     shareChallengeId: game.snapshot?.shareChallengeId, owner: game.owner, slug: game.slug,
-  });
+  }));
   try {
     await navigator.clipboard.writeText(url);
     toast("Link copied ✓", { duration: 1200 });
@@ -4229,7 +4259,7 @@ async function prepareShareCard() {
     } catch { /* offline / mint failed — the card falls back to a plain link below */ }
   }
   const cardUrl = challengeId
-    ? `${location.origin}/c/${challengeId}`
+    ? withMyVs(`${location.origin}/c/${challengeId}`)
     : shareTargetUrl({ origin: location.origin, owner: game.owner, slug: game.slug });
 
   // The card draws ONLY the color grid (no letters, no answer) — the model is the
@@ -4257,10 +4287,10 @@ async function shareResult() {
   // no tappable way in. A bare url AirDrops as a real link and unfurls an OG preview
   // in iMessage/WhatsApp. The pretty card lives behind "Save card" instead.
   const img = game.shareImage;
-  const url = img?.url ?? shareTargetUrl({
+  const url = img?.url ?? withMyVs(shareTargetUrl({
     origin: location.origin, challengeId: game.challengeId,
     shareChallengeId: game.snapshot?.shareChallengeId, owner: game.owner, slug: game.slug,
-  });
+  }));
   const text = img?.text ?? "Race me on Wordul!";
   if (navigator.share) {
     try {

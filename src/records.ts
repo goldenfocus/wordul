@@ -47,6 +47,23 @@ export function encodeSolveWords(rows: { word?: string }[]): string[] {
   return (rows ?? []).map((r) => String(r?.word ?? "").toUpperCase());
 }
 
+// Pure: the run that becomes a player's ghost for a given word — their proudest one.
+// Best win (fewest guesses, earliest finish breaks ties), else the most recent run.
+// Only runs WITH a solveGrid qualify (no grid → nothing to replay). Server-side only:
+// it reads the private `word` field that toPublicGame() strips.
+export function bestGameForWord(games: GameRecord[], word: string): GameRecord | null {
+  const w = word.toUpperCase();
+  const played = (games ?? []).filter((g) => g.word === w && Array.isArray(g.solveGrid) && g.solveGrid.length > 0);
+  if (played.length === 0) return null;
+  const wins = played.filter((g) => g.result === "won");
+  if (wins.length > 0) {
+    wins.sort((a, b) => a.guesses - b.guesses || a.finishedAt - b.finishedAt);
+    return wins[0];
+  }
+  played.sort((a, b) => b.finishedAt - a.finishedAt);
+  return played[0];
+}
+
 type FinishedPlayer = { username: string; status: "won" | "lost" | "playing"; guesses: number };
 
 const outcome = (s: FinishedPlayer["status"]): GameOutcome => (s === "won" ? "won" : "lost");

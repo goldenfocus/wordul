@@ -5,7 +5,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.ts";
 import type { ChallengeState, ChallengeAttempt } from "./challenge-core.ts";
-import { toMeta, computeRecord, ghostsOf, sanitizeGhosts } from "./challenge-core.ts";
+import { toMeta, computeRecord, ghostsOf, sanitizeGhosts, addAttempt } from "./challenge-core.ts";
 import type { GhostTape } from "./ghost-core.ts";
 
 export class Challenge extends DurableObject<Env> {
@@ -43,10 +43,14 @@ export class Challenge extends DurableObject<Env> {
       const state = await this.load();
       if (!state) return new Response("not found", { status: 404 });
       const a = (await req.json()) as Omit<ChallengeAttempt, "at">;
-      state.attempts.push({ ...a, at: Date.now() });
-      if (state.attempts.length > 500) state.attempts = state.attempts.slice(-500);
-      await this.ctx.storage.put("state", state);
-      return Response.json({ record: computeRecord(state.attempts) });
+      // One-shot scoring: a username's FIRST run is their attempt forever — a repeat
+      // is practice (acknowledged, never scored). Keeps "beat my 3/6" honest.
+      const repeat = addAttempt(state.attempts, { ...a, at: Date.now() });
+      if (!repeat) {
+        if (state.attempts.length > 500) state.attempts = state.attempts.slice(-500);
+        await this.ctx.storage.put("state", state);
+      }
+      return Response.json({ record: computeRecord(state.attempts), repeat });
     }
 
     // File the original race's ghost tape. First write wins — a rematch round minting a

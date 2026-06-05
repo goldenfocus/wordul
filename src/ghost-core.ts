@@ -36,3 +36,39 @@ export function tapePush(tape: GhostTape, ev: GhostEvent): void {
   if (last && ev.t < last.t) ev.t = last.t;
   tape.events.push(ev);
 }
+
+// Re-cut a stored solveGrid ("g"/"y"/"x" rows, the profile's colors-only record) into a
+// cadence-paced ghost tape — the dual-replay half of a wiki word challenge. No commit
+// times survive in a GameRecord, so pacing is synthetic (same constants as the client's
+// owner-tape). Masks only, like every tape. Malformed rows → null, never a corrupt tape.
+const CELL_COLOR: Record<string, Color> = { g: "hot", y: "warm", x: "cold" };
+const FIRST_GUESS_MS = 4500;
+const GAP_MS = 7000;
+
+export function tapeFromSolveGrid(args: {
+  username: string;
+  wordLength: number;
+  maxGuesses: number;
+  solveGrid: string[];
+  won: boolean;
+}): GhostTape | null {
+  const { username, wordLength, maxGuesses, solveGrid, won } = args;
+  if (!Array.isArray(solveGrid) || solveGrid.length === 0 || solveGrid.length > maxGuesses) return null;
+  const tape = newTape(wordLength, maxGuesses, [{ username, host: true }]);
+  let t = 0;
+  for (let i = 0; i < solveGrid.length; i++) {
+    const row = solveGrid[i];
+    if (typeof row !== "string" || row.length !== wordLength) return null;
+    const mask: Color[] = [];
+    for (const cell of row) {
+      const c = CELL_COLOR[cell];
+      if (!c) return null;
+      mask.push(c);
+    }
+    t += i === 0 ? FIRST_GUESS_MS : GAP_MS;
+    const last = i === solveGrid.length - 1;
+    tapePush(tape, { t, u: username, k: "guess", mask, status: last ? (won ? "won" : "lost") : "playing" });
+  }
+  tapePush(tape, { t, u: username, k: "finish", status: won ? "won" : "lost", guesses: solveGrid.length });
+  return tape;
+}

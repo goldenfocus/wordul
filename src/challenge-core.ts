@@ -22,6 +22,7 @@ export type ChallengeState = {
   createdAt: number;
   attempts: ChallengeAttempt[];
   ghosts?: GhostTape;  // original race's replay tape (masks only); absent on plain challenges
+  kind?: "word";       // canonical per-word leaderboard challenge (wiki CTA) vs a personal share
 };
 
 export type ChallengeMeta = {
@@ -31,6 +32,8 @@ export type ChallengeMeta = {
   ownerGrid: string[][];
   wordLength: number;
   record: ChallengeRecord;
+  kind?: "word";
+  attempts: number;    // scored attempts so far (one per username) — the wiki "N raced it"
 };
 
 const B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -39,6 +42,25 @@ export function makeChallengeId(rng: () => number = Math.random): string {
   let id = "";
   for (let i = 0; i < 5; i++) id += B62[Math.floor(rng() * B62.length)];
   return id;
+}
+
+// Deterministic id for a word's CANONICAL challenge (its public leaderboard), from a
+// hash digest of the word. Opaque on purpose: /c/OCEAN would spoil the answer; a
+// hash-derived id spoils nothing. Pure over bytes so it's unit-testable — the worker
+// supplies crypto.subtle.digest("SHA-256", "word:<WORD>") bytes.
+export function wordChallengeIdFromBytes(bytes: Uint8Array): string {
+  let id = "";
+  for (let i = 0; i < 5; i++) id += B62[bytes[i] % B62.length];
+  return id;
+}
+
+// One-shot scoring: a username's FIRST attempt is their attempt, forever — repeats
+// return true and change nothing. This keeps "beat my 3/6" honest: nobody quietly
+// re-rolls until the record falls. Mutates `attempts` in place (DO storage style).
+export function addAttempt(attempts: ChallengeAttempt[], a: ChallengeAttempt): boolean {
+  if (attempts.some((x) => x.username === a.username)) return true;
+  attempts.push(a);
+  return false;
 }
 
 export function computeRecord(attempts: ChallengeAttempt[]): ChallengeRecord {
@@ -57,6 +79,8 @@ export function toMeta(state: ChallengeState): ChallengeMeta {
     ownerGrid: state.ownerGrid,
     wordLength: state.wordLength,
     record: computeRecord(state.attempts),
+    kind: state.kind,
+    attempts: state.attempts.length,
   };
 }
 

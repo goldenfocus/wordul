@@ -4,7 +4,8 @@ import { Challenge } from "./challenge.ts";
 import { Daily } from "./daily.ts";
 import { Science } from "./science-object.ts";
 import { Arena } from "./arena.ts";
-import { makeChallengeId } from "./challenge-core.ts";
+import { makeChallengeId, wordChallengeIdFromBytes } from "./challenge-core.ts";
+import { tapeFromSolveGrid } from "./ghost-core.ts";
 import type { Env } from "./types.ts";
 import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts";
 import { isWordPage, slugFor, wordOfTheDay, ANSWER_WORDS } from "./words.ts";
@@ -38,6 +39,13 @@ export function rateLimitDecision(count: number, limit: number): { allow: boolea
 // already encode the scope (e.g. `rl:claim:<ip>`); `windowSec` is the bucket lifetime.
 // Counter is get-then-put (not atomic): a concurrent burst can undercount — fine for a
 // best-effort deterrent (the DO is the real auth boundary), not an exact quota.
+// The canonical challenge id for a word — SHA-256 keeps it opaque (no word in the URL),
+// deterministic so every wiki visitor lands on the same per-word leaderboard.
+async function wordChallengeId(word: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`word:${word.toUpperCase()}`));
+  return wordChallengeIdFromBytes(new Uint8Array(digest));
+}
+
 async function rateLimit(env: Env, key: string, limit: number, windowSec: number): Promise<boolean> {
   try {
     const raw = await env.DIRECTORY.get(key);
@@ -155,6 +163,35 @@ export default {
       });
     }
 
+    // Canonical per-word challenge (the word's public leaderboard, wiki CTA):
+    // GET /api/word/<word>/challenge → { id, record, attempts, wordLength }.
+    // The id is hash-derived (opaque — /c/OCEAN would spoil the answer); the DO is
+    // minted lazily with the reserved owner "wordul" and kind:"word".
+    if (url.pathname.startsWith("/api/word/") && url.pathname.endsWith("/challenge") && req.method === "GET") {
+      const word = decodeURIComponent(
+        url.pathname.slice("/api/word/".length, -"/challenge".length),
+      ).toUpperCase();
+      if (!isWordPage(word)) return new Response("not found", { status: 404 });
+      const id = await wordChallengeId(word);
+      const stub = env.CHALLENGE.get(env.CHALLENGE.idFromName(id));
+      let res = await stub.fetch(new Request("https://do/meta", { method: "GET" }));
+      if (res.status === 404) {
+        await stub.fetch(new Request("https://do/", {
+          method: "POST",
+          body: JSON.stringify({
+            id, word, wordLength: word.length,
+            owner: "wordul", ownerScore: "", ownerGrid: [], kind: "word",
+          }),
+          headers: { "content-type": "application/json" },
+        }));
+        res = await stub.fetch(new Request("https://do/meta", { method: "GET" }));
+      }
+      return new Response(res.body, {
+        status: res.status,
+        headers: { "content-type": "application/json", "cache-control": "public, max-age=60" },
+      });
+    }
+
     // Daily leaderboard JSON API: /api/daily/<YYYY-MM-DD>/leaderboard?username=<u>
     // Proxies to the day's single Room DO (keyed exactly like the /ws daily room).
     const dailyLb = url.pathname.match(/^\/api\/daily\/(\d{4}-\d{2}-\d{2})\/leaderboard$/);
@@ -192,11 +229,36 @@ export default {
       return stub.fetch(new Request("https://do/meta", { method: "GET" }));
     }
 
-    // Challenge ghost tape (no word): GET /api/challenge/<id>/ghosts
+    // Challenge ghost tape (no word): GET /api/challenge/<id>/ghosts[?vs=<username>]
+    // ?vs= is the dual-replay half of a wiki word challenge: when the DO has no filed
+    // tape, the sender's stored run for this word (colors only) is re-cut into a ghost
+    // on the fly — so each shared link races ITS challenger on one shared leaderboard.
     const ghostsMatch = url.pathname.match(/^\/api\/challenge\/([0-9A-Za-z]{5})\/ghosts$/);
     if (ghostsMatch && req.method === "GET") {
       const stub = env.CHALLENGE.get(env.CHALLENGE.idFromName(ghostsMatch[1]));
-      return stub.fetch(new Request("https://do/ghosts", { method: "GET" }));
+      const res = await stub.fetch(new Request("https://do/ghosts", { method: "GET" }));
+      const vs = normalizeUsername(url.searchParams.get("vs") ?? "");
+      if (!vs || !res.ok) return res;
+      const filed = (await res.json()) as { ghosts: unknown };
+      if (filed.ghosts) return Response.json(filed); // a real recorded tape beats a synth
+      try {
+        // Server→server only: the pinned word never reaches the client on this path.
+        const wr = await stub.fetch(new Request("https://do/word", { method: "GET" }));
+        if (!wr.ok) return Response.json({ ghosts: null });
+        const { word, wordLength } = (await wr.json()) as { word: string; wordLength: number };
+        const gr = await env.USER.get(env.USER.idFromName(vs)).fetch(
+          new Request(`https://do/game-for-word?username=${encodeURIComponent(vs)}&word=${encodeURIComponent(word)}`, { method: "GET" }),
+        );
+        if (!gr.ok) return Response.json({ ghosts: null });
+        const game = (await gr.json()) as { found: boolean; won: boolean; solveGrid: string[] };
+        if (!game.found) return Response.json({ ghosts: null });
+        const tape = tapeFromSolveGrid({
+          username: vs, wordLength, maxGuesses: 6, solveGrid: game.solveGrid, won: game.won,
+        });
+        return Response.json({ ghosts: tape });
+      } catch {
+        return Response.json({ ghosts: null }); // a ghost hiccup never blocks the challenge
+      }
     }
 
     // Sitemap from the directory.

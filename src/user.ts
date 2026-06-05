@@ -6,7 +6,7 @@ import { healProfile, freshProfile, applyH2H } from "./user-core.ts";
 import { publicProfile, makePassphrase, canClaim, addSession, revokeSession, touchSession, projectDirectory, validatePassphraseShape } from "./account-core.ts";
 import { hashPassphrase, verifyPassphrase, mintToken, hashToken, secureIndex } from "./account-crypto.ts";
 import { activeDate } from "./daily-core.ts";
-import type { GameRecord } from "./records.ts";
+import { bestGameForWord, type GameRecord } from "./records.ts";
 import type { LedgerPart } from "./economy.ts";
 
 const HISTORY_CAP = 100;
@@ -36,6 +36,23 @@ export class User extends DurableObject<Env> {
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const username = url.searchParams.get("username") ?? "";
+
+    // INTERNAL (worker→DO only, no public route): the run that becomes this user's
+    // ghost for a word — reads the private `word` field that publicProfile strips.
+    // Returns colors only (solveGrid masks); letters never leave the DO through here.
+    if (req.method === "GET" && url.pathname.endsWith("/game-for-word")) {
+      const word = url.searchParams.get("word") ?? "";
+      const profile = await this.load(username);
+      const game = bestGameForWord(profile.games, word);
+      if (!game) return Response.json({ found: false });
+      return Response.json({
+        found: true,
+        won: game.result === "won",
+        guesses: game.guesses,
+        solveGrid: game.solveGrid,
+        score: `${game.result === "won" ? game.guesses : "X"}/6`,
+      });
+    }
 
     if (req.method === "GET" && !url.pathname.endsWith("/account/me")) {
       const profile = await this.load(username);

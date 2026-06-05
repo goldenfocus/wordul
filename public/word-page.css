@@ -21,11 +21,14 @@ html, .wp { overflow-x:clip; } /* belt-and-braces: no lateral scroll on mobile (
 .wp-rel p a { margin-right:0; }
 .wp-faq details { border-top:1px solid #2a2a2c; padding:8px 0; }
 .wp-faq summary { cursor:pointer; }
-/* Two CTAs: Play stays the loud one; "Continue with AI" is its ghost sibling.
-   Flex-wrap so the pair stacks on narrow phones instead of widening the page. */
+/* Three CTAs: Play stays the loud one; "Continue with AI" is its ghost sibling;
+   "Challenge a friend" (JS-injected) is the gold dare — the word's blind-race link.
+   Flex-wrap so they stack on narrow phones instead of widening the page. */
 .wp-cta { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; margin-top:40px; }
 .wp-play { display:inline-block; background:var(--hot); color:#fff; padding:12px 24px; border-radius:8px; text-decoration:none; font-weight:700; }
 .wp-ai { display:inline-block; border:1px solid var(--hot); color:var(--hot); padding:11px 23px; border-radius:8px; text-decoration:none; font-weight:700; }
+.wp-challenge { display:inline-block; border:1px solid #f0c14b; color:#f0c14b; padding:11px 23px; border-radius:8px; text-decoration:none; font-weight:700; }
+.wp-record { margin-top:10px; font-weight:700; color:#f0c14b; }
 
 /* Meanings — numbered senses with italic examples + a small register tag. */
 .wp-senses ol { margin:6px 0 0; padding-left:22px; }
