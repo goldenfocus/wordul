@@ -1,15 +1,18 @@
 {
-  // Wrangler config for the deployed Worker "wordle-race".
-  // Reconciled with the VERIFIED Cloudflare API config (the authority for what is LIVE):
-  //   compatibility_date 2026-04-25, compatibility_flags ["nodejs_compat"],
-  //   bindings ASSETS (assets ./public) + ROOM (durable_object_namespace, class "Room"),
-  //   migration tag v1 -> new_classes ["Room"].
+  // Wrangler config for the deployed Worker "wordul".
+  //
+  // RENAME (2026-06-05): the worker was renamed from the legacy "wordle-race" to
+  // "wordul" so the Cloudflare dashboard (worker + every <name>_<Class> DO namespace)
+  // matches the wordul.com brand. A Cloudflare worker that owns Durable Objects can't
+  // be renamed in place — deploying under the new name stands up a FRESH worker with
+  // BRAND-NEW, EMPTY DO namespaces. This was a deliberate clean cutover (no live data
+  // to preserve), NOT a data-migrating transfer. Cutover runbook: see COLONY.md.
+  // The old "wordle-race" worker + its (orphaned) namespaces are deleted after cutover.
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "wordle-race",
-  // Worker name is an internal Cloudflare id (it hosts all the Durable Objects, so
-  // it CANNOT be renamed without orphaning every user/room/stat). The only public
-  // leak of the legacy "wordle" name was the auto subdomain wordle-race.*.workers.dev
-  // — disabled here so prod is served only from the custom domain wordul.com.
+  "name": "wordul",
+  // workers_dev disabled so prod is served only from the custom domain wordul.com
+  // (no <name>.*.workers.dev subdomain). preview_urls stay on for smoke-testing the
+  // fresh worker before the domain is moved onto it.
   "workers_dev": false,
   "preview_urls": true,
   "main": "src/worker.ts",
@@ -27,8 +30,9 @@
       {
         "name": "ROOM",
         "class_name": "Room"
-        // Live namespace_id on the deployed script: 4948d60bb9274d829a7ef1d49f3bf1c1
-        // (managed by wrangler; do NOT hardcode it here).
+        // namespace_id is managed by wrangler (do NOT hardcode it here). The fresh
+        // "wordul" worker gets a new namespace_id; the legacy wordle-race id
+        // (4948d60bb9274d829a7ef1d49f3bf1c1) is retired with the old worker.
       },
       {
         "name": "USER",
@@ -79,14 +83,17 @@
     "binding": "AI"
   },
 
-  // The live Room DO uses the KV-style storage API (ctx.storage.get("state") /
-  // ctx.storage.put("state", ...) + getAlarm) and Hibernatable WebSockets
-  // (acceptWebSocket / serializeAttachment), NOT SQLite storage. So the
-  // verified migration is "new_classes", NOT "new_sqlite_classes".
+  // Room uses the KV-style storage API (ctx.storage.get("state") / put("state", ...)
+  // + getAlarm) and Hibernatable WebSockets (acceptWebSocket / serializeAttachment) —
+  // both of which work on SQLite-backed namespaces. On the legacy wordle-race worker
+  // Room was "new_classes" (grandfathered before the free-plan rule). The fresh
+  // "wordul" worker creates Room from scratch, so it MUST be new_sqlite_classes like
+  // every other class — a NEW namespace on the free plan that is new_classes fails the
+  // deploy with err 10097 (dry-run won't catch it; only a real deploy does).
   "migrations": [
     {
       "tag": "v1",
-      "new_classes": ["Room"]
+      "new_sqlite_classes": ["Room"]
     },
     {
       // Free plan requires NEW DO namespaces to be SQLite-backed. The User DO uses the
@@ -133,12 +140,13 @@
     "enabled": true
   }
 
-  // DIVERGENCE (transcript vs live):
-  //  - The build-session transcript (f04) wrangler.jsonc used
-  //    "new_sqlite_classes" for the migration; the verified API config uses
-  //    "new_classes" (matching the KV-style storage the live code actually uses).
-  //    "new_classes" is authoritative and is what is written above.
-  //  - The transcript also declared a production route + SPA asset handling:
+  // HISTORY (legacy wordle-race worker):
+  //  - On wordle-race, Room's v1 migration was "new_classes" (it predated the
+  //    free-plan rule that all NEW namespaces be SQLite-backed). That is no longer
+  //    relevant: the fresh "wordul" worker creates Room as new_sqlite_classes above,
+  //    consistent with every other class.
+  //  - The original build transcript also declared a production route + SPA asset
+  //    handling that were never confirmed against the live API config:
   //      "routes": [{ "pattern": "wordle.goldenfoc.us/*", "zone_name": "goldenfoc.us" }],
   //      "assets": { ..., "not_found_handling": "single-page-application" }
   //    These are NOT confirmed by the verified API config (workers/domains was

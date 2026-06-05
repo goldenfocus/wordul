@@ -3894,7 +3894,7 @@ async function shareResult() {
   }
   // Desktop fallback: download the card image + copy the room link.
   if (img?.canvas) {
-    downloadCanvas(img.canvas, "wordle-race.png");
+    downloadCanvas(img.canvas, "wordul.png");
     try {
       await navigator.clipboard.writeText(img.url);
       toast("Card saved · link copied — go invite someone!", { duration: 2800 });
