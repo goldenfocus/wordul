@@ -1890,6 +1890,11 @@ function onServerMessage(msg) {
     // Ghost race verdict: my finish vs the host ghost's recorded finish — one toast,
     // the moment my status flips. Time is the tiebreak story; guesses break a same-time tie.
     if (game.ghostTape && me && prevMe && prevMe.status === "playing" && me.status !== "playing" && game.ghostT0 != null) {
+      // Same rule as a live room: the first solve ends the race for EVERYONE. My win
+      // freezes the tape and flips still-racing ghosts to OUT (recorded finishes that
+      // already replayed stay as they happened). A bust leaves the field racing — just
+      // like spectating after going out in a real room.
+      if (me.status === "won") endGhostRaceOnMyWin();
       const hf = hostFinish(game.ghostTape);
       if (hf) {
         const myMs = Date.now() - game.ghostT0;
@@ -2985,6 +2990,19 @@ function resetGhostReplay() {
   game.ghostTape = null;
   game.ghostT0 = null;
   game.ghostPlayers = [];
+}
+
+// My solve ends the ghost race (mirrors the live room's first-solve-ends-all rule):
+// stop the tape clock and flip every still-racing ghost to OUT. Mutates the grafted
+// ghost objects in place — the snapshot render that triggered this paints the result.
+function endGhostRaceOnMyWin() {
+  clearTimeout(ghostTimer);
+  ghostTimer = null;
+  for (const g of game.ghostPlayers || []) {
+    if (g.status === "playing") g.status = "lost";
+    g.typingLen = 0;
+    game.typing.delete(g.username);
+  }
 }
 
 // Tap-armed start for a ghost challenge: the field waits, dimmed, behind a single
