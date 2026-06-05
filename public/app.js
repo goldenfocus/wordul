@@ -20,6 +20,7 @@ import { computeDailyStatsView, computeRosterView } from "/daily-stats.js";
 import { fmtDuration, goldValue } from "/daily-card.js";
 import { computeFeedStreamView, computeFeedPostView } from "/feed.js";
 import { EDITIONS, getEdition } from "/editions/index.js";
+import { ghostPlayersAt, nextEventAfter, hostFinish } from "/ghost-replay.js";
 import { dramaUpdate, dramaStop } from "/drama.js";
 import { MODES, isAvailableMode } from "/modes.js";
 import { getWorld, worldSlugFromPath, listWorlds, featuredWorlds } from "/worlds.js";
@@ -739,6 +740,7 @@ function showRoom(owner, slug) {
   game.lastGuessCounts = new Map();
   game.typing = new Map();
   game.autoStart = false;
+  resetGhostReplay(); // no ghost field carries into a fresh room
   game.publicArena = false; // never carry a public-host intent into the next room
   // Arena origin: the pending flag (set at entry) OR a sessionStorage marker (survives a
   // mid-game refresh, which loses the in-memory flag). Persist it so a reload still resolves
@@ -795,6 +797,13 @@ async function showChallenge(id) {
     navigate("/");
     return;
   }
+  // Ghost tape (arena-published challenges only): the original field's replay. A miss
+  // or fetch hiccup just means a plain solo challenge — never a blocker.
+  let ghosts = null;
+  try {
+    const gr = await fetch(`/api/challenge/${id}/ghosts`);
+    if (gr.ok) ghosts = (await gr.json()).ghosts;
+  } catch { /* plain challenge — no ghosts */ }
   // Stand up the room view (same engine; challenge chrome instead of owner/slug).
   leaveRoom();
   game.challengeId = id;
@@ -811,7 +820,11 @@ async function showChallenge(id) {
   game.chatCollapsed = false;
   game.lastGuessCounts = new Map();
   game.typing = new Map();
-  game.autoStart = true; // challenge boards go live immediately — no lobby ceremony
+  resetGhostReplay();
+  game.ghostTape = ghosts && Array.isArray(ghosts.events) && ghosts.events.length ? ghosts : null;
+  // A plain challenge keeps the instant board; a GHOST challenge arms a tap — the tap
+  // is the start gun (and, later, the browser audio-unlock gesture for voice replays).
+  game.autoStart = !game.ghostTape;
   game.roomTab = "play";
   game.shareImage = null;
   game.replay = [];
@@ -823,10 +836,16 @@ async function showChallenge(id) {
   wireRoomTabs();
   buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
 
-  const target = meta.record
-    ? `${meta.record.username} holds the record at ${meta.record.score}`
-    : `@${meta.owner} scored ${meta.ownerScore}`;
-  toast(`Challenge from @${meta.owner} — ${target}. Beat it.`, { duration: 4200 });
+  if (game.ghostTape) {
+    showGhostReadyOverlay();
+  } else {
+    const target = meta.record
+      ? `${meta.record.username} holds the record at ${meta.record.score}`
+      : meta.ownerScore
+        ? `@${meta.owner} scored ${meta.ownerScore}`
+        : `@${meta.owner} is racing it right now`;
+    toast(`Challenge from @${meta.owner} — ${target}. Beat it.`, { duration: 4200 });
+  }
   connectChallenge(id);
 }
 
@@ -1792,6 +1811,11 @@ function onServerMessage(msg) {
   if (msg.type === "snapshot") {
     const prev = game.snapshot;
     game.snapshot = msg.room;
+    // Ghost race: a server snapshot only ever carries the solo player — re-graft the
+    // ghost field so renders between replay ticks never drop the opponents.
+    if (game.ghostPlayers && game.ghostPlayers.length) {
+      game.snapshot.players = [...msg.room.players, ...game.ghostPlayers];
+    }
     // Daily finisher token: the server hands it ONLY to a viewer who's completed today.
     // Stash it per-date so the home recap can unlock everyone's letter-boards. Never sent
     // to a still-playing client, so it can't leak today's answer.
@@ -1852,10 +1876,26 @@ function onServerMessage(msg) {
       triggerStartCelebration();
       resetIdle();
       armGiveUpTimer(); // 💀 give-up only unlocks 3 min into the round
+      // Ghost race: GO is t=0 — the original field starts typing beside you now.
+      if (game.ghostTape && game.ghostT0 == null) startGhostReplay();
     }
     const me = msg.room.players.find((p) => p.username === getUsername());
     const prevMe = prev?.players.find((p) => p.username === getUsername());
     renderH2HBadge(); // opponent may have just joined; refresh the "You vs X W–L" badge
+    // Ghost race verdict: my finish vs the host ghost's recorded finish — one toast,
+    // the moment my status flips. Time is the tiebreak story; guesses break a same-time tie.
+    if (game.ghostTape && me && prevMe && prevMe.status === "playing" && me.status !== "playing" && game.ghostT0 != null) {
+      const hf = hostFinish(game.ghostTape);
+      if (hf) {
+        const myMs = Date.now() - game.ghostT0;
+        const ds = Math.max(1, Math.abs(Math.round((hf.t - myMs) / 1000)));
+        const iWon = me.status === "won" && (hf.status !== "won" || myMs < hf.t || (myMs === hf.t && me.guesses.length <= hf.guesses));
+        toast(iWon
+          ? `You beat @${hf.username} by ${ds}s 🏆`
+          : me.status === "won" ? `@${hf.username} had you by ${ds}s — rematch?` : `@${hf.username} survives this round 👻`,
+          { duration: 5000 });
+      }
+    }
     // Server accepted our guess → clear pending letters.
     if (me && prevMe && me.guesses.length > prevMe.guesses.length) {
       game.pending = "";
@@ -2074,6 +2114,14 @@ function onServerMessage(msg) {
     closeStats();
   } else if (msg.type === "rematch_cancelled") {
     settleRematchHome(msg.reason, opponentName());
+  } else if (msg.type === "arena_handoff") {
+    // The arena race already has its 1 human — but their word is published as a
+    // challenge. Route there: same word, their ghosts, a score to beat. No dead end.
+    const who = msg.host ? `@${msg.host}` : "your friend";
+    toast(msg.hostDone
+      ? `${who} already raced this word — your turn.`
+      : `${who} is racing this word right now — race it too.`, { duration: 4200 });
+    navigate(`/c/${msg.challengeId}`);
   } else if (msg.type === "error") {
     toast(msg.message || "Error", { error: true });
   }
@@ -2813,6 +2861,12 @@ function renderBoards(snap, me) {
       crown.textContent = `👑 ×${snap.throne.streak}`;
       name.appendChild(crown);
     }
+    if (p.ghost) {
+      const b = document.createElement("span");
+      b.className = "badge ghost-badge";
+      b.textContent = p.ghostHost ? "👑 ghost" : "👻";
+      name.appendChild(b);
+    }
     board.appendChild(name);
 
     const grid = document.createElement("div");
@@ -2901,6 +2955,97 @@ function updateOpponentGhost(username) {
     tile.classList.toggle("ghost", c < len);
     tile.classList.toggle("ghost-cursor", c === len && len > 0);
   });
+}
+
+// --- Ghost replay (arena race tape): one clock from GO, events fire at their offsets ---
+
+function resetGhostReplay() {
+  clearTimeout(ghostTimer);
+  ghostTimer = null;
+  game.ghostTape = null;
+  game.ghostT0 = null;
+  game.ghostPlayers = [];
+}
+
+// Tap-armed start for a ghost challenge: the field is loaded, the player fires the gun.
+// On tap: local 3-2-1 (reuses the duel overlay), then the start message — the server
+// flips to playing and the snapshot transition starts the replay clock (onServerMessage).
+function showGhostReadyOverlay() {
+  const tape = game.ghostTape;
+  const host = tape && tape.players.find((p) => p.host);
+  const el = document.createElement("div");
+  el.id = "ghostReady";
+  el.className = "ghost-ready-overlay";
+  // DOM-built, no innerHTML — usernames are server-sanitized, but textContent keeps
+  // the no-markup-injection rule airtight (house style, same as toast()).
+  const card = document.createElement("div");
+  card.className = "ghost-ready-card";
+  const title = document.createElement("div");
+  title.className = "ghost-ready-title";
+  title.textContent = "👻 Ghost race";
+  const sub = document.createElement("div");
+  sub.className = "ghost-ready-sub";
+  const others = tape.players.length - 1;
+  const fieldLine = (host ? `@${host.username}` : "The field")
+    + (others > 0 ? ` + ${others} racer${others > 1 ? "s" : ""}` : "");
+  sub.appendChild(document.createTextNode(`${fieldLine} already ran this word.`));
+  sub.appendChild(document.createElement("br"));
+  sub.appendChild(document.createTextNode("Beat the replay — every keystroke, as it happened."));
+  const btn = document.createElement("button");
+  btn.className = "hero-btn";
+  btn.id = "ghostGoBtn";
+  const label = document.createElement("span");
+  label.className = "hero-btn-label";
+  label.textContent = "I'm ready — GO";
+  btn.appendChild(label);
+  card.append(title, sub, btn);
+  el.appendChild(card);
+  document.body.appendChild(el);
+  btn.addEventListener("click", () => {
+    el.remove();
+    startCountdownOverlay(Date.now() + 3000);
+    setTimeout(() => { stopCountdownOverlay(); send({ type: "start" }); }, 3000);
+  });
+}
+
+let ghostTimer = null;
+function startGhostReplay() {
+  game.ghostT0 = Date.now();
+  game.ghostPlayers = ghostPlayersAt(game.ghostTape, 0);
+  tickGhostReplay();
+}
+
+function tickGhostReplay() {
+  clearTimeout(ghostTimer);
+  if (!game.ghostTape || game.ghostT0 == null || !game.snapshot) return;
+  const t = Date.now() - game.ghostT0;
+  const prev = game.ghostPlayers;
+  const next = ghostPlayersAt(game.ghostTape, t);
+  game.ghostPlayers = next;
+  const real = game.snapshot.players.filter((p) => !p.ghost);
+  game.snapshot.players = [...real, ...next];
+  // Typing pulses ride the existing ghost-fill path; commits/finishes need a render.
+  let structural = false;
+  for (let i = 0; i < next.length; i++) {
+    const a = prev[i], b = next[i];
+    if (!a || a.guesses.length !== b.guesses.length || a.status !== b.status) { structural = true; break; }
+  }
+  for (const g of next) {
+    if (g.typingLen > 0) game.typing.set(g.username, g.typingLen);
+    else game.typing.delete(g.username);
+  }
+  if (structural) {
+    // Drama reacts to ghost commits exactly like live opponents.
+    dramaUpdate([...real, ...prev], game.snapshot.players, {
+      me: getUsername(), maxGuesses: game.snapshot.maxGuesses ?? 6,
+      phase: game.snapshot.phase, isDaily: false,
+    });
+    render();
+  } else {
+    for (const g of next) updateOpponentGhost(g.username);
+  }
+  const at = nextEventAfter(game.ghostTape, t);
+  if (at != null) ghostTimer = setTimeout(tickGhostReplay, Math.max(16, at - t));
 }
 
 // During a preserved render (mid-payout / mid-explosion) the board DOM is frozen so the
@@ -4151,6 +4296,9 @@ function toggleMute() {
 function leaveRoom() {
   if (game.rematchSettleTimer) { clearTimeout(game.rematchSettleTimer); game.rematchSettleTimer = null; }
   stopCountdownOverlay(); // tear down a duel 3-2-1 overlay if we navigate away mid-countdown
+  resetGhostReplay(); // stop a running tape + drop the ghost field
+  const ghostReady = document.getElementById("ghostReady");
+  if (ghostReady) ghostReady.remove(); // tear down a not-yet-tapped ghost gate too
   teardownLobbyRail(); // stop the open-games poll when leaving the room (incl. defection)
   stopHeartbeat();
   game.challengeId = null;
