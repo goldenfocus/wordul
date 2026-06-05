@@ -8,6 +8,9 @@ import {
   seedPaths,
   rollSpawn,
   hydrateSeedRec,
+  alarmKick,
+  EMPTY_KICK_MS,
+  ENSURE_ALARM_MS,
   CAPACITY_WEIGHTS,
   STALE_MS,
   MAX_OPEN_MS,
@@ -334,5 +337,30 @@ describe("hydrateSeedRec (legacy backfill)", () => {
   it("leaves a complete rec untouched", () => {
     const r = rec({ capacity: 4, botCount: 3, seats: "3/4", personaIds: ["maya", "theo", "nova"] });
     expect(hydrateSeedRec(r)).toEqual(r);
+  });
+});
+
+describe("alarmKick — viewer-aware mint scheduling (GET /open)", () => {
+  const now = 1_000_000;
+
+  it("empty index + no alarm → kick almost immediately", () => {
+    expect(alarmKick(0, null, now)).toBe(now + EMPTY_KICK_MS);
+  });
+  it("empty index + alarm parked far out (idle 30–90s drift) → pull it forward", () => {
+    expect(alarmKick(0, now + 60_000, now)).toBe(now + EMPTY_KICK_MS);
+  });
+  it("empty index + alarm already imminent → leave it (no churn)", () => {
+    expect(alarmKick(0, now + 100, now)).toBe(null);
+    expect(alarmKick(0, now + EMPTY_KICK_MS, now)).toBe(null);
+  });
+  it("stocked index + no alarm → ensure the loop is alive at the lazy cadence", () => {
+    expect(alarmKick(2, null, now)).toBe(now + ENSURE_ALARM_MS);
+  });
+  it("stocked index + alarm scheduled → hands off entirely", () => {
+    expect(alarmKick(2, now + 60_000, now)).toBe(null);
+    expect(alarmKick(2, now + 100, now)).toBe(null);
+  });
+  it("an overdue alarm counts as imminent — never reschedule it backwards", () => {
+    expect(alarmKick(0, now - 5_000, now)).toBe(null);
   });
 });

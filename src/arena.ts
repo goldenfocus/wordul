@@ -12,6 +12,7 @@ import {
   rollLifetime,
   rollSpawn,
   hydrateSeedRec,
+  alarmKick,
   TARGET_OPEN,
   MAX_SEEDED,
   type ArenaState,
@@ -40,13 +41,15 @@ export class Arena extends DurableObject<Env> {
     const url = new URL(req.url);
     if (req.method === "GET" && url.pathname === "/open") {
       // Prune-only. Does NOT seed: seeding from a public GET would stack mints and could
-      // mint a leaky room before disguise lands (review fix, defects 6 & 10).
+      // mint a leaky room before disguise lands (review fix, defects 6 & 10). But an EMPTY
+      // index with a viewer on it pulls the alarm forward (alarmKick) so the first room
+      // appears within a poll or two instead of after the 30–90s idle reschedule.
       const s = prune(await this.load(), Date.now());
       await this.save(s);
-      if ((await this.ctx.storage.getAlarm()) === null) {
-        void this.ctx.storage.setAlarm(Date.now() + 5_000);
-      }
-      return Response.json(openGames(s) satisfies OpenGame[]);
+      const games = openGames(s);
+      const kickAt = alarmKick(games.length, await this.ctx.storage.getAlarm(), Date.now());
+      if (kickAt !== null) void this.ctx.storage.setAlarm(kickAt);
+      return Response.json(games satisfies OpenGame[]);
     }
     if (req.method === "POST" && url.pathname === "/open") {
       const b = (await req.json().catch(() => null)) as { path?: string } | null;

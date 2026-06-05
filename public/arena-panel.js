@@ -49,6 +49,16 @@ export function isHot(game) {
 }
 
 const POLL_MS = 8000;
+const EMPTY_POLL_MS = 2000;
+
+// Adaptive poll cadence: the standalone Arena polls fast while there's nothing tappable
+// (loading/empty/error) — the server's alarmKick mints a room within ~250ms of an empty
+// GET, so a quick re-poll is what makes it show up snappily — then relaxes to POLL_MS
+// once rows exist. The in-room lobby rail always uses the calm cadence: it lives for
+// minutes and its list is OFTEN legitimately empty (your own room is excluded).
+export function nextPollMs(state, inLobby) {
+  return state === "list" || inLobby ? POLL_MS : EMPTY_POLL_MS;
+}
 
 // Render the open-games list into `mountEl`, polling while mounted. Returns a stop()
 // that clears the poll — the caller MUST invoke it on teardown (leaving the surface).
@@ -60,15 +70,19 @@ export function mountArenaList(mountEl, { onJoin, excludePath } = {}) {
   let stopped = false;
   let timer = null;
   const inLobby = excludePath != null; // rail-in-your-room mode vs the standalone /arena list
+  let lastState = "loading"; // drives the adaptive poll cadence (nextPollMs)
 
   const draw = (games, isError) => {
     if (stopped) return;
     const visible = Array.isArray(games) ? games.filter((g) => g && g.routePath !== excludePath) : games;
     const state = arenaEmptyState(visible, isError);
+    lastState = state;
     if (state === "loading") { mountEl.innerHTML = `<div class="arena-state">Finding opponents…</div>`; return; }
     if (state === "error") { mountEl.innerHTML = `<div class="arena-state">Couldn't reach the Arena. Retrying…</div>`; return; }
     if (state === "empty") {
-      mountEl.innerHTML = `<div class="arena-state">${inLobby ? "You're first. Others will trickle in…" : "No open games right now."}</div>`;
+      // Standalone empty stays on "Finding opponents…" — the fast poll + server kick will
+      // surface a room in a beat or two, so "no open games" would just be a jarring flash.
+      mountEl.innerHTML = `<div class="arena-state">${inLobby ? "You're first. Others will trickle in…" : "Finding opponents…"}</div>`;
       return;
     }
     const list = document.createElement("div");
@@ -91,19 +105,23 @@ export function mountArenaList(mountEl, { onJoin, excludePath } = {}) {
     mountEl.appendChild(list);
   };
 
-  const fetchOnce = () => {
+  // Self-scheduling poll (not setInterval): each tick re-arms at the cadence the freshly
+  // drawn state calls for — fast while empty, relaxed once the list has rows.
+  const tick = () => {
     fetch("/api/arena/open")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("bad status"))))
       .then((games) => draw(games, false))
-      .catch(() => draw(null, true));
+      .catch(() => draw(null, true))
+      .then(() => {
+        if (!stopped) timer = setTimeout(tick, nextPollMs(lastState, inLobby));
+      });
   };
 
   draw(null, false); // loading state immediately
-  fetchOnce();
-  timer = setInterval(fetchOnce, POLL_MS);
+  tick();
 
   return function stop() {
     stopped = true;
-    if (timer) clearInterval(timer);
+    if (timer) clearTimeout(timer);
   };
 }

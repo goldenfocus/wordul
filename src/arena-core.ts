@@ -105,6 +105,25 @@ function pickCapacity(roll: number): number {
   return CAPACITY_WEIGHTS[CAPACITY_WEIGHTS.length - 1][0];
 }
 
+// --- Viewer-aware mint scheduling (GET /open) ---------------------------------------
+export const EMPTY_KICK_MS = 250; // empty index + someone looking → mint almost now
+export const ENSURE_ALARM_MS = 5_000; // stocked index → just make sure the loop is alive
+
+// Decide whether GET /open should (re)set the seed-loop alarm, and for when. Returns the
+// new alarm time (epoch ms) or null to leave the schedule alone. An empty index with a
+// viewer staring at it pulls the alarm forward so the first room mints in ~EMPTY_KICK_MS
+// instead of waiting out the 30–90s at-target idle drift — the "open the Arena, stare at
+// 'no open games' for a minute" failure. Mints still happen ONLY in alarm() (the
+// no-mint-from-GET review fix, defects 6 & 10, stands). An already-imminent (or overdue)
+// alarm is left to fire on its own.
+export function alarmKick(openCount: number, currentAlarm: number | null, nowMs: number): number | null {
+  if (openCount === 0) {
+    const kickAt = nowMs + EMPTY_KICK_MS;
+    return currentAlarm === null || currentAlarm > kickAt ? kickAt : null;
+  }
+  return currentAlarm === null ? nowMs + ENSURE_ALARM_MS : null;
+}
+
 export function emptyArenaState(): ArenaState {
   return { seeded: {}, seedCount: 0 };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { arenaRowProps, arenaEmptyState, pickNextGame, seatLabel, isHot } from "../public/arena-panel.js";
+import { arenaRowProps, arenaEmptyState, pickNextGame, seatLabel, isHot, nextPollMs } from "../public/arena-panel.js";
 
 const game = {
   routePath: "/@arena/maya-0",
@@ -88,5 +88,21 @@ describe("pickNextGame (F3) — the 'Join next game' target", () => {
   it("returns null defensively for null/undefined games", () => {
     expect(pickNextGame(null, "/@arena/maya-0")).toBe(null);
     expect(pickNextGame(undefined, "/@arena/maya-0")).toBe(null);
+  });
+});
+
+describe("nextPollMs (F6) — adaptive poll while the list is empty", () => {
+  it("a populated list polls at the relaxed cadence", () => {
+    expect(nextPollMs("list", false)).toBe(8000);
+    expect(nextPollMs("list", true)).toBe(8000);
+  });
+  it("standalone arena with nothing tappable polls fast (empty/loading/error)", () => {
+    expect(nextPollMs("empty", false)).toBe(2000);
+    expect(nextPollMs("loading", false)).toBe(2000);
+    expect(nextPollMs("error", false)).toBe(2000);
+  });
+  it("the in-room lobby rail never fast-polls (it lives for minutes)", () => {
+    expect(nextPollMs("empty", true)).toBe(8000);
+    expect(nextPollMs("error", true)).toBe(8000);
   });
 });
