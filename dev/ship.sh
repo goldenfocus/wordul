@@ -42,14 +42,25 @@ if [ -f .github/workflows/deploy.yml ] && command -v gh >/dev/null 2>&1 \
   ci_deploys=true
 fi
 if [ "$ci_deploys" = true ]; then
-  echo "   CI deploys on push to main — watching the run..."
-  sleep 4
-  run_id="$(gh run list --workflow=deploy.yml --branch=main --limit=1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
+  # Watch the run for THE COMMIT WE JUST PUSHED — never `--branch=main --limit=1`,
+  # which matches whatever run is newest and can grab a PREVIOUS, already-completed
+  # run. `gh run watch` on a finished run returns "already completed with success"
+  # instantly — a false green that hides a still-in-flight (or failed) deploy.
+  # Filter by --commit <HEAD sha> and poll until the push registers its run.
+  head_sha="$(git rev-parse HEAD)"; head_short="$(git rev-parse --short HEAD)"
+  echo "   CI deploys on push to main — locating the run for $head_short..."
+  run_id=""
+  for _ in $(seq 1 30); do   # poll up to ~60s for the push to register a run
+    run_id="$(gh run list --workflow=deploy.yml --commit="$head_sha" --limit=1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
+    [ -n "$run_id" ] && break
+    sleep 2
+  done
   if [ -n "$run_id" ]; then
+    echo "   watching run $run_id..."
     gh run watch "$run_id" --exit-status || {
       echo "✋ CI deploy failed — inspect: gh run view $run_id --log-failed. Prod unchanged." >&2; exit 1; }
   else
-    echo "   (couldn't find the CI run — check the Actions tab.)"
+    echo "   (couldn't find a CI run for $head_short after 60s — check the Actions tab.)"
   fi
 else
   echo "   (CI not configured yet — deploying locally. Add the CLOUDFLARE_API_TOKEN secret"

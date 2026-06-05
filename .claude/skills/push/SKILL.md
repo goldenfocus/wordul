@@ -32,8 +32,13 @@ npm run check-graph && npm run typecheck && npm test
 # 4. GitHub
 git push origin HEAD:main
 
-# 5. Prod — CI deploys origin/main on merge. Watch the run:
-gh run watch "$(gh run list --workflow=deploy.yml --branch=main --limit=1 --json databaseId --jq '.[0].databaseId')" --exit-status
+# 5. Prod — CI deploys origin/main on merge. Watch the run FOR THE COMMIT JUST PUSHED.
+#    NEVER `--branch=main --limit=1`: it can match a previous, already-completed run, and
+#    `gh run watch` on a finished run returns "already completed with success" instantly —
+#    a false green that hides a still-in-flight (or failed) deploy. Filter by --commit + poll.
+SHA="$(git rev-parse HEAD)"; RUN=""
+for _ in $(seq 1 30); do RUN="$(gh run list --workflow=deploy.yml --commit="$SHA" --limit=1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)"; [ -n "$RUN" ] && break; sleep 2; done
+gh run watch "$RUN" --exit-status
 # (If CLOUDFLARE_API_TOKEN isn't set yet, CI skips the deploy — fall back: npm run deploy)
 
 # 6. Smoke
