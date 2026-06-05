@@ -1,7 +1,7 @@
 # Universal Card Arena — Design Spec (v1)
 
 **Date:** 2026-06-04 · **Revised:** 2026-06-05 (review pass — see *Revision log*)
-**Status:** brainstorm approved → **revised after a 12-agent code-grounded review**; ready for implementation plan(s) once the owner confirms the flagged v1 defaults. Server/Durable-Object phases are **Sacred Stops** gated on Yan's go (see Build Phases). **Code-grounded** against worktree `card-arena-spec` (`origin/main`); grounding commit is **`07362e1`** (the parent of the doc commit `63c3229`). Re-confirm line-level shapes at implementation time.
+**Status:** brainstorm approved → **revised after a 12-agent code-grounded review** → **v1 defaults confirmed by the owner 2026-06-05** (see *Owner decisions for v1*), so it is **ready for implementation plan(s)**. Server/Durable-Object phases are **Sacred Stops** gated on Yan's go (see Build Phases). **Code-grounded** against worktree `card-arena-spec` (`origin/main`); grounding commit is **`07362e1`** (the parent of the doc commit `63c3229`). Re-confirm line-level shapes at implementation time.
 **First consumer:** Wordul (`wordul.com`)
 **Visual direction (locked, live prototype):** `https://wordul.com/designs/bot-studio-forge-bay`
 ⚠️ **Prototype source is NOT version-controlled** — it is served from the `DESIGNS` **R2 bucket** (`worker.ts:332-357`), not `public/`. `public/word/forge.html` is the unrelated SEO page for the *word* FORGE. Plan A must first **export the prototype from R2** (or reconstruct it); there is no checked-in file to "lift."
@@ -561,21 +561,22 @@ card; **C2 is the lone Sacred Stop**, last and gated.
 
 ---
 
-## Owner decisions for v1 (former "open questions" — now flagged defaults; override anytime)
+## Owner decisions for v1 (CONFIRMED — 2026-06-05)
 
 These are **plan inputs**, not nice-to-haves (they gate the USER DO schema, the C1 dispatch trigger,
-and the P0b storage shape). Decided with sensible defaults so planning can proceed:
+and the P0b storage shape). **Confirmed by the owner 2026-06-05** — locked for v1:
 
-1. **Stable size** → **default: a small stable, hard cap 3 per user.** Ranked board caps **1 entry
+1. **Stable size** → **CONFIRMED: a small stable, hard cap 3 per user.** Ranked board caps **1 entry
    per owner/day** regardless. *(Gates Plan A persistence.)*
-2. **Ranked entry** → **default: explicit opt-in per day** ("send to today's ranked"). Clearer intent
+2. **Ranked entry** → **CONFIRMED: explicit opt-in per day** ("send to today's ranked"). Clearer intent
    + supports the answer-reveal mitigation (commit before reveal). *(Gates Plan C1 dispatch.)*
-3. **Cosmetic frames** → **default: ship a small free set in v1**; gold-sink wiring later.
-4. **Human card visibility** → **default: private until opt-in.** ⚠️ Implication: since
-   `/api/user/<name>` is already public, the **new measured axes must be gated server-side** —
-   otherwise "private" is already foreclosed. *(Decide before P0b persists guess data.)*
-5. **D2 storage** → **default: rolling aggregate** (opener-frequency counter, risk-ratio, timing EMA),
+3. **Cosmetic frames** → **CONFIRMED: ship a small free set in v1**; gold-sink wiring later.
+4. **Human card visibility** → **CONFIRMED: private until opt-in.** ⚠️ **Binding requirement** (not just
+   an implication): since `/api/user/<name>` is already public, the **new measured axes MUST be gated
+   server-side** — otherwise "private" is already foreclosed. **Plan P0b/Plan D must implement this gate**
+   when they persist/expose the measured card. *(Decided before P0b persists guess data.)*
+5. **D2 storage** → **CONFIRMED: rolling aggregate** (opener-frequency counter, risk-ratio, timing EMA),
    **not raw guess history** — privacy + bounded storage; raw replay deferred to north-star anti-cheat.
 
-> These five are my recommended defaults from the review; tell me any you'd flip and I'll thread the
-> change through the affected plan(s) before writing them.
+> **All five confirmed by the owner on 2026-06-05** — no flips from the review's recommendations. These
+> are now **locked plan inputs**; the affected plans (A, P0b, C1, D) inherit them directly.
