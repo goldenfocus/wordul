@@ -3256,6 +3256,37 @@ body.lobby #lobbyRailList { max-height: 248px; overflow: auto; }
 }
 @keyframes chat-ping-blink { 50% { opacity: 0.35; } }
 
+/* Global channel = "coming soon" placeholder (no networking this release). Muted line
+   in place of the message log; the input is disabled while Global is active. */
+.chat-global-placeholder {
+  padding: 18px 14px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  font-style: italic;
+}
+.chat-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Lobby places #chatPanel inline in the right zone. On mobile (≤520px) the panel is
+   otherwise a fixed bottom sheet — pin it back in-flow so it sits in #lobbyRight and
+   scrolls internally. Scoped to body.lobby so non-lobby (sheet) chat is untouched. */
+body.lobby #chatPanel {
+  position: static;
+  transform: none;
+  width: 100%;
+  max-width: none;
+  max-height: 320px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  box-shadow: none;
+  z-index: auto;
+  pointer-events: auto;
+}
+body.lobby #chatLog { max-height: 200px; }
+
 /* 7 ── Bloom-on-start: stagger the full grid's rows in when leaving lobby. */
 .boards.blooming .grid-row {
   animation: bloomRow 0.45s cubic-bezier(0.2, 0.9, 0.2, 1) both;

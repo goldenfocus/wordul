@@ -624,6 +624,10 @@ const game = {
   // Chat state: how many entries we'd already rendered so we can flag new ones for
   // the unread badge while the panel is collapsed.
   lastChatLen: 0,
+  // Which chat channel is showing. "global" is a placeholder ("coming soon") this
+  // release; "table" is the real per-room chat. Defaults to global on room entry so a
+  // solo lobby host sees the Global panel rather than an empty Table.
+  chatChannel: "global",
   lastSeatCount: 0, // # of taken seats last "Your table" render — new seats get a pop (seatin)
   unreadChat: 0,
   chatCollapsed: false,
@@ -759,6 +763,7 @@ function showRoom(owner, slug) {
   game.pending = "";
   game.hasShownEndStats = false;
   game.lastChatLen = 0;
+  game.chatChannel = "global"; // fresh room → Global placeholder until a table msg pops Table
   game.unreadChat = 0;
   game.chatCollapsed = false;
   game.lastGuessCounts = new Map();
@@ -874,6 +879,7 @@ async function showChallenge(id) {
   game.pending = "";
   game.hasShownEndStats = false;
   game.lastChatLen = 0;
+  game.chatChannel = "global";
   game.unreadChat = 0;
   game.chatCollapsed = false;
   game.lastGuessCounts = new Map();
@@ -1568,11 +1574,23 @@ function wireChat() {
   if (form) {
     form.addEventListener("submit", (e) => {
       e.preventDefault();
+      // Global is a placeholder this release — the input is disabled there so the form
+      // can't normally submit, but belt-and-suspenders: never route a global send.
+      if (game.chatChannel === "global") return;
       const text = (input.value || "").trim();
       if (!text) return;
       send({ type: "chat", text });
       input.value = "";
     });
+  }
+
+  // Global/Table channel tabs (wired once). Table = the real per-room chat; Global is a
+  // "coming soon" placeholder. Guarded so re-running wireChat() doesn't stack listeners.
+  const tabs = $("#chatTabs");
+  if (tabs && !tabs.dataset.wired) {
+    tabs.dataset.wired = "1";
+    $("#chatTabGlobal")?.addEventListener("click", () => switchChatChannel("global"));
+    $("#chatTabTable")?.addEventListener("click", () => switchChatChannel("table"));
   }
 
   // Desktop toggle: collapse/expand inline panel. Pointer events on the inner X close
@@ -1607,6 +1625,42 @@ function wireChat() {
   // Visibility is owned by render() (gated on player count); we just wire the tap.
   if (topBtn) {
     topBtn.onclick = openChatSheet;
+  }
+}
+
+// Switch the active chat channel ("global" placeholder ⇄ "table" real chat). Toggles the
+// tab .is-active state, re-renders the body for the channel, and clears the Table ping.
+function switchChatChannel(which) {
+  game.chatChannel = which;
+  $("#chatTabGlobal")?.classList.toggle("is-active", which === "global");
+  $("#chatTabTable")?.classList.toggle("is-active", which === "table");
+  if (which === "table") {
+    const ping = $("#chatTabPing");
+    if (ping) ping.hidden = true;
+  }
+  renderChatChannel();
+}
+
+// Show the body for the active channel. Table → real #chatLog + enabled input. Global →
+// a single muted placeholder + disabled input (no networking; placeholder this release).
+function renderChatChannel() {
+  const log = $("#chatLog");
+  const input = $("#chatInput");
+  // Lazily create the Global placeholder line once, as a sibling of #chatLog in #chatBody.
+  let placeholder = $("#chatGlobalPlaceholder");
+  if (!placeholder && log) {
+    placeholder = document.createElement("div");
+    placeholder.id = "chatGlobalPlaceholder";
+    placeholder.className = "chat-global-placeholder";
+    placeholder.textContent = "🌐 Global lobby chat is coming soon — you're chatting with your table for now.";
+    log.parentNode.insertBefore(placeholder, log);
+  }
+  const isGlobal = game.chatChannel === "global";
+  if (log) log.hidden = isGlobal;
+  if (placeholder) placeholder.hidden = !isGlobal;
+  if (input) {
+    input.disabled = isGlobal;
+    input.placeholder = isGlobal ? "Global chat coming soon…" : "Message your table…";
   }
 }
 
@@ -2693,13 +2747,21 @@ function render() {
   // Chat is social — keep it out of sight while you're playing solo, and only
   // surface it (inline on desktop, 💬 button on mobile) once someone else is in
   // the room. `me` is always in snap.players, so >= 2 means real company.
+  // Exception: in the lobby phase the right zone hosts chat, so we show the panel even
+  // solo (the Global "coming soon" placeholder fills it) — otherwise the zone is empty.
   const hasCompany = snap.players.length >= 2;
-  const showSocial = game.isDaily ? !dailyLocked : hasCompany;
+  const inLobbyPhase = snap.phase === "lobby" && !game.isDaily;
+  const showSocial = game.isDaily ? !dailyLocked : (hasCompany || inLobbyPhase);
   const chatPanel = $("#chatPanel");
   const chatTopBtn = $("#chatTopBtn");
   if (chatPanel) chatPanel.hidden = !showSocial;
   if (chatTopBtn) chatTopBtn.hidden = !showSocial;
   if (!showSocial) closeChatSheet();
+  // Reveal the Global/Table tabs whenever the panel is shown, and paint the active
+  // channel's body (placeholder vs. real log + input enable/disable).
+  const chatTabs = $("#chatTabs");
+  if (chatTabs) chatTabs.hidden = !showSocial;
+  if (showSocial) renderChatChannel();
 
   // Immersive UI (C5): mid-play, the in-game header collapses to just avatar +
   // username + gold. Room name, ✎ rename, Share ↗, and the scoreboard hide while
@@ -2848,6 +2910,10 @@ function renderChat(snap) {
     const hasText = (e.text || "").trim().length > 0;
     if (e.kind !== "system" && hasText && e.from !== getUsername()) notifyCount++;
   }
+  // Capture "a genuinely new, meaningful table message arrived" BEFORE we mutate
+  // lastChatLen — seeding existing history on first render has appended>0 too, so we
+  // key the auto-pop on notifyCount (system join/quit or someone else's non-empty line).
+  const hadNewTableMsg = notifyCount > 0;
   game.lastChatLen = chat.length;
   if (appended > 0) {
     const panel = $("#chatPanel");
@@ -2859,6 +2925,11 @@ function renderChat(snap) {
       game.unreadChat += notifyCount;
     }
     updateChatBadge();
+  }
+  // Auto-pop the Table tab on a new table message so it's not buried under the Global
+  // placeholder. Only on a real new message (notifyCount), and only if not already there.
+  if (hadNewTableMsg && game.chatChannel !== "table") {
+    switchChatChannel("table");
   }
 }
 
