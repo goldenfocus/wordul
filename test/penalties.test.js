@@ -3,7 +3,7 @@ import { deadLettersFrom, wastedDeadLettersInLast } from "/celebrate.js";
 import { GOLD, escalatedPenalty } from "/gold.js";
 
 const g = (word, mask) => ({ word, mask });
-const G = "green", Y = "yellow", X = "gray";
+const G = "hot", Y = "warm", X = "cold";
 
 describe("deadLettersFrom", () => {
   it("returns an empty Set for no guesses", () => {
@@ -11,8 +11,8 @@ describe("deadLettersFrom", () => {
     expect(deadLettersFrom(undefined).size).toBe(0);
   });
 
-  it("flags a letter that is gray everywhere and never colored", () => {
-    // CRANE: every tile gray → the answer shares none of these letters.
+  it("flags a letter that is cold everywhere and never colored", () => {
+    // CRANE: every tile cold → the answer shares none of these letters.
     const dead = deadLettersFrom([g("CRANE", [X, X, X, X, X])]);
     expect([...dead].sort()).toEqual(["A", "C", "E", "N", "R"]);
   });
@@ -22,29 +22,29 @@ describe("deadLettersFrom", () => {
     expect([...dead].sort()).toEqual(["B", "I", "L", "M", "P"]);
   });
 
-  it("DUP-SAFE: a letter gray at one position but green/yellow elsewhere is NOT dead", () => {
-    // SASSY vs an answer with one S: scoreGuess paints one S green, the rest gray.
+  it("DUP-SAFE: a letter cold at one position but hot/warm elsewhere is NOT dead", () => {
+    // SASSY vs an answer with one S: scoreGuess paints one S hot, the rest cold.
     // The answer DOES contain S — flagging it dead would wrongly penalize reuse.
     const dead = deadLettersFrom([g("SASSY", [G, X, X, X, X])]);
     expect(dead.has("S")).toBe(false);
-    // A (gray, never colored) and Y (gray, never colored) ARE dead.
+    // A (cold, never colored) and Y (cold, never colored) ARE dead.
     expect(dead.has("A")).toBe(true);
     expect(dead.has("Y")).toBe(true);
   });
 
-  it("DUP-SAFE across guesses: gray in one guess, yellow in another → not dead", () => {
+  it("DUP-SAFE across guesses: cold in one guess, warm in another → not dead", () => {
     const guesses = [
       g("SPORE", [X, X, X, X, X]), // S looks dead here…
-      g("TOAST", [X, X, X, Y, X]), // …but S is yellow at index 3 → answer has it
+      g("TOAST", [X, X, X, Y, X]), // …but S is warm at index 3 → answer has it
     ];
     expect(deadLettersFrom(guesses).has("S")).toBe(false);
   });
 
-  it("green and yellow letters never appear in the dead Set", () => {
+  it("hot and warm letters never appear in the dead Set", () => {
     const dead = deadLettersFrom([g("CRANE", [G, Y, X, X, X])]);
-    expect(dead.has("C")).toBe(false); // green
-    expect(dead.has("R")).toBe(false); // yellow
-    expect(dead.has("A")).toBe(true);  // gray, uncolored
+    expect(dead.has("C")).toBe(false); // hot
+    expect(dead.has("R")).toBe(false); // warm
+    expect(dead.has("A")).toBe(true);  // cold, uncolored
   });
 });
 
@@ -57,7 +57,7 @@ describe("wastedDeadLettersInLast", () => {
   it("counts a dead letter (proven by a prior guess) reused in the last guess", () => {
     const guesses = [
       g("DROWN", [X, X, X, X, X]), // D proven dead
-      g("DAILY", [X, G, X, X, X]), // reuses D at index 0 → wasted
+      g("DAILY", [X, G, X, X, X]), // reuses D at index 0 → bad
     ];
     const out = wastedDeadLettersInLast(guesses);
     expect(out.letters).toEqual(["D"]);
@@ -65,19 +65,19 @@ describe("wastedDeadLettersInLast", () => {
   });
 
   it("SELF-CONTAMINATION GUARD: derives dead-knowledge from PRIOR guesses only", () => {
-    // Z is gray ONLY in the last guess — first-time use, not yet proven dead.
+    // Z is cold ONLY in the last guess — first-time use, not yet proven dead.
     // It must NOT be counted (you can't waste a letter you didn't know was dead).
     const guesses = [
       g("CRANE", [X, G, X, X, X]),
-      g("ZIPPY", [X, G, X, X, X]), // Z's own gray here is its first appearance
+      g("ZIPPY", [X, G, X, X, X]), // Z's own cold here is its first appearance
     ];
     expect(wastedDeadLettersInLast(guesses).count).toBe(0);
   });
 
   it("dedupes per-letter: the same dead letter typed twice counts once", () => {
     const guesses = [
-      // Only D is dead here: I/N/E are yellow/green (alive), so they can't be wasted.
-      g("DINE", [X, Y, G, Y]),     // D gray (dead); I,N,E colored (alive)
+      // Only D is dead here: I/N/E are warm/hot (alive), so they can't be wasted.
+      g("DINE", [X, Y, G, Y]),     // D cold (dead); I,N,E colored (alive)
       g("DODO", [X, G, X, G]),     // D at index 0 AND index 2 → one wasted letter
     ];
     const out = wastedDeadLettersInLast(guesses);

@@ -29,9 +29,9 @@ function applyPalette() {
   for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(k, v);
 }
 
-// Sample colour pattern for the preview row: greens/yellows/grays, deterministic by position.
+// Sample colour pattern for the preview row: hots/warms/colds, deterministic by position.
 function sampleClass(i) {
-  const pat = ["green", "gray", "yellow", "green", "gray", "yellow"];
+  const pat = ["hot", "cold", "warm", "hot", "cold", "warm"];
   return pat[i % pat.length];
 }
 

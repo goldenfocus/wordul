@@ -1,23 +1,23 @@
-export type Color = "green" | "yellow" | "gray";
+export type Color = "hot" | "warm" | "cold";
 
 export function scoreGuess(guess: string, answer: string): Color[] {
   const g = guess.toUpperCase();
   const a = answer.toUpperCase();
-  const result: Color[] = new Array(g.length).fill("gray");
+  const result: Color[] = new Array(g.length).fill("cold");
   const leftover: Record<string, number> = {};
 
   for (let i = 0; i < g.length; i++) {
     if (g[i] === a[i]) {
-      result[i] = "green";
+      result[i] = "hot";
     } else {
       leftover[a[i]] = (leftover[a[i]] ?? 0) + 1;
     }
   }
   for (let i = 0; i < g.length; i++) {
-    if (result[i] === "green") continue;
+    if (result[i] === "hot") continue;
     const c = g[i];
     if ((leftover[c] ?? 0) > 0) {
-      result[i] = "yellow";
+      result[i] = "warm";
       leftover[c] -= 1;
     }
   }
@@ -30,10 +30,10 @@ export function countVowels(word: string): number {
   return (word.toUpperCase().match(/[AEIOU]/g) ?? []).length;
 }
 
-// The set of positions a player has already pinned green across all their guesses.
+// The set of positions a player has already pinned hot across all their guesses.
 export function greenedPositions(guesses: { mask: Color[] }[]): Set<number> {
   const s = new Set<number>();
-  for (const g of guesses) g.mask.forEach((c, i) => { if (c === "green") s.add(i); });
+  for (const g of guesses) g.mask.forEach((c, i) => { if (c === "hot") s.add(i); });
   return s;
 }
 

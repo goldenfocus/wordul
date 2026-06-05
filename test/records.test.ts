@@ -4,8 +4,8 @@ import { buildGameRecords, encodeSolveGrid, encodeSolveWords, toPublicGame } fro
 describe("encodeSolveGrid", () => {
   it("encodes each guess mask as a g/y/x row string", () => {
     const grid = encodeSolveGrid([
-      { mask: ["gray", "yellow", "gray", "gray", "green"] },
-      { mask: ["green", "green", "green", "green", "green"] },
+      { mask: ["cold", "warm", "cold", "cold", "hot"] },
+      { mask: ["hot", "hot", "hot", "hot", "hot"] },
     ]);
     expect(grid).toEqual(["xyxxg", "ggggg"]);
   });

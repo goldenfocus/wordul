@@ -6,10 +6,10 @@ import {
 } from "../src/economy.ts";
 import type { GuessRow } from "../src/economy.ts";
 
-// helper: build a GuessRow from a word + a mask string ("g"=green,"y"=yellow,"x"=gray)
+// helper: build a GuessRow from a word + a mask string ("g"=hot,"y"=warm,"x"=cold)
 const row = (word: string, m: string): GuessRow => ({
   word: word.toUpperCase(),
-  mask: [...m].map((c) => (c === "g" ? "green" : c === "y" ? "yellow" : "gray")),
+  mask: [...m].map((c) => (c === "g" ? "hot" : c === "y" ? "warm" : "cold")),
 });
 
 describe("comboMultiplier", () => {
@@ -28,59 +28,59 @@ describe("escalatedPenalty", () => {
 });
 
 describe("orderedDiscoveriesInLast", () => {
-  it("lists new yellows then new greens, ascending, dup-safe", () => {
-    const guesses = [row("CRANE", "gyxxx")]; // C green, R yellow
+  it("lists new warms then new hots, ascending, dup-safe", () => {
+    const guesses = [row("CRANE", "gyxxx")]; // C hot, R warm
     const d = orderedDiscoveriesInLast(guesses);
-    expect(d.map((x) => x.kind)).toEqual(["yellow", "green"]);
+    expect(d.map((x) => x.kind)).toEqual(["warm", "hot"]);
     expect(d.map((x) => x.index)).toEqual([1, 0]);
   });
   it("does not re-count a color already seen at that index", () => {
     const guesses = [row("CRANE", "gxxxx"), row("CLOUD", "gxxxx")];
-    expect(orderedDiscoveriesInLast(guesses)).toEqual([]); // C green was already green
+    expect(orderedDiscoveriesInLast(guesses)).toEqual([]); // C hot was already hot
   });
 
-  it("a moving yellow letter pays its yellow once, not again at a new position", () => {
-    // R proven present (yellow) at pos1 in guess1; reappears yellow at pos0 in guess2.
-    // Dedup by LETTER → no new yellow discovery for R in guess2.
+  it("a moving warm letter pays its warm once, not again at a new position", () => {
+    // R proven present (warm) at pos1 in guess1; reappears warm at pos0 in guess2.
+    // Dedup by LETTER → no new warm discovery for R in guess2.
     const guesses = [row("CRANE", "xyxxx"), row("RUMBA", "yxxxx")];
     expect(orderedDiscoveriesInLast(guesses)).toEqual([]);
   });
 
-  it("yellow→green upgrade: the green still pays (dedup green by POSITION)", () => {
-    // R yellow at pos1 in guess1 (letter proven present). In guess2 R lands green at pos1.
-    // Green dedup is by position; pos1 was never green before → green R pos1 pays.
+  it("warm→hot upgrade: the hot still pays (dedup hot by POSITION)", () => {
+    // R warm at pos1 in guess1 (letter proven present). In guess2 R lands hot at pos1.
+    // Hot dedup is by position; pos1 was never hot before → hot R pos1 pays.
     const guesses = [row("CRANE", "xyxxx"), row("BREAD", "xgxxx")];
     const d = orderedDiscoveriesInLast(guesses);
-    expect(d).toEqual([{ index: 1, kind: "green", letter: "R" }]);
+    expect(d).toEqual([{ index: 1, kind: "hot", letter: "R" }]);
   });
 
-  it("a carried green never re-pays at the same position", () => {
+  it("a carried hot never re-pays at the same position", () => {
     const guesses = [row("CRANE", "gxxxx"), row("CLOUD", "gxxxx"), row("CHALK", "gxxxx")];
-    expect(orderedDiscoveriesInLast(guesses)).toEqual([]); // C green at pos0 long proven
+    expect(orderedDiscoveriesInLast(guesses)).toEqual([]); // C hot at pos0 long proven
   });
 });
 
 describe("deadLettersFrom / wastedDeadLettersInLast", () => {
-  it("marks a gray-everywhere letter dead and flags its reuse", () => {
-    const prior = [row("CRANE", "xxxxx")]; // all gray -> C,R,A,N,E dead
+  it("marks a cold-everywhere letter dead and flags its reuse", () => {
+    const prior = [row("CRANE", "xxxxx")]; // all cold -> C,R,A,N,E dead
     expect(deadLettersFrom(prior).has("C")).toBe(true);
     const guesses = [...prior, row("CLOUD", "xxxxx")];
     expect(wastedDeadLettersInLast(guesses)).toEqual({ letters: ["C"], count: 1 });
   });
-  it("a letter green somewhere is never dead (dup-safe)", () => {
-    const prior = [row("EERIE", "gxxxx")]; // first E green -> E not dead
+  it("a letter hot somewhere is never dead (dup-safe)", () => {
+    const prior = [row("EERIE", "gxxxx")]; // first E hot -> E not dead
     expect(deadLettersFrom(prior).has("E")).toBe(false);
   });
 });
 
 describe("pointsEarned", () => {
-  it("pays greens+yellows with combo and a solve+speed bonus", () => {
-    // 5 greens, combo(5)=3x -> round(500*3)=1500, +solve 500 +speed 300*5=1500 => 3500
+  it("pays hots+warms with combo and a solve+speed bonus", () => {
+    // 5 hots, combo(5)=3x -> round(500*3)=1500, +solve 500 +speed 300*5=1500 => 3500
     const guesses = [row("CRANE", "ggggg")];
     expect(pointsEarned(guesses, 6)).toBe(1500 + 500 + 1500);
   });
   it("subtracts capped, escalating wasted-letter penalties", () => {
-    // guess1 all gray (C,R,A,N,E dead), guess2 "CRUMB" reuses C and R (2 dead letters),
+    // guess1 all cold (C,R,A,N,E dead), guess2 "CRUMB" reuses C and R (2 dead letters),
     // no discoveries -> 50 + 50 = 100 penalty, total -100.
     const guesses = [row("CRANE", "xxxxx"), row("CRUMB", "xxxxx")];
     expect(pointsEarned(guesses, 6)).toBe(-100);
@@ -100,18 +100,18 @@ describe("speedBonusPoints", () => {
 });
 
 describe("CRANE → CRANK economy case", () => {
-  // Answer CRANK. Guess1 CRANE → C,R,A,N green, E gray. Guess2 CRANK → all green (solve).
+  // Answer CRANK. Guess1 CRANE → C,R,A,N hot, E cold. Guess2 CRANK → all hot (solve).
   const guesses = [row("CRANE", "ggggx"), row("CRANK", "ggggg")];
 
-  it("guess2 yields only the new green K at pos5 (no re-paid greens, no phantom yellow)", () => {
+  it("guess2 yields only the new hot K at pos5 (no re-paid hots, no phantom warm)", () => {
     expect(orderedDiscoveriesInLast(guesses)).toEqual([
-      { index: 4, kind: "green", letter: "K" },
+      { index: 4, kind: "hot", letter: "K" },
     ]);
   });
 
   it("pointsEarned reflects the discoveries + solve, independent of the speed clock", () => {
-    // guess1: 4 new greens, combo(4)=2.5× → round(400*2.5)=1000.
-    // guess2: 1 new green (K), combo(1)=1× → 100. Solve at guess2: +500 +300*guessesLeft(6-2=4)=1200.
+    // guess1: 4 new hots, combo(4)=2.5× → round(400*2.5)=1000.
+    // guess2: 1 new hot (K), combo(1)=1× → 100. Solve at guess2: +500 +300*guessesLeft(6-2=4)=1200.
     // pointsEarned uses the GUESS-count speed bonus (speedPerGuessLeft), not wall-clock speedBonusPoints.
     expect(pointsEarned(guesses, 6)).toBe(1000 + 100 + 500 + 1200);
   });

@@ -1,5 +1,5 @@
 /* Wordul — /how-to-play page styles. Layout + demo sizing only; tile colors
-   (.tile.green/.yellow/.gray) are inherited from style.css so the demos match the
+   (.tile.hot/.warm/.cold) are inherited from style.css so the demos match the
    live game exactly. */
 
 body.howto { overflow-y: auto; height: auto; }
@@ -16,7 +16,7 @@ body.howto { overflow-y: auto; height: auto; }
 .howto-hero { text-align: center; padding: 1rem 0 0.5rem; }
 .howto-hero h1 { font-size: clamp(1.8rem, 6vw, 2.6rem); margin: 0 0 0.5rem; }
 .howto-lede { font-size: 1.05rem; color: var(--muted, #b8b8bd); max-width: 36rem; margin: 0 auto 1.5rem; }
-.howto-lede em { color: var(--green); font-style: normal; font-weight: 600; }
+.howto-lede em { color: var(--hot); font-style: normal; font-weight: 600; }
 .howto-lingo { max-width: 32rem; margin: 0 auto 1.25rem; }
 .howto-lingo .pos { font-style: italic; opacity: 0.7; margin: 0 0.15rem; }
 
@@ -65,7 +65,7 @@ body.howto { overflow-y: auto; height: auto; }
 .howto-cards { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; }
 @media (max-width: 520px) { .howto-cards { grid-template-columns: 1fr; } }
 .howto-card { padding: 1rem; border-radius: 10px; border: 1px solid var(--border, #2a2a2e); }
-.howto-card.earn { background: color-mix(in srgb, var(--green) 8%, transparent); }
+.howto-card.earn { background: color-mix(in srgb, var(--hot) 8%, transparent); }
 .howto-card.lose { background: color-mix(in srgb, #c0392b 8%, transparent); }
 .howto-card ul { margin: 0 0 0.5rem; padding-left: 1.1rem; }
 .howto-card li { margin-bottom: 0.3rem; }

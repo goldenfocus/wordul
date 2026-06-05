@@ -45,33 +45,33 @@ export function escalatedPenalty(base: number, reuseCount: number): number {
 //     just relocates a known-present letter earns nothing.
 export function orderedDiscoveriesInLast(
   guesses: GuessRow[],
-): { index: number; kind: "yellow" | "green"; letter: string }[] {
+): { index: number; kind: "warm" | "hot"; letter: string }[] {
   if (!guesses || guesses.length === 0) return [];
   const last = guesses[guesses.length - 1];
   if (!last || !last.mask) return [];
-  const wasGreen = new Set<number>();        // positions already green
-  const provenPresent = new Set<string>();   // letters already proven present (yellow OR green)
+  const wasGreen = new Set<number>();        // positions already hot
+  const provenPresent = new Set<string>();   // letters already proven present (warm OR hot)
   for (let g = 0; g < guesses.length - 1; g++) {
     const mask = guesses[g].mask || [];
     const w = guesses[g].word || "";
     for (let i = 0; i < mask.length; i++) {
-      if (mask[i] === "green") {
+      if (mask[i] === "hot") {
         wasGreen.add(i);
         provenPresent.add((w[i] || "").toUpperCase());
-      } else if (mask[i] === "yellow") {
+      } else if (mask[i] === "warm") {
         provenPresent.add((w[i] || "").toUpperCase());
       }
     }
   }
   const word = last.word || "";
-  const out: { index: number; kind: "yellow" | "green"; letter: string }[] = [];
+  const out: { index: number; kind: "warm" | "hot"; letter: string }[] = [];
   for (let i = 0; i < last.mask.length; i++) {
-    if (last.mask[i] === "yellow" && !provenPresent.has((word[i] || "").toUpperCase())) {
-      out.push({ index: i, kind: "yellow", letter: word[i] });
+    if (last.mask[i] === "warm" && !provenPresent.has((word[i] || "").toUpperCase())) {
+      out.push({ index: i, kind: "warm", letter: word[i] });
     }
   }
   for (let i = 0; i < last.mask.length; i++) {
-    if (last.mask[i] === "green" && !wasGreen.has(i)) out.push({ index: i, kind: "green", letter: word[i] });
+    if (last.mask[i] === "hot" && !wasGreen.has(i)) out.push({ index: i, kind: "hot", letter: word[i] });
   }
   return out;
 }
@@ -84,7 +84,7 @@ export function deadLettersFrom(guesses: GuessRow[]): Set<string> {
     if (!g || !g.mask) continue;
     const word = g.word || "";
     for (let i = 0; i < g.mask.length; i++) {
-      if (g.mask[i] === "green" || g.mask[i] === "yellow") good.add((word[i] || "").toUpperCase());
+      if (g.mask[i] === "hot" || g.mask[i] === "warm") good.add((word[i] || "").toUpperCase());
     }
   }
   const dead = new Set<string>();
@@ -92,7 +92,7 @@ export function deadLettersFrom(guesses: GuessRow[]): Set<string> {
     if (!g || !g.mask) continue;
     const word = g.word || "";
     for (let i = 0; i < g.mask.length; i++) {
-      if (g.mask[i] === "gray") {
+      if (g.mask[i] === "cold") {
         const c = (word[i] || "").toUpperCase();
         if (c && !good.has(c)) dead.add(c);
       }
@@ -129,7 +129,7 @@ export function pointsEarned(guesses: GuessRow[], maxGuesses: number): number {
   for (let k = 0; k < guesses.length; k++) {
     const upto = guesses.slice(0, k + 1);
     const disc = orderedDiscoveriesInLast(upto);
-    const base = disc.reduce((s, d) => s + (d.kind === "green" ? POINTS.green : POINTS.yellow), 0);
+    const base = disc.reduce((s, d) => s + (d.kind === "hot" ? POINTS.green : POINTS.yellow), 0);
     pts += Math.round(base * comboMultiplier(disc.length));
     const wasted = wastedDeadLettersInLast(upto);
     let pen = 0;
@@ -141,7 +141,7 @@ export function pointsEarned(guesses: GuessRow[], maxGuesses: number): number {
     pts -= Math.min(pen, POINTS.wastedCapPerGuess);
   }
   const last = guesses[guesses.length - 1];
-  if (last && last.mask.length > 0 && last.mask.every((c) => c === "green")) {
+  if (last && last.mask.length > 0 && last.mask.every((c) => c === "hot")) {
     const guessesLeft = Math.max(0, maxGuesses - guesses.length);
     pts += POINTS.solve + POINTS.speedPerGuessLeft * guessesLeft;
   }

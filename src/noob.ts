@@ -27,7 +27,7 @@ function greensFromView(guesses: BotView["ownGuesses"]): Map<number, string> {
   for (const { word, mask } of guesses) {
     const w = word.toUpperCase();
     for (let i = 0; i < mask.length; i++) {
-      if (mask[i] === "green") greens.set(i, w[i]);
+      if (mask[i] === "hot") greens.set(i, w[i]);
     }
   }
   return greens;

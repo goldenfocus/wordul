@@ -3,14 +3,14 @@ import { buildShareCardModel } from "/share-card.js";
 
 describe("share-card model", () => {
   const guesses = [
-    { word: "CRANE", mask: ["gray","gray","yellow","gray","green"] },
-    { word: "SLATE", mask: ["green","green","green","green","green"] },
+    { word: "CRANE", mask: ["cold","cold","warm","cold","hot"] },
+    { word: "SLATE", mask: ["hot","hot","hot","hot","hot"] },
   ];
 
   it("carries the color grid, name, score, phrase, and cta — but NEVER the word", () => {
     const m = buildShareCardModel({ username: "yan", guesses, won: true, score: "2/6",
       answer: "SLATE", challengeUrl: "wordul.com/c/x7gk2" });
-    expect(m.grid).toEqual([["gray","gray","yellow","gray","green"], ["green","green","green","green","green"]]);
+    expect(m.grid).toEqual([["cold","cold","warm","cold","hot"], ["hot","hot","hot","hot","hot"]]);
     expect(m.name).toBe("@yan");
     expect(m.score).toBe("2/6");
     expect(typeof m.phrase).toBe("string");

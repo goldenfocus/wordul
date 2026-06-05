@@ -35,8 +35,8 @@ export function toPublicGame(g: GameRecord, liveDailyPath = ""): PublicGameRecor
 }
 
 // Pure: encode a player's guess masks into compact row strings for the solve stamp.
-// green→"g", yellow→"y", gray→"x".
-const CELL: Record<Color, string> = { green: "g", yellow: "y", gray: "x" };
+// hot→"g", warm→"y", cold→"x".
+const CELL: Record<Color, string> = { hot: "g", warm: "y", cold: "x" };
 export function encodeSolveGrid(rows: { mask: Color[] }[]): string[] {
   return (rows ?? []).map((r) => (r?.mask ?? []).map((c) => CELL[c] ?? "x").join(""));
 }

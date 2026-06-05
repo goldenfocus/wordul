@@ -43,7 +43,7 @@ const LS = {
                                // profile ever leaking today's answer.
 };
 
-const SOLVE_CELL = { green: "g", yellow: "y", gray: "x" };
+const SOLVE_CELL = { hot: "g", warm: "y", cold: "x" };
 // Stash this browser's own finished daily (letters + color grid) so the home recap can
 // draw a crystallized stamp with real letters. Never sent to the server.
 function captureDailySolve(date, me) {
@@ -704,8 +704,8 @@ function getMyFreshTile(colIndex) {
   for (let r = rows.length - 1; r >= 0; r--) {
     const tiles = rows[r].querySelectorAll(".tile");
     const filled = tiles[0] && (tiles[0].classList.contains("reveal") ||
-      tiles[0].classList.contains("green") || tiles[0].classList.contains("yellow") ||
-      tiles[0].classList.contains("gray"));
+      tiles[0].classList.contains("hot") || tiles[0].classList.contains("warm") ||
+      tiles[0].classList.contains("cold"));
     if (filled) return tiles[colIndex] || null;
   }
   return null;
@@ -1797,10 +1797,10 @@ function onServerMessage(msg) {
         // the old lump Math.round((ng*green + ny*yellow)*mult); only the timing is staged.
         const discoveryList = orderedDiscoveriesInLast(me.guesses).map((d) => ({
           ...d,
-          value: d.kind === "green" ? GOLD.green : GOLD.yellow,
+          value: d.kind === "hot" ? GOLD.hot : GOLD.warm,
         }));
-        const ng = discoveryList.filter((d) => d.kind === "green").length;
-        const ny = discoveryList.filter((d) => d.kind === "yellow").length;
+        const ng = discoveryList.filter((d) => d.kind === "hot").length;
+        const ny = discoveryList.filter((d) => d.kind === "warm").length;
         const discoveries = discoveryList.length;
         const mult = comboMultiplier(discoveries);
         const base = discoveryList.reduce((s, d) => s + d.value, 0);
@@ -1821,7 +1821,7 @@ function onServerMessage(msg) {
           const reuse = game.deadLetterReuse.get(letter) ?? 0;
           const pen = escalatedPenalty(GOLD.wastedLetterPenalty, reuse);
           penalty += pen;
-          penaltyLines.push(`wasted  ${letter}  −${pen}`);
+          penaltyLines.push(`${"bad ".repeat(reuse + 1).trim()}  ${letter}  −${pen}`);
           game.deadLetterReuse.set(letter, reuse + 1);
         }
         penalty = Math.min(penalty, GOLD.wastedCapPerGuess);
@@ -3016,13 +3016,13 @@ function checkHardMode(guess, prevGuesses) {
   const ord = (n) => (n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : `${n}th`);
   for (const g of prevGuesses) {
     for (let i = 0; i < g.word.length; i++) {
-      if (g.mask[i] === "green" && guess[i] !== g.word[i]) {
+      if (g.mask[i] === "hot" && guess[i] !== g.word[i]) {
         return `${ord(i + 1)} letter must be ${g.word[i]}`;
       }
     }
     const need = {};
     for (let i = 0; i < g.word.length; i++) {
-      if (g.mask[i] === "yellow") need[g.word[i]] = (need[g.word[i]] ?? 0) + 1;
+      if (g.mask[i] === "warm") need[g.word[i]] = (need[g.word[i]] ?? 0) + 1;
     }
     const have = {};
     for (const c of guess) have[c] = (have[c] ?? 0) + 1;
@@ -3245,8 +3245,8 @@ function crackTiles(letters) {
   for (let r = rows.length - 1; r >= 0; r--) {
     const tiles = rows[r].querySelectorAll(".tile");
     const filled = tiles[0] && (tiles[0].classList.contains("reveal") ||
-      tiles[0].classList.contains("green") || tiles[0].classList.contains("yellow") ||
-      tiles[0].classList.contains("gray"));
+      tiles[0].classList.contains("hot") || tiles[0].classList.contains("warm") ||
+      tiles[0].classList.contains("cold"));
     if (!filled) continue;
     tiles.forEach((t) => {
       if (!up.has((t.textContent || "").toUpperCase())) return;
@@ -3274,10 +3274,10 @@ function celebrateGreens(count) {
   } else {
     playChime([[660, 0], [880, 0.08]]);
     if (boards && !reduced) {
-      boards.classList.remove("green-spark");
+      boards.classList.remove("hot-spark");
       void boards.offsetWidth; // restart the animation
-      boards.classList.add("green-spark");
-      setTimeout(() => boards.classList.remove("green-spark"), 700);
+      boards.classList.add("hot-spark");
+      setTimeout(() => boards.classList.remove("hot-spark"), 700);
     }
   }
 }
@@ -3326,7 +3326,7 @@ function handleGameOver(snap) {
     const maxGuesses = snap.maxGuesses ?? 6;
     const finalGreens = newGreensInLast(me.guesses);
     const speedBonus = GOLD.speedPerGuessLeft * Math.max(0, maxGuesses - guessCount);
-    const winGold = GOLD.solve + speedBonus + finalGreens * GOLD.green;
+    const winGold = GOLD.solve + speedBonus + finalGreens * GOLD.hot;
     awardGold(winGold, getSettings().reducedMotion);
     game.goldThisRound = (game.goldThisRound || 0) + winGold;
     // Clearer-wins: the solve is the climactic turn — capture it in the replay + hacker-log
@@ -3334,7 +3334,7 @@ function handleGameOver(snap) {
     // was already awarded above; this only RECORDS it (shape matches the gated server viewer).
     const winEvents = [];
     for (const d of orderedDiscoveriesInLast(me.guesses)) {
-      if (d.kind === "green") winEvents.push({ kind: "green", index: d.index, letter: d.letter, delta: GOLD.green });
+      if (d.kind === "hot") winEvents.push({ kind: "hot", index: d.index, letter: d.letter, delta: GOLD.hot });
     }
     winEvents.push({ kind: "solve", delta: GOLD.solve });
     if (speedBonus > 0) winEvents.push({ kind: "speed", delta: speedBonus });

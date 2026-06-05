@@ -2,7 +2,7 @@
 //
 // Powers the live, auto-playing tile demos on the How to Play page. The scorer below is
 // a faithful PORT of src/color.ts `scoreGuess` (same leftover-counter algorithm, same
-// 'gray' spelling) so the demos color tiles by the EXACT rule the real game uses. The
+// 'cold' spelling) so the demos color tiles by the EXACT rule the real game uses. The
 // port is kept honest by test/howto-score.test.ts, which diffs it against the real
 // scorer across many word pairs. If they ever drift, that test fails.
 //
@@ -10,21 +10,21 @@
 // to test `score` in isolation.
 
 // --- The scorer: a direct port of src/color.ts scoreGuess. ---
-// Returns one of "green" | "yellow" | "gray" per letter.
+// Returns one of "hot" | "warm" | "cold" per letter.
 export function score(guess, answer) {
   const g = guess.toUpperCase();
   const a = answer.toUpperCase();
-  const result = new Array(g.length).fill("gray");
+  const result = new Array(g.length).fill("cold");
   const leftover = {};
   for (let i = 0; i < g.length; i++) {
-    if (g[i] === a[i]) result[i] = "green";
+    if (g[i] === a[i]) result[i] = "hot";
     else leftover[a[i]] = (leftover[a[i]] ?? 0) + 1;
   }
   for (let i = 0; i < g.length; i++) {
-    if (result[i] === "green") continue;
+    if (result[i] === "hot") continue;
     const c = g[i];
     if ((leftover[c] ?? 0) > 0) {
-      result[i] = "yellow";
+      result[i] = "warm";
       leftover[c] -= 1;
     }
   }
@@ -161,11 +161,11 @@ async function cycle(mount, withEnd) {
 // A single static legend tile that flips on tap/hover so it feels alive + explorable.
 function wireTappable(root) {
   root.querySelectorAll("[data-flip]").forEach((tile) => {
-    const states = ["green", "yellow", "gray"];
+    const states = ["hot", "warm", "cold"];
     let i = states.indexOf(tile.dataset.flip);
     if (i < 0) i = 0;
     const apply = () => {
-      tile.classList.remove("green", "yellow", "gray");
+      tile.classList.remove("hot", "warm", "cold");
       tile.classList.add(states[i], "reveal");
     };
     apply();

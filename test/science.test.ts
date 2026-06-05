@@ -21,7 +21,7 @@ const base = {
 
 describe("science aggregates", () => {
   it("turns masks into stable public patterns", () => {
-    const pattern = maskToPattern(["green", "yellow", "gray", "gray", "green"]);
+    const pattern = maskToPattern(["hot", "warm", "cold", "cold", "hot"]);
     expect(pattern).toBe("GYXXG");
     expect(countMask(pattern)).toEqual({ green: 2, yellow: 1, gray: 2 });
   });

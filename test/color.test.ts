@@ -3,7 +3,7 @@ import { countVowels, greenedPositions, revealUngreened } from "../src/color.ts"
 import type { Color } from "../src/color.ts";
 
 const row = (mask: Color[]) => ({ mask });
-const G: Color = "green", Y: Color = "yellow", X: Color = "gray";
+const G: Color = "hot", Y: Color = "warm", X: Color = "cold";
 
 describe("countVowels", () => {
   it("counts A E I O U (case-insensitive)", () => {

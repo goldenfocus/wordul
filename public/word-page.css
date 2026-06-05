@@ -1,19 +1,19 @@
 /* public/word-page.css — standalone styles for the word wiki pages. */
-:root { --bg:#121213; --fg:#d7dadc; --green:#6aaa64; --muted:#818384; }
+:root { --bg:#121213; --fg:#d7dadc; --hot:#6aaa64; --muted:#818384; }
 html, .wp { overflow-x:clip; } /* belt-and-braces: no lateral scroll on mobile (see iOS scar) */
 .wp { margin:0; background:var(--bg); color:var(--fg); font-family:system-ui,Arial,sans-serif; line-height:1.5; }
 .wp-head { padding:16px 20px; border-bottom:1px solid #2a2a2c; }
 .wp-head a { color:var(--fg); text-decoration:none; }
 .wp-main { max-width:720px; margin:0 auto; padding:24px 20px 64px; }
 .wp-tiles { display:flex; gap:8px; justify-content:center; margin:8px 0 4px; }
-.wp-tile { width:48px; height:48px; display:grid; place-items:center; background:var(--green); color:#fff; font-weight:800; font-size:28px; border-radius:6px; }
+.wp-tile { width:48px; height:48px; display:grid; place-items:center; background:var(--hot); color:#fff; font-weight:800; font-size:28px; border-radius:6px; }
 .wp-meta { text-align:center; color:var(--muted); margin:0 0 8px; }
 .wp h1 { text-align:center; letter-spacing:4px; margin:4px 0 24px; }
 .wp h2 { font-size:18px; margin:28px 0 6px; }
-.wp-quote { border-left:3px solid var(--green); margin:20px 0; padding:4px 0 4px 16px; color:var(--fg); }
+.wp-quote { border-left:3px solid var(--hot); margin:20px 0; padding:4px 0 4px 16px; color:var(--fg); }
 .wp-quote cite { display:block; color:var(--muted); margin-top:6px; font-style:normal; }
 .wp-rel h3 { font-size:14px; color:var(--muted); margin:14px 0 4px; }
-.wp-rel a, .wp-main section a { color:var(--green); text-decoration:none; margin-right:10px; }
+.wp-rel a, .wp-main section a { color:var(--hot); text-decoration:none; margin-right:10px; }
 /* Related-word links are emitted back-to-back (</a><a>) with no whitespace, so inline flow
    has no break opportunity and the row can't wrap → it ran off-screen on mobile. Flex-wrap
    the row so every link is its own wrappable item; gap replaces the inline margin. */
@@ -22,7 +22,7 @@ html, .wp { overflow-x:clip; } /* belt-and-braces: no lateral scroll on mobile (
 .wp-faq details { border-top:1px solid #2a2a2c; padding:8px 0; }
 .wp-faq summary { cursor:pointer; }
 .wp-cta { text-align:center; margin-top:40px; }
-.wp-play { display:inline-block; background:var(--green); color:#fff; padding:12px 24px; border-radius:8px; text-decoration:none; font-weight:700; }
+.wp-play { display:inline-block; background:var(--hot); color:#fff; padding:12px 24px; border-radius:8px; text-decoration:none; font-weight:700; }
 
 /* Meanings — numbered senses with italic examples + a small register tag. */
 .wp-senses ol { margin:6px 0 0; padding-left:22px; }

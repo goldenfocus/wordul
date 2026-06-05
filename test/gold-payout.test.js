@@ -3,18 +3,18 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { GOLD, comboMultiplier, playPayoutSequence } from "/gold.js";
 import { getGold, setGold } from "/edition.js";
 
-// Build the discovery shape app.js hands to playPayoutSequence: yellows first, then
-// greens, value attached. value = GOLD.green for greens, GOLD.yellow for yellows.
+// Build the discovery shape app.js hands to playPayoutSequence: warms first, then
+// hots, value attached. value = GOLD.hot for hots, GOLD.warm for warms.
 function discoveries(ng, ny) {
   const out = [];
-  for (let i = 0; i < ny; i++) out.push({ index: i, kind: "yellow", letter: "A", value: GOLD.yellow });
-  for (let i = 0; i < ng; i++) out.push({ index: i, kind: "green", letter: "B", value: GOLD.green });
+  for (let i = 0; i < ny; i++) out.push({ index: i, kind: "warm", letter: "A", value: GOLD.warm });
+  for (let i = 0; i < ng; i++) out.push({ index: i, kind: "hot", letter: "B", value: GOLD.hot });
   return out;
 }
 
 // The old lump the staged payout must match exactly.
 const oldLump = (ng, ny) =>
-  Math.round((ng * GOLD.green + ny * GOLD.yellow) * comboMultiplier(ng + ny));
+  Math.round((ng * GOLD.hot + ny * GOLD.warm) * comboMultiplier(ng + ny));
 
 describe("playPayoutSequence — gold-sum invariant (no double-award, no drift)", () => {
   beforeEach(() => {
@@ -24,13 +24,13 @@ describe("playPayoutSequence — gold-sum invariant (no double-award, no drift)"
 
   // reducedMotion path is synchronous → easiest to assert the total.
   const cases = [
-    [1, 0], // single green, mult 1
-    [0, 1], // single yellow, mult 1
-    [2, 0], // 2 greens → 1.5×
+    [1, 0], // single hot, mult 1
+    [0, 1], // single warm, mult 1
+    [2, 0], // 2 hots → 1.5×
     [1, 1], // 1g + 1y → 1.5×
-    [3, 0], // 3 greens → 2×
+    [3, 0], // 3 hots → 2×
     [2, 1], // → 2×
-    [0, 5], // 5 yellows → 3×
+    [0, 5], // 5 warms → 3×
     [3, 2], // → 3×
   ];
 
@@ -66,13 +66,13 @@ describe("playPayoutSequence — gold-sum invariant (no double-award, no drift)"
       mult: comboMultiplier(1),
       reducedMotion: false,
     });
-    expect(getGold()).toBe(GOLD.green);
+    expect(getGold()).toBe(GOLD.hot);
   });
 
   it("per-beat ticks are integers summing to base; the bonus is round(base*mult)-base", async () => {
     // 3g+2y, mult 3: base = 3*100 + 2*50 = 400; total = round(400*3) = 1200; bonus = 800.
     const ng = 3, ny = 2;
-    const base = ng * GOLD.green + ny * GOLD.yellow;
+    const base = ng * GOLD.hot + ny * GOLD.warm;
     const total = oldLump(ng, ny);
     expect(base).toBe(400);
     expect(total).toBe(1200);
@@ -165,6 +165,6 @@ describe("playPayoutSequence — gold-sum invariant (no double-award, no drift)"
     // 2 beat lines + 1 combo finale line.
     expect(lines.length).toBe(3);
     expect(lines[lines.length - 1].o.tone).toBe("combo");
-    expect(seen).toEqual([0, 0]); // one getTile call per discovery (yellow idx0, green idx0)
+    expect(seen).toEqual([0, 0]); // one getTile call per discovery (warm idx0, hot idx0)
   });
 });

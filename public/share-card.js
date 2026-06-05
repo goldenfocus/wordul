@@ -28,9 +28,9 @@ export function buildShareCardModel({ username, guesses, won, score, challengeUr
 }
 
 const BRAND = { bg: "#15101f", gold: "#f0c14b", violet: "#7c5cff", accent: "#9d8bff", fg: "#f7f1e3", muted: "#bdb6c9" };
-// Correct (in-position) tiles use the brand ultraviolet — the live game's --green —
-// NOT NYT Wordle green. yellow = brand gold-ish, gray = brand neutral.
-const TILE = { green: "#9d8bff", yellow: "#c9a227", gray: "#2a2533" };
+// Correct (in-position) tiles use the brand ultraviolet — the live game's --hot —
+// NOT NYT Wordle green. warm = brand gold-ish, cold = brand neutral.
+const TILE = { hot: "#9d8bff", warm: "#c9a227", cold: "#2a2533" };
 
 export function renderShareCard(model, cols) {
   const dpr = 2, W = 560, P = 40, gap = 8;
@@ -53,7 +53,7 @@ export function renderShareCard(model, cols) {
   ctx.font = `800 30px ${FONT}`; ctx.fillStyle = BRAND.gold;
   ctx.fillText("WORDUL", W / 2, cy + 19); cy += 38 + 20;
 
-  ctx.font = `800 32px ${FONT}`; ctx.fillStyle = model.won ? TILE.green : BRAND.muted;
+  ctx.font = `800 32px ${FONT}`; ctx.fillStyle = model.won ? TILE.hot : BRAND.muted;
   ctx.fillText(`${model.name} · ${model.score}`, W / 2, cy + 20);
   cy += 40 + 24;
 

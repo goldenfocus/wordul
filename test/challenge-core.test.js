@@ -32,7 +32,7 @@ describe("challenge-core", () => {
   it("toMeta never leaks the answer word", () => {
     const state = {
       id: "x7gk2", word: "SLATE", wordLength: 5, owner: "yan",
-      ownerScore: "3/6", ownerGrid: [["green","gray","gray","gray","gray"]],
+      ownerScore: "3/6", ownerGrid: [["hot","cold","cold","cold","cold"]],
       createdAt: 1, attempts: [],
     };
     const meta = toMeta(state);

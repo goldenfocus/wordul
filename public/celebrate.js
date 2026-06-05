@@ -7,11 +7,11 @@ export function newGreensInLast(guesses) {
   const wasGreen = new Set();
   for (let g = 0; g < guesses.length - 1; g++) {
     const mask = guesses[g].mask || [];
-    for (let i = 0; i < mask.length; i++) if (mask[i] === "green") wasGreen.add(i);
+    for (let i = 0; i < mask.length; i++) if (mask[i] === "hot") wasGreen.add(i);
   }
   let count = 0;
   for (let i = 0; i < last.mask.length; i++) {
-    if (last.mask[i] === "green" && !wasGreen.has(i)) count++;
+    if (last.mask[i] === "hot" && !wasGreen.has(i)) count++;
   }
   return count;
 }
@@ -31,13 +31,13 @@ export function newYellowsInLast(guesses) {
     const mask = guesses[g].mask || [];
     const w = guesses[g].word || "";
     for (let i = 0; i < mask.length; i++) {
-      if (mask[i] === "green" || mask[i] === "yellow") provenPresent.add((w[i] || "").toUpperCase());
+      if (mask[i] === "hot" || mask[i] === "warm") provenPresent.add((w[i] || "").toUpperCase());
     }
   }
   const word = last.word || "";
   let count = 0;
   for (let i = 0; i < last.mask.length; i++) {
-    if (last.mask[i] === "yellow" && !provenPresent.has((word[i] || "").toUpperCase())) count++;
+    if (last.mask[i] === "warm" && !provenPresent.has((word[i] || "").toUpperCase())) count++;
   }
   return count;
 }
@@ -53,9 +53,9 @@ export function newYellowsInLast(guesses) {
 //   • YELLOW dedups BY LETTER — a yellow pays only if that LETTER wasn't already proven
 //     present (yellow OR green at any position) in a PRIOR guess. A "moving" yellow that
 //     just relocates a known-present letter earns nothing.
-// Returns: Array<{index:number, kind:'yellow'|'green', letter:string}>.
-// Invariant: filter(kind==='green').length === newGreensInLast(g) and the same for
-// yellow — the staged beats total the identical discoveries as the old lump.
+// Returns: Array<{index:number, kind:'warm'|'hot', letter:string}>.
+// Invariant: filter(kind==='hot').length === newGreensInLast(g) and the same for
+// warm — the staged beats total the identical discoveries as the old lump.
 export function orderedDiscoveriesInLast(guesses) {
   if (!guesses || guesses.length === 0) return [];
   const last = guesses[guesses.length - 1];
@@ -66,10 +66,10 @@ export function orderedDiscoveriesInLast(guesses) {
     const mask = guesses[g].mask || [];
     const w = guesses[g].word || "";
     for (let i = 0; i < mask.length; i++) {
-      if (mask[i] === "green") {
+      if (mask[i] === "hot") {
         wasGreen.add(i);
         provenPresent.add((w[i] || "").toUpperCase());
-      } else if (mask[i] === "yellow") {
+      } else if (mask[i] === "warm") {
         provenPresent.add((w[i] || "").toUpperCase());
       }
     }
@@ -78,14 +78,14 @@ export function orderedDiscoveriesInLast(guesses) {
   const out = [];
   // Yellows first (ascending index)…
   for (let i = 0; i < last.mask.length; i++) {
-    if (last.mask[i] === "yellow" && !provenPresent.has((word[i] || "").toUpperCase())) {
-      out.push({ index: i, kind: "yellow", letter: word[i] });
+    if (last.mask[i] === "warm" && !provenPresent.has((word[i] || "").toUpperCase())) {
+      out.push({ index: i, kind: "warm", letter: word[i] });
     }
   }
   // …then greens (ascending index).
   for (let i = 0; i < last.mask.length; i++) {
-    if (last.mask[i] === "green" && !wasGreen.has(i)) {
-      out.push({ index: i, kind: "green", letter: word[i] });
+    if (last.mask[i] === "hot" && !wasGreen.has(i)) {
+      out.push({ index: i, kind: "hot", letter: word[i] });
     }
   }
   return out;
@@ -107,7 +107,7 @@ export function deadLettersFrom(guesses) {
     if (!g || !g.mask) continue;
     const word = g.word || "";
     for (let i = 0; i < g.mask.length; i++) {
-      if (g.mask[i] === "green" || g.mask[i] === "yellow") {
+      if (g.mask[i] === "hot" || g.mask[i] === "warm") {
         good.add((word[i] || "").toUpperCase());
       }
     }
@@ -118,7 +118,7 @@ export function deadLettersFrom(guesses) {
     if (!g || !g.mask) continue;
     const word = g.word || "";
     for (let i = 0; i < g.mask.length; i++) {
-      if (g.mask[i] === "gray") {
+      if (g.mask[i] === "cold") {
         const c = (word[i] || "").toUpperCase();
         if (c && !good.has(c)) dead.add(c);
       }

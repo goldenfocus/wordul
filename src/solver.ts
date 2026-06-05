@@ -43,10 +43,10 @@ function buildConstraints(guesses: BotView["ownGuesses"]): Constraints {
 
     for (let i = 0; i < g.length; i++) {
       const c = g[i];
-      if (mask[i] === "green") {
+      if (mask[i] === "hot") {
         greens.set(i, c);
         nonGray[c] = (nonGray[c] ?? 0) + 1;
-      } else if (mask[i] === "yellow") {
+      } else if (mask[i] === "warm") {
         (forbidden.get(c) ?? forbidden.set(c, new Set()).get(c)!).add(i);
         nonGray[c] = (nonGray[c] ?? 0) + 1;
       } else {

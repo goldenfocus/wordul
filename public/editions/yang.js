@@ -9,7 +9,7 @@ export const edition = {
   palette: {
     bg: "#0b0a0c", fg: "#f7f1e3", muted: "#9a9388", border: "#2e2a22",
     tileEmpty: "#0b0a0c", tilePendingBorder: "#4a4334", keyBg: "#2a2620",
-    green: "#6f9e7a", yellow: "#d9ad4f", gray: "#38332a",
+    hot: "#6f9e7a", warm: "#d9ad4f", cold: "#38332a",
     accent: "#f0c14b", bgCard: "#161310", error: "#e0796b",
   },
   fonts: {

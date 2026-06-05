@@ -25,7 +25,7 @@ describe("noobGuess", () => {
     // Confirmed green 'C' at position 0.
     const view: BotView = {
       wordLength: 5,
-      ownGuesses: [{ word: "CRANE", mask: ["green", "gray", "gray", "gray", "gray"] }],
+      ownGuesses: [{ word: "CRANE", mask: ["hot", "cold", "cold", "cold", "cold"] }],
     };
     const sharp = computeNextGuess(view);
     const slip = noobGuess(view, NOOB, 0);

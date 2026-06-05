@@ -200,7 +200,7 @@ export function emptyScienceState(date: string, now = Date.now()): ScienceDailyS
 }
 
 export function maskToPattern(mask: Color[]): string {
-  return mask.map((c) => (c === "green" ? "G" : c === "yellow" ? "Y" : "X")).join("");
+  return mask.map((c) => (c === "hot" ? "G" : c === "warm" ? "Y" : "X")).join("");
 }
 
 export function countMask(pattern: string): { green: number; yellow: number; gray: number } {

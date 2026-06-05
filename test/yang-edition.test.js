@@ -39,7 +39,7 @@ describe("yang edition", () => {
     }
   });
   it("has a full palette and fonts", () => {
-    for (const k of ["bg", "fg", "accent", "green", "yellow", "gray"]) {
+    for (const k of ["bg", "fg", "accent", "hot", "warm", "cold"]) {
       expect(typeof ed.palette[k]).toBe("string");
     }
     expect(typeof ed.fonts.display).toBe("string");

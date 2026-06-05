@@ -20,8 +20,8 @@ const GOLD_WALLET = { get: getGold, add: addGold, drain: drainGold };
 
 // --- Gold economy: earn on progress, with combo multipliers, raining from the sky. ---
 export const GOLD = {
-  green: 100,             // each newly-revealed green
-  yellow: 50,             // each newly-revealed yellow
+  hot: 100,             // each newly-revealed hot
+  warm: 50,             // each newly-revealed warm
   solve: 500,             // flat solve bonus
   speedPerGuessLeft: 300, // × unused guesses — solve fast, earn more
   revealCost: 4000,       // a letter is a splurge (gold is precious)
@@ -138,7 +138,7 @@ function spawnGoldCoins(n) {
 
 // --- Clearer wins: the sequenced payout. ---
 // Instead of one lump coin-burst, walk the discoveries one beat at a time so a win
-// is *legible*: each yellow/green glows its tile, floats a "+N", ticks the HUD, plays
+// is *legible*: each warm/hot glows its tile, floats a "+N", ticks the HUD, plays
 // an ascending note, and types a hacker-log line — then a finale "✦ N× COMBO" lands
 // the multiplier last. Tunable cadence; reducedMotion / fast-payouts skip the pauses.
 export const PAYOUT_BEAT_MS = 450;
@@ -163,7 +163,7 @@ function spawnGoldFloater(tile, value) {
 // (= round(base*mult) − base) ONCE at the finale. So:  Σbeats + bonus === total.
 // playPayoutSequence({ discoveries, mult, hud, getTile, log, playChime,
 //                      celebrateCombo, reducedMotion, onBalanceChange }) → Promise
-//   discoveries  Array<{ index, kind:'yellow'|'green', letter, value }> (value attached by caller)
+//   discoveries  Array<{ index, kind:'warm'|'hot', letter, value }> (value attached by caller)
 //   mult         combo multiplier for this guess (comboMultiplier(discoveries.length))
 //   hud          the #goldHud element to tick (optional; resolved if omitted)
 //   getTile      (index) → the board tile DOM for that column (optional; glow/floater skipped if null)

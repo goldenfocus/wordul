@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { newGreensInLast, newYellowsInLast, orderedDiscoveriesInLast } from "/celebrate.js";
 
 const g = (word, mask) => ({ word, mask });
-const G = "green", Y = "yellow", X = "gray";
+const G = "hot", Y = "warm", X = "cold";
 
 describe("newGreensInLast", () => {
   it("returns 0 for no guesses", () => {
@@ -67,17 +67,17 @@ describe("orderedDiscoveriesInLast", () => {
   it("orders yellows before greens in a single guess (small→big)", () => {
     // CRANE: C yellow (0), N green (3). Yellow must come first.
     expect(orderedDiscoveriesInLast([g("CRANE", [Y, X, X, G, X])])).toEqual([
-      { index: 0, kind: "yellow", letter: "C" },
-      { index: 3, kind: "green", letter: "N" },
+      { index: 0, kind: "warm", letter: "C" },
+      { index: 3, kind: "hot", letter: "N" },
     ]);
   });
   it("returns ALL yellows (ascending index) THEN all greens (ascending index)", () => {
     // CRANE: yellows at 1,4 (R,E); greens at 0,2 (C,A).
     expect(orderedDiscoveriesInLast([g("CRANE", [G, Y, G, X, Y])])).toEqual([
-      { index: 1, kind: "yellow", letter: "R" },
-      { index: 4, kind: "yellow", letter: "E" },
-      { index: 0, kind: "green", letter: "C" },
-      { index: 2, kind: "green", letter: "A" },
+      { index: 1, kind: "warm", letter: "R" },
+      { index: 4, kind: "warm", letter: "E" },
+      { index: 0, kind: "hot", letter: "C" },
+      { index: 2, kind: "hot", letter: "A" },
     ]);
   });
   it("excludes greens already discovered at that position in an earlier guess", () => {
@@ -86,7 +86,7 @@ describe("orderedDiscoveriesInLast", () => {
       g("COVEN", [G, X, X, G, X]),   // col 0 already green; col 3 is NEW
     ];
     expect(orderedDiscoveriesInLast(guesses)).toEqual([
-      { index: 3, kind: "green", letter: "E" },
+      { index: 3, kind: "hot", letter: "E" },
     ]);
   });
   it("excludes a yellow whose LETTER was already proven present in an earlier guess", () => {
@@ -95,15 +95,15 @@ describe("orderedDiscoveriesInLast", () => {
       g("COVEN", [Y, X, Y, X, X]),   // C already present (dropped); V is NEW
     ];
     expect(orderedDiscoveriesInLast(guesses)).toEqual([
-      { index: 2, kind: "yellow", letter: "V" },
+      { index: 2, kind: "warm", letter: "V" },
     ]);
   });
   it("handles duplicate letters per position, not per letter", () => {
     // SASSY: same letter S green at index 0 and yellow at index 2 — counted by
     // position, so both surface (green after yellow in beat order).
     expect(orderedDiscoveriesInLast([g("SASSY", [G, X, Y, X, X])])).toEqual([
-      { index: 2, kind: "yellow", letter: "S" },
-      { index: 0, kind: "green", letter: "S" },
+      { index: 2, kind: "warm", letter: "S" },
+      { index: 0, kind: "hot", letter: "S" },
     ]);
   });
   // REGRESSION (F6): the client discovery list must match the SERVER mint
@@ -115,7 +115,7 @@ describe("orderedDiscoveriesInLast", () => {
     it("CRANE → CRANK: guess2 yields ONLY the new green K (no phantom yellow, no re-paid greens)", () => {
       const guesses = [g("CRANE", [G, G, G, G, X]), g("CRANK", [G, G, G, G, G])];
       expect(orderedDiscoveriesInLast(guesses)).toEqual([
-        { index: 4, kind: "green", letter: "K" },
+        { index: 4, kind: "hot", letter: "K" },
       ]);
     });
     it("a moving yellow letter pays its yellow ONCE, not again at a new position", () => {
@@ -128,7 +128,7 @@ describe("orderedDiscoveriesInLast", () => {
       // R yellow pos1 guess1 (present). guess2 BREAD: R green at pos1 → new green pays.
       const guesses = [g("CRANE", [X, Y, X, X, X]), g("BREAD", [X, G, X, X, X])];
       expect(orderedDiscoveriesInLast(guesses)).toEqual([
-        { index: 1, kind: "green", letter: "R" },
+        { index: 1, kind: "hot", letter: "R" },
       ]);
     });
   });
@@ -149,8 +149,8 @@ describe("orderedDiscoveriesInLast", () => {
     ];
     for (const f of fixtures) {
       const out = orderedDiscoveriesInLast(f);
-      expect(out.filter((d) => d.kind === "green").length).toBe(newGreensInLast(f));
-      expect(out.filter((d) => d.kind === "yellow").length).toBe(newYellowsInLast(f));
+      expect(out.filter((d) => d.kind === "hot").length).toBe(newGreensInLast(f));
+      expect(out.filter((d) => d.kind === "warm").length).toBe(newYellowsInLast(f));
     }
   });
 });

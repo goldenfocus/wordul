@@ -12,7 +12,7 @@ export const edition = {
     bg: "#0e0e10", fg: "#f4f2ec", muted: "#8a8a8f", border: "#2a2a2e",
     tileEmpty: "#0e0e10", tilePendingBorder: "#46464c", keyBg: "#2a2a2e",
     // Chrome is ultraviolet; "warm" carries a silver-yellow whisper of old #2.
-    green: "#9d8bff", yellow: "#d8c97a", gray: "#3a3a3e",
+    hot: "#9d8bff", warm: "#d8c97a", cold: "#3a3a3e",
     accent: "#9d8bff", bgCard: "#17171a", error: "#e0796b",
   },
   fonts: {

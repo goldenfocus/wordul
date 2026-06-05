@@ -34,11 +34,11 @@ describe("createHacklog", () => {
   it("logLine prefixes with '> ' and records structured entries in order", () => {
     const el = mount();
     const log = createHacklog(el, { reducedMotion: true });
-    log.logLine("green N pos 4  +100", { tone: "gain" });
-    log.logLine("yellow C pos 1  +50", { tone: "gain" });
+    log.logLine("hot N pos 4  +100", { tone: "gain" });
+    log.logLine("warm C pos 1  +50", { tone: "gain" });
     expect(log.getEntries()).toEqual([
-      { text: "> green N pos 4  +100", tone: "gain" },
-      { text: "> yellow C pos 1  +50", tone: "gain" },
+      { text: "> hot N pos 4  +100", tone: "gain" },
+      { text: "> warm C pos 1  +50", tone: "gain" },
     ]);
   });
 

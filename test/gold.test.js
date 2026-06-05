@@ -19,30 +19,30 @@ describe("comboMultiplier", () => {
 // multiplier, these expected payouts must be revisited deliberately.
 describe("gold sum (earn formula with C1 constants)", () => {
   const earned = (ng, ny) =>
-    Math.round((ng * GOLD.green + ny * GOLD.yellow) * comboMultiplier(ng + ny));
+    Math.round((ng * GOLD.hot + ny * GOLD.warm) * comboMultiplier(ng + ny));
 
   it("locks the C1 base values", () => {
-    expect(GOLD.green).toBe(100);
-    expect(GOLD.yellow).toBe(50);
+    expect(GOLD.hot).toBe(100);
+    expect(GOLD.warm).toBe(50);
     expect(GOLD.solve).toBe(500);
     expect(GOLD.speedPerGuessLeft).toBe(300);
     expect(GOLD.revealCost).toBe(4000);
     expect(GOLD.vowelCost).toBe(200);
   });
 
-  it("single green = 100 (no combo)", () => {
+  it("single hot = 100 (no combo)", () => {
     expect(earned(1, 0)).toBe(100);
   });
-  it("single yellow = 50 (no combo)", () => {
+  it("single warm = 50 (no combo)", () => {
     expect(earned(0, 1)).toBe(50);
   });
-  it("2 greens = (100+100)×1.5 = 300", () => {
+  it("2 hots = (100+100)×1.5 = 300", () => {
     expect(earned(2, 0)).toBe(300);
   });
-  it("1 green + 1 yellow = (100+50)×1.5 = 225", () => {
+  it("1 hot + 1 warm = (100+50)×1.5 = 225", () => {
     expect(earned(1, 1)).toBe(225);
   });
-  it("3 greens = (300)×2 = 600", () => {
+  it("3 hots = (300)×2 = 600", () => {
     expect(earned(3, 0)).toBe(600);
   });
 });

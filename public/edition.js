@@ -109,14 +109,14 @@ export function companionReact(event, ctx = {}) {
 // BOARD is the surface the player stares at for minutes — tiles, keys, feedback colors. We only
 // let an edition repaint it if it carries `morphBoard: true` (a curated, eyeballed theme). Every
 // other edition leaves the board on the elegant :root default, so an auto/loosely-themed day
-// (e.g. Tactile's browns) can't turn the board muddy, and green/yellow keep a stable meaning
+// (e.g. Tactile's browns) can't turn the board muddy, and hot/warm keep a stable meaning
 // across days. applyEdition removes any stale board overrides when morphing into an unblessed
 // edition, so switching themes never leaves yesterday's colors stuck inline.
 const CHROME_VARS = { accent: "--accent", bgCard: "--bg-card", error: "--error" };
 const BOARD_VARS = {
   bg: "--bg", fg: "--fg", muted: "--muted", border: "--border",
   tileEmpty: "--tile-empty", tilePendingBorder: "--tile-pending-border",
-  keyBg: "--key-bg", green: "--green", yellow: "--yellow", gray: "--gray",
+  keyBg: "--key-bg", hot: "--hot", warm: "--warm", cold: "--cold",
 };
 
 // Vibe Studio — a curated day ships a 3-color palette {a1,a2,a3}. Map it to the CSS custom

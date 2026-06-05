@@ -158,11 +158,11 @@ export function buildKeyboard(root, layoutId, handlers) {
   }
 }
 
-// Color the keys from MY guesses only (green beats yellow beats gray).
+// Color the keys from MY guesses only (hot beats warm beats cold).
 export function renderKeyboard(root, me) {
   if (!root) return;
   const map = {};
-  const priority = { gray: 1, yellow: 2, green: 3 };
+  const priority = { cold: 1, warm: 2, hot: 3 };
   if (me) {
     for (const g of me.guesses) {
       for (let i = 0; i < g.word.length; i++) {
@@ -173,7 +173,7 @@ export function renderKeyboard(root, me) {
     }
   }
   for (const key of root.querySelectorAll(".key")) {
-    key.classList.remove("green", "yellow", "gray");
+    key.classList.remove("hot", "warm", "cold");
     const v = key.dataset.key;
     if (v && map[v]) key.classList.add(map[v]);
   }

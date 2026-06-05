@@ -64,7 +64,7 @@ function makeHarness() {
   return { room, ctx, env, storagePuts, userFetch, isFetchSettled: () => settled };
 }
 
-const greenMask = ["green", "green", "green", "green", "green"];
+const hotMask = ["hot", "hot", "hot", "hot", "hot"];
 
 describe("win reveal is never gated behind best-effort USER-DO writes", () => {
   it("finishGame (race/duel) completes without waiting on the record/mint write", async () => {
@@ -79,7 +79,7 @@ describe("win reveal is never gated behind best-effort USER-DO writes", () => {
         {
           username: "yan",
           status: "won",
-          guesses: [{ word: "CRANE", mask: greenMask }],
+          guesses: [{ word: "CRANE", mask: hotMask }],
           points: 120,
           pointsSpent: 0,
           isBot: false,
@@ -128,7 +128,7 @@ describe("win reveal is never gated behind best-effort USER-DO writes", () => {
         {
           username: "yan",
           status: "won",
-          guesses: [{ word: "CRANE", mask: greenMask }],
+          guesses: [{ word: "CRANE", mask: hotMask }],
           points: 50,
           pointsSpent: 0,
           isBot: false,

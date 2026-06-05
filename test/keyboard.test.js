@@ -109,15 +109,15 @@ describe("renderKeyboard", () => {
     buildKeyboard(root, "qwerty", noopHandlers());
     const me = {
       guesses: [
-        { word: "QUERY", mask: ["gray", "yellow", "green", "gray", "gray"] },
-        { word: "QUEEN", mask: ["green", "gray", "gray", "gray", "gray"] }, // Q upgrades gray→green
+        { word: "QUERY", mask: ["cold", "warm", "hot", "cold", "cold"] },
+        { word: "QUEEN", mask: ["hot", "cold", "cold", "cold", "cold"] }, // Q upgrades cold→hot
       ],
     };
     renderKeyboard(root, me);
-    expect(root.querySelector('.key[data-key="Q"]').classList.contains("green")).toBe(true);
-    expect(root.querySelector('.key[data-key="U"]').classList.contains("yellow")).toBe(true);
-    expect(root.querySelector('.key[data-key="E"]').classList.contains("green")).toBe(true);
-    expect(root.querySelector('.key[data-key="R"]').classList.contains("gray")).toBe(true);
+    expect(root.querySelector('.key[data-key="Q"]').classList.contains("hot")).toBe(true);
+    expect(root.querySelector('.key[data-key="U"]').classList.contains("warm")).toBe(true);
+    expect(root.querySelector('.key[data-key="E"]').classList.contains("hot")).toBe(true);
+    expect(root.querySelector('.key[data-key="R"]').classList.contains("cold")).toBe(true);
   });
 });
 

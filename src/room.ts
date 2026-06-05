@@ -947,7 +947,7 @@ export class Room extends DurableObject<Env> {
     // so the daily round score EXCLUDES pointsSpent. Race rooms still net out the spend.
     const earned = pointsEarned(player.guesses, this.state.maxGuesses);
     player.points = this.state.isDaily ? earned : earned - player.pointsSpent;
-    const allGreen = mask.every((c) => c === "green");
+    const allGreen = mask.every((c) => c === "hot");
     if (allGreen) {
       player.status = "won";
       if (!this.state.winner) this.state.winner = player.username;

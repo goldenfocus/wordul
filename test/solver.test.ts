@@ -17,7 +17,7 @@ function playToEnd(answer: string, maxGuesses = 12): string[] {
     played.push(word);
     const mask = scoreGuess(word, answer);
     view.ownGuesses.push({ word, mask });
-    if (mask.every((c) => c === "green")) break;
+    if (mask.every((c) => c === "hot")) break;
   }
   return played;
 }
@@ -55,7 +55,7 @@ describe("solver — the blind brain (v0.0000)", () => {
     // An impossible constraint: green 'Q' at every position. No answer matches.
     const view: BotView = {
       wordLength: 5,
-      ownGuesses: [{ word: "QQQQQ", mask: ["green", "green", "green", "green", "green"] }],
+      ownGuesses: [{ word: "QQQQQ", mask: ["hot", "hot", "hot", "hot", "hot"] }],
     };
     expect(() => computeNextGuess(view)).not.toThrow();
   });
