@@ -43,7 +43,7 @@ export async function openSecureSheet(username, onClaimed) {
   overlay.innerHTML = `
     <div class="acct-sheet" role="dialog" aria-modal="true" aria-label="Secure this account">
       <h2>🔒 Secure @${esc(username)}</h2>
-      <p class="acct-lede">Your name is the public handle. This 6-word phrase is the secret that proves it's yours — like a key. Write it down: we store only a one-way hash and <strong>can't reset it</strong>. (A warm backup — sign in with Google/email — is coming.)</p>
+      <p class="acct-lede">Your name is the public handle. This 6-word phrase is the secret that proves it's yours — like a key. Write it down: we store only a one-way hash and <strong>can't reset it</strong>, so keep it somewhere safe.</p>
       <p class="acct-phrase" aria-live="polite">…</p>
       <div class="acct-actions">
         <button class="acct-roll" type="button">🎲 Re-roll</button>
