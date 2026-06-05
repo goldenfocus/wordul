@@ -20,6 +20,7 @@ import { computeDailyStatsView, computeRosterView } from "/daily-stats.js";
 import { fmtDuration, goldValue } from "/daily-card.js";
 import { computeFeedStreamView, computeFeedPostView } from "/feed.js";
 import { EDITIONS, getEdition } from "/editions/index.js";
+import { dramaUpdate, dramaStop } from "/drama.js";
 import { MODES, isAvailableMode } from "/modes.js";
 import { getWorld, worldSlugFromPath, listWorlds, featuredWorlds } from "/worlds.js";
 import { renderWorldCard, pushRecentWorld, getRecentWorldSlugs } from "/world-card.js";
@@ -1549,6 +1550,7 @@ function openSocket(url) {
   ws.addEventListener("error", () => { try { ws.close(); } catch {} });
 
   ws.addEventListener("close", () => {
+    dramaStop(); // no more snapshots will arrive to stop the tick — kill it now
     // Stale or intentional close — leaveRoom() cleared socketSession/reconnect, or a
     // newer socket replaced this one. Reconnecting would resurrect a zombie WS that
     // streams snapshots into home/hub/profile where the room scaffold is gone.
@@ -1759,6 +1761,13 @@ function onServerMessage(msg) {
         if (committed || p.status !== "playing" || !p.connected) game.typing.delete(p.username);
       }
     }
+    // Drama audio: opponents' progress → stings / danger tick / bust fanfare. Snapshot-
+    // driven, so every end-of-round path (win, loss, outpaced, rematch reset) re-evaluates
+    // to silence on its own — no per-path stop calls needed.
+    dramaUpdate(prev?.players ?? null, msg.room.players, {
+      me: getUsername(), maxGuesses: msg.room.maxGuesses ?? 6,
+      phase: msg.room.phase, isDaily: !!msg.room.isDaily,
+    });
     // The room owns the theme: adopt it whenever it differs from what's applied. This is
     // how invitees inherit the host's theme and how a live change reaches everyone. applyEdition
     // also persists it locally, so your last room's vibe sticks into your next solo game.
