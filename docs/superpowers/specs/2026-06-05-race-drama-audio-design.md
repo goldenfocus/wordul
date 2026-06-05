@@ -85,8 +85,8 @@ total — missing/short fields produce zero cues, never throws.
 - `test/drama.test.js` (vitest, matches the repo's public-module test pattern):
   new-hot detection (first hot, repeat hot not news, multi-hot count), warm-only blip,
   danger level derivation incl. multi-opponent max, bust cue with `deep` flag, my own
-  rows never produce cues, finished/daily contexts produce nothing, cooldown priority
-  (bust beats hot beats warm) if implemented in the pure half.
+  rows never produce cues, finished/daily contexts produce nothing. The cooldown +
+  priority pick lives in the impure half (time-dependent) — covered by smoke, not unit tests.
 - Audio output is unautomatable; smoke live: race 2 bots, hear sting on their hot rows,
   tick at their row 4, faster tick row 5, fanfare on bust; mute kills everything.
 
