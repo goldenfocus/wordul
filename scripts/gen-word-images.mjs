@@ -42,7 +42,7 @@
 //    --limit N   cap this run to the first N words still missing images
 //    --word W    generate only this word (ignores skip-existing for that word's missing slots)
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { S3Client, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
@@ -80,8 +80,18 @@ const BRAND = { bg: "#15101f", accent: "#9d8bff", gold: "#f0c14b", fg: "#f7f1e3"
 const BUCKET = "wordul-og"; // reuse the existing OG R2 bucket
 const MODEL = "@cf/black-forest-labs/flux-1-schnell";
 const IMG = 1024; // square; composited type sits on top
-const CONCURRENCY = 4; // gentle on the Workers AI rate limit
+const CONCURRENCY = Number(process.env.GEN_CONCURRENCY) || 4; // gentle on the Workers AI rate limit
 const LIVE = process.env.WORDUL_IMG_GEN === "1"; // the one flag that unlocks spending
+
+// Optional local / worker-binding modes — used when we lack R2 S3 keys or a Workers-AI API
+// token (e.g. generating via a temporary worker route under `wrangler dev --remote`):
+//   --out-dir DIR    write composited <slot>/<slug>.webp under DIR instead of R2 (QA locally)
+//   --endpoint URL   POST {prompt} to a worker route (header x-img-gen-key: IMG_GEN_KEY) that
+//                    runs the AI binding, instead of calling the Cloudflare AI REST API direct
+//   --words a,b,c    generate only this curated comma-list of words
+let OUT_DIR = null;
+let ENDPOINT = null;
+const ENDPOINT_KEY = process.env.IMG_GEN_KEY || "";
 
 const die = (msg) => { console.error(msg); process.exit(1); };
 
@@ -95,22 +105,26 @@ async function loadIntel() {
 // `def` (the verified definition from word-intel) anchors every slot so homographs like
 // CRANE / BASS / SEWER resolve to their fact-checked primary sense, not the model's guess.
 function promptsFor(word, def) {
-  const W = word.toUpperCase();
-  const sense = def
-    ? `The word means: "${def}". Depict only that sense.`
-    : `Depict the primary, common sense of the word.`;
+  // IMPORTANT: never name the word in the prompt — flux renders the literal word as garbled
+  // text in the pixels (it ignores "no text" when a quoted word is present). We describe only
+  // the MEANING; the word itself is composited on afterward. The verified def anchors the
+  // subject (and resolves homographs to the primary sense).
+  // Lead with the word as a lowercase keyword ("Subject: ocean — <def>") to ground the
+  // subject (fixes drift like OCEAN→planet from the bare def's "Earth's surface"). Lowercase
+  // + mid-sentence avoids the baked-text artifact that a quoted UPPERCASE word triggers.
+  const subject = def
+    ? `Subject: ${word.toLowerCase()} — ${def}`
+    : `Subject: ${word.toLowerCase()}, in its primary common meaning`;
   return {
     hero:
-      `Hero meaning-scene for the word "${W}". ${sense} A single cinematic scene showing ` +
-      `what the word is, beautifully and literally. ${STYLE_SUFFIX} ${NEGATIVE}`,
+      `A single clear cinematic scene showing this subject beautifully and literally, one ` +
+      `subject only. ${subject}. ${STYLE_SUFFIX} ${NEGATIVE}`,
     mnemonic:
-      `Memory hook ("see it to spell it") for the word "${W}". ${sense} A vivid, slightly ` +
-      `surreal, exaggerated dreamlike association that makes the word unforgettable. ` +
-      `Memorable over literal. ${STYLE_SUFFIX} ${NEGATIVE}`,
+      `A vivid, slightly surreal, exaggerated dreamlike memory-hook image of this subject — ` +
+      `an association you can't un-see, memorable over literal. ${subject}. ${STYLE_SUFFIX} ${NEGATIVE}`,
     etymology:
-      `Etymology vignette for the word "${W}". ${sense} A quiet, antique, archival-mood ` +
-      `historical scene evoking the word's origin and the era or root it grew from, ` +
-      `still in the same palette. ${STYLE_SUFFIX} ${NEGATIVE}`,
+      `A quiet, antique, archival-mood historical vignette evoking the origin of this subject ` +
+      `and the era or root it grew from. ${subject}. ${STYLE_SUFFIX} ${NEGATIVE}`,
   };
 }
 
@@ -119,6 +133,17 @@ const keyFor = (slot, slug) => `${SLOT_KEY[slot]}/${slug}.webp`;
 
 // ── Cloudflare Workers AI: flux-1-schnell → PNG bytes ────────────────────────
 async function generate(prompt) {
+  // Worker-route mode: POST the prompt to a deployed/dev worker that runs the AI binding
+  // (no offline CF_AI_TOKEN needed — the worker's runtime binding authorizes the call).
+  if (ENDPOINT) {
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-img-gen-key": ENDPOINT_KEY },
+      body: JSON.stringify({ prompt }),
+    });
+    if (!res.ok) throw new Error(`endpoint ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    return Buffer.from(await res.arrayBuffer());
+  }
   const acct = process.env.R2_ACCOUNT_ID;
   const token = process.env.CF_AI_TOKEN;
   const url = `https://api.cloudflare.com/client/v4/accounts/${acct}/ai/run/${MODEL}`;
@@ -199,6 +224,15 @@ async function putR2(s3, key, body) {
   await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: body, ContentType: "image/webp" }));
 }
 
+// Local-output helpers (mirror the R2 key path under OUT_DIR).
+const localPathFor = (key) => join(OUT_DIR, key);
+const existsLocal = (key) => existsSync(localPathFor(key));
+function putLocal(key, body) {
+  const p = localPathFor(key);
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, body);
+}
+
 // ── per-word work ────────────────────────────────────────────────────────────
 async function processWord(s3, word, def, forced) {
   const slug = slugFor(word.toUpperCase());
@@ -208,14 +242,14 @@ async function processWord(s3, word, def, forced) {
   for (const slot of slots) {
     const key = keyFor(slot, slug);
 
-    if (LIVE && !forced && (await existsInR2(s3, key))) {
+    if (LIVE && !forced && (OUT_DIR ? existsLocal(key) : await existsInR2(s3, key))) {
       console.log(`  · skip ${key} (exists)`);
       continue;
     }
 
     if (denied) {
       console.log(`  ⚑ ${key} — deny-listed → poster-only fallback (no AI spend)`);
-      if (LIVE) await putR2(s3, key, await posterWebp(word, def));
+      if (LIVE) { const b = await posterWebp(word, def); if (OUT_DIR) putLocal(key, b); else await putR2(s3, key, b); }
       continue;
     }
 
@@ -227,8 +261,8 @@ async function processWord(s3, word, def, forced) {
     }
     const png = await generate(prompt);
     const webp = await compositeWebp(png, word, def, slot);
-    await putR2(s3, key, webp);
-    console.log(`  ✓ ${key}`);
+    if (OUT_DIR) putLocal(key, webp); else await putR2(s3, key, webp);
+    console.log(`  ✓ ${key}${OUT_DIR ? " (local)" : ""}`);
   }
 }
 
@@ -241,6 +275,13 @@ async function main() {
   let only = null;
   const wi = args.indexOf("--word");
   if (wi >= 0) { only = (args[wi + 1] || "").toUpperCase(); args.splice(wi, 2); }
+  let onlyList = null;
+  const wli = args.indexOf("--words");
+  if (wli >= 0) { onlyList = (args[wli + 1] || "").toUpperCase().split(",").map((s) => s.trim()).filter(Boolean); args.splice(wli, 2); }
+  const oi = args.indexOf("--out-dir");
+  if (oi >= 0) { OUT_DIR = args[oi + 1]; args.splice(oi, 2); }
+  const ei = args.indexOf("--endpoint");
+  if (ei >= 0) { ENDPOINT = args[ei + 1]; args.splice(ei, 2); }
 
   const intel = await loadIntel();
   const excluded = exclusions(); // WORD_EXCLUSIONS — no public page, skip entirely
@@ -253,6 +294,11 @@ async function main() {
   if (only) {
     words = words.includes(only) ? [only] : [];
     if (!words.length) die(`"${only}" is not an indexable answer word (excluded or unknown).`);
+  } else if (onlyList && onlyList.length) {
+    const set = new Set(words);
+    const picked = onlyList.filter((w) => set.has(w));
+    if (!picked.length) die(`none of --words are indexable answer words.`);
+    words = picked;
   } else {
     // skip-existing happens per-slot inside processWord; without R2 (dry-run) we still cap here
     words = words.slice(0, limit);
@@ -264,7 +310,8 @@ async function main() {
   );
   if (!LIVE) console.log("Dry-run prints the prompts and the R2 keys it WOULD write. Nothing is uploaded.\n");
 
-  const s3 = LIVE ? makeS3() : null; // never touch creds in a dry-run
+  if (OUT_DIR) console.log(`out-dir: ${OUT_DIR}${ENDPOINT ? ` · endpoint: ${ENDPOINT}` : ""}`);
+  const s3 = LIVE && !OUT_DIR ? makeS3() : null; // local out-dir mode needs no R2 creds
 
   const queue = [...words];
   let n = 0;

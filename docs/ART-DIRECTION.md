@@ -56,6 +56,17 @@ compositing** (sharp SVG overlay, same brand frame as the OG cards in
 This is enforced two ways: `"no text"` in the style suffix **and** the negative prompt
 below. Belt and suspenders.
 
+### Never NAME the word in the prompt (third, load-bearing defense)
+Field-tested: flux renders a quoted/UPPERCASE word (`the word "BLOOM"`) as **literal letters
+in the pixels**, defeating "no text". So the generator **never names the word**. It leads with
+the word as a **lowercase subject keyword** followed by the verified def —
+`Subject: ocean — A vast continuous body of salt water…`. This:
+- produces no baked-in letters (lowercase mid-sentence keyword isn't rendered as signage), and
+- grounds the subject so it doesn't drift (the bare def alone sent OCEAN → a planet, because
+  its def says "covering most of Earth's surface"; the `ocean —` keyword pins it to the sea).
+
+The word, def, and wordul.com mark are still composited on afterward.
+
 ---
 
 ## 3-slot spec
