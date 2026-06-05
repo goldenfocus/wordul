@@ -7,6 +7,7 @@ import { Arena } from "./arena.ts";
 import { makeChallengeId, wordChallengeIdFromBytes } from "./challenge-core.ts";
 import { tapeFromSolveGrid } from "./ghost-core.ts";
 import { Worduls } from "./worduls.ts";
+import { extractBearer, isOwner, wordulsStub } from "./worduls-routes.ts";
 import type { Env } from "./types.ts";
 import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts";
 import { isWordPage, slugFor, wordOfTheDay, ANSWER_WORDS } from "./words.ts";
@@ -60,7 +61,7 @@ async function rateLimit(env: Env, key: string, limit: number, windowSec: number
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
 
     // Room WebSocket: /ws?room=<owner>/<slug>
@@ -149,6 +150,58 @@ export default {
       if (!isValidUsername(name)) return new Response("bad username", { status: 400 });
       const stub = env.USER.get(env.USER.idFromName(name));
       return stub.fetch(new Request(`https://do/?username=${name}`, { method: "GET" }));
+    }
+
+    // --- Worduls: user-authored creations (namespace /api/worduls — /api/worlds is the editions' to take) ---
+    if (url.pathname === "/api/worduls" && req.method === "POST") {
+      const body = await req.json().catch(() => null) as { owner?: string; desiredSlug?: string; bundle?: unknown } | null;
+      const owner = normalizeUsername(body?.owner ?? "");
+      if (!isValidUsername(owner)) return Response.json({ error: "bad_owner" }, { status: 400 });
+      if (!(await isOwner(env, owner, extractBearer(req)))) return Response.json({ error: "unauthorized" }, { status: 401 });
+      const res = await wordulsStub(env, owner).fetch("https://do/publish", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ owner, desiredSlug: body?.desiredSlug, bundle: body?.bundle, now: Date.now() }),
+      });
+      // On success, register the published wordul for discoverability (sitemap + crawl).
+      if (res.ok) {
+        const cloned = res.clone();
+        const out = await cloned.json().catch(() => null) as { url?: string } | null;
+        if (out?.url) ctx.waitUntil(env.DIRECTORY.put(`wordul:${out.url}`, "1").catch(() => {}));
+      }
+      return res;
+    }
+    const wlist = url.pathname.match(/^\/api\/worduls\/([a-z0-9_-]{3,20})$/);
+    if (wlist && req.method === "GET") {
+      const owner = normalizeUsername(wlist[1]);
+      const includeAll = await isOwner(env, owner, extractBearer(req));
+      return wordulsStub(env, owner).fetch(`https://do/list?owner=${owner}${includeAll ? "&includeAll=1" : ""}`);
+    }
+    const wone = url.pathname.match(/^\/api\/worduls\/([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/);
+    if (wone) {
+      const owner = normalizeUsername(wone[1]);
+      const slug = wone[2];
+      if (req.method === "GET") {
+        // Owner gets the full record (incl. word) for editing; public gets the card via /list.
+        if (await isOwner(env, owner, extractBearer(req))) {
+          return wordulsStub(env, owner).fetch(`https://do/get?slug=${slug}`);
+        }
+        return Response.json({ error: "owner_only" }, { status: 403 });
+      }
+      if (req.method === "PATCH") {
+        if (!(await isOwner(env, owner, extractBearer(req)))) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const patch = await req.text();
+        const res = await wordulsStub(env, owner).fetch(`https://do/patch?slug=${slug}`, {
+          method: "PATCH", headers: { "content-type": "application/json" }, body: patch,
+        });
+        // Keep the discoverability index in sync with publish/unpublish transitions.
+        if (res.ok) {
+          const status = (() => { try { return (JSON.parse(patch) as { status?: string }).status; } catch { return undefined; } })();
+          const key = `wordul:/@${owner}/${slug}`;
+          if (status === "unpublished" || status === "draft") ctx.waitUntil(env.DIRECTORY.delete(key).catch(() => {}));
+          else if (status === "published") ctx.waitUntil(env.DIRECTORY.put(key, "1").catch(() => {}));
+        }
+        return res;
+      }
     }
 
     // Per-word public solve stats (powers the live panel on each word page).
