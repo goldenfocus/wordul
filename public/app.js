@@ -14,6 +14,8 @@ import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, 
 import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, detectLayout } from "/keyboard.js";
 import { getSettings, saveSettings, applySettings, openSettings, openHub } from "/settings.js";
 import { buildShareCardModel, renderShareCard } from "/share-card.js";
+import { shareTargetUrl } from "/share-links.js";
+import { buildOwnerTape } from "/owner-tape.js";
 import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
 import { mountArenaList, pickNextGame } from "/arena-panel.js";
 import { computeDailyStatsView, computeRosterView } from "/daily-stats.js";
@@ -597,6 +599,7 @@ const game = {
   ws: null,
   challengeId: null,   // /c/<id> solo-replay: the challenge being raced (null in normal rooms)
   challengeMeta: null, // cached { owner, ownerScore, record, ... } from /api/challenge/<id>/meta
+  myGuessTimes: [],    // Date.now() per accepted guess of MINE — paces the owner tape at mint
   isDaily: false,      // /daily/<date>: async one-shot, gated "underneath"
   dailyDate: null,
   fromArena: false,    // reached through the Arena (open-games join or public host) → Arena end screen
@@ -625,7 +628,7 @@ const game = {
   heartbeatTimer: null,
   pongTimer: null, // heartbeat watchdog — unanswered ping ⇒ recycle a zombie socket
   autoStart: false,  // one-shot: "Start playing" auto-begins the solo game on first lobby snapshot
-  shareImage: null,  // { file, url, text, canvas } — pre-rendered result card for sharing
+  shareImage: null,  // { url, text, canvas } — pre-rendered result card for sharing
   // EZ-mode power-ups (reset each round): revealed letters + known vowel count.
   ezRound: -1,
   revealed: [],
@@ -752,6 +755,7 @@ function showRoom(owner, slug) {
   game.roomTab = "play";
   game.shareImage = null;
   game.replay = [];
+  game.myGuessTimes = [];
   game.payingOut = false;
   // tpl-room mounts a FRESH #hacklog node, so drop any stale terminal bound to the
   // previous room's (now-detached) element — it's re-created lazily on first payout.
@@ -829,6 +833,7 @@ async function showChallenge(id) {
   game.roomTab = "play";
   game.shareImage = null;
   game.replay = [];
+  game.myGuessTimes = [];
   game.payingOut = false;
   hacklog = null;
   mount("tpl-room");
@@ -1136,12 +1141,13 @@ function connectChallenge(id) {
 // first thing that happens — no hunting for a button. MUST be called inside a
 // user-gesture call stack (a click) for navigator.share to be allowed.
 async function shareRoomInvite() {
-  // A seeded arena room publishes its word as a challenge — share THAT (it works for
-  // unlimited friends, with ghost replay), never the 1-human room link.
-  const cid = game.snapshot && game.snapshot.shareChallengeId;
-  const inviteUrl = cid
-    ? `${location.origin}/c/${cid}`
-    : `${location.origin}/@${game.owner}/${game.slug}`;
+  // A challenge view shares its own /c/<id>; a seeded arena room shares the challenge
+  // it published (works for unlimited friends, with ghost replay) — never a null slug.
+  const cid = game.challengeId || (game.snapshot && game.snapshot.shareChallengeId);
+  const inviteUrl = shareTargetUrl({
+    origin: location.origin, challengeId: game.challengeId,
+    shareChallengeId: game.snapshot?.shareChallengeId, owner: game.owner, slug: game.slug,
+  });
   if (typeof navigator.share === "function") {
     try {
       await navigator.share({
@@ -1179,11 +1185,12 @@ function renderRoomHeader() {
 // Copy the room link with a subtle confirmation. The whole share/copy surface
 // collapsed into one gesture: tap the name.
 async function copyRoomLink() {
-  // Same rule as shareRoomInvite: a seeded arena room hands out its challenge link.
-  const cid = game.snapshot && game.snapshot.shareChallengeId;
-  const url = cid
-    ? `${location.origin}/c/${cid}`
-    : `${location.origin}/@${game.owner}/${game.slug}`;
+  // Same rule as shareRoomInvite: challenge views and seeded arena rooms hand out
+  // their /c/<id> link (regression: this used to mint "/@papa/null" in a challenge).
+  const url = shareTargetUrl({
+    origin: location.origin, challengeId: game.challengeId,
+    shareChallengeId: game.snapshot?.shareChallengeId, owner: game.owner, slug: game.slug,
+  });
   try {
     await navigator.clipboard.writeText(url);
     toast("Link copied ✓", { duration: 1200 });
@@ -1909,6 +1916,9 @@ function onServerMessage(msg) {
     // Server accepted our guess → clear pending letters.
     if (me && prevMe && me.guesses.length > prevMe.guesses.length) {
       game.pending = "";
+      // Stamp the commit for the mint-time owner tape. A reload loses earlier stamps —
+      // buildOwnerTape detects the shortfall and falls back to a fixed cadence.
+      game.myGuessTimes.push(Date.now());
       // A valid guess landed. If it didn't end the game, the companion reacts —
       // and in Yang's edition, new greens get a scaled celebration instead.
       if (me.status === "playing" && !game.hasShownEndStats) {
@@ -2572,6 +2582,7 @@ function resetRound(round) {
   game.pendingCashOut = false; // §B: the new round hasn't earned a cash-out yet (armed on won/lost)
   // Clearer-wins: a fresh round starts an empty replay + a cleared hacker-log.
   game.replay = [];
+  game.myGuessTimes = [];
   clearPayoutTimers(); // cancel any pending payout/drain from the prior round + reset payingOut
   // Loss penalties (C2): escalation is per-game, so a fresh round forgets old mistakes.
   game.deadLetterReuse = new Map();
@@ -4134,6 +4145,16 @@ function openStats(opts = {}) {
   const row = $(".share-row");
   if (urlEl) urlEl.value = game.shareImage?.url ?? location.href;
   if (row) row.classList.toggle("no-native", typeof navigator.share !== "function");
+  // "Save card" — the PNG card moved here when sharing went link-first (AirDrop
+  // ships an attached file alone, so the file can't ride along with the link).
+  const saveBtn = $("#shareSave");
+  if (saveBtn) {
+    saveBtn.textContent = t("endscreen.saveCard");
+    saveBtn.hidden = !game.shareImage?.canvas; // prepareShareCard reveals it when the canvas lands
+    saveBtn.onclick = () => {
+      if (game.shareImage?.canvas) downloadCanvas(game.shareImage.canvas, "wordul.png");
+    };
+  }
   if (copyBtn) copyBtn.onclick = async () => {
     try {
       await navigator.clipboard.writeText(game.shareImage?.url ?? location.href);
@@ -4176,6 +4197,20 @@ async function prepareShareCard() {
   // word). A seeded arena room already published one WITH the ghost tape — prefer it.
   let challengeId = game.challengeId || snap.shareChallengeId || null;
   if (!challengeId) {
+    // My run, re-cut as a ghost tape (masks only) — so whoever takes the challenge
+    // races my replay, not just a static score. Built OUTSIDE the mint try: a tape
+    // bug must degrade to a ghost-less challenge, never cost us the mint itself.
+    let ghosts;
+    try {
+      ghosts = buildOwnerTape({
+        username: getUsername(),
+        wordLength: snap.wordLength ?? 5,
+        maxGuesses: maxG,
+        masks: (me.guesses || []).map((g) => g.mask),
+        won,
+        times: game.myGuessTimes,
+      }) ?? undefined;
+    } catch { /* malformed run data — mint without a replay */ }
     try {
       const res = await fetch("/api/challenge", {
         method: "POST",
@@ -4186,14 +4221,16 @@ async function prepareShareCard() {
           owner: getUsername(),
           ownerScore: score,
           ownerGrid: (me.guesses || []).map((g) => g.mask),
+          ghosts,
         }),
       });
+      if (!res.ok) throw new Error(`mint ${res.status}`); // fetch doesn't throw on 5xx
       challengeId = (await res.json()).id;
-    } catch { /* offline / mint failed — fall back to the room link below */ }
+    } catch { /* offline / mint failed — the card falls back to a plain link below */ }
   }
   const cardUrl = challengeId
     ? `${location.origin}/c/${challengeId}`
-    : `${location.origin}/@${game.owner}/${game.slug}`;
+    : shareTargetUrl({ origin: location.origin, owner: game.owner, slug: game.slug });
 
   // The card draws ONLY the color grid (no letters, no answer) — the model is the
   // no-spoiler guarantee, unit-tested in test/share-card.test.js.
@@ -4205,56 +4242,35 @@ async function prepareShareCard() {
   const text = won
     ? `Solved Wordul in ${score} — beat me?`
     : `Wordul got me. Your turn?`;
-  // Sync essentials available immediately; the File arrives a tick later.
-  game.shareImage = { file: null, url: cardUrl, text, canvas };
-  // The share row may have rendered before the mint resolved — backfill its URL field.
+  game.shareImage = { url: cardUrl, text, canvas };
+  // The share row may have rendered before the mint resolved — backfill its URL field
+  // and reveal "Save card" now that a canvas exists to save.
   const urlEl = $("#shareUrl");
   if (urlEl) urlEl.value = cardUrl;
-  canvas.toBlob((blob) => {
-    if (blob && game.shareImage && game.shareImage.canvas === canvas) {
-      game.shareImage.file = new File([blob], "wordul.png", { type: "image/png" });
-    }
-  }, "image/png");
+  const saveBtn = $("#shareSave");
+  if (saveBtn) saveBtn.hidden = false;
 }
 
 async function shareResult() {
+  // LINK-first, never file-first: AirDrop ships an attached file ALONE (text + url
+  // silently dropped), so sharing the PNG card meant AirDrop delivered an image with
+  // no tappable way in. A bare url AirDrops as a real link and unfurls an OG preview
+  // in iMessage/WhatsApp. The pretty card lives behind "Save card" instead.
   const img = game.shareImage;
-  // Best: native share of the image card + room link.
-  if (img?.file && navigator.canShare?.({ files: [img.file] })) {
+  const url = img?.url ?? shareTargetUrl({
+    origin: location.origin, challengeId: game.challengeId,
+    shareChallengeId: game.snapshot?.shareChallengeId, owner: game.owner, slug: game.slug,
+  });
+  const text = img?.text ?? "Race me on Wordul!";
+  if (navigator.share) {
     try {
-      // iOS Messages drops a standalone `url` when a file is attached — the only
-      // "link" left is the one painted into the PNG (not tappable). Fold the URL
-      // into the text so the message body carries a real, tappable link.
-      await navigator.share({ files: [img.file], text: `${img.text} ${img.url}` });
+      await navigator.share({ text, url });
       return;
     } catch (e) {
       if (e && e.name === "AbortError") return;
     }
   }
-  // Native share without files (link only) where image sharing isn't supported.
-  if (img && navigator.share) {
-    try {
-      await navigator.share({ text: img.text, url: img.url });
-      return;
-    } catch (e) {
-      if (e && e.name === "AbortError") return;
-    }
-  }
-  // Desktop fallback: download the card image + copy the room link.
-  if (img?.canvas) {
-    downloadCanvas(img.canvas, "wordul.png");
-    try {
-      await navigator.clipboard.writeText(img.url);
-      toast("Card saved · link copied — go invite someone!", { duration: 2800 });
-    } catch {
-      toast("Card saved", { duration: 2000 });
-    }
-    return;
-  }
-  // Last resort (no finished game): just share/copy a join link.
-  const url = `${location.origin}/@${game.owner}/${game.slug}`;
-  if (navigator.share) navigator.share({ text: "Race me on Wordul!", url }).catch(() => fallbackCopy(url));
-  else fallbackCopy(url);
+  fallbackCopy(`${text} ${url}`);
 }
 
 function fallbackCopy(text) {

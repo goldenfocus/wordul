@@ -26,6 +26,8 @@ export default defineConfig({
       { find: /^\/keyboard\.js$/, replacement: new URL("./public/keyboard.js", import.meta.url).pathname },
       { find: /^\/settings\.js$/, replacement: new URL("./public/settings.js", import.meta.url).pathname },
       { find: /^\/share-card\.js$/, replacement: new URL("./public/share-card.js", import.meta.url).pathname },
+      { find: /^\/share-links\.js$/, replacement: new URL("./public/share-links.js", import.meta.url).pathname },
+      { find: /^\/owner-tape\.js$/, replacement: new URL("./public/owner-tape.js", import.meta.url).pathname },
       { find: /^\/hub-glyphs\.js$/, replacement: new URL("./public/hub-glyphs.js", import.meta.url).pathname },
       { find: /^\/daily-card\.js$/, replacement: new URL("./public/daily-card.js", import.meta.url).pathname },
       { find: /^\/race-copy\.js$/, replacement: new URL("./public/race-copy.js", import.meta.url).pathname },

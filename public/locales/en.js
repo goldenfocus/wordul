@@ -21,6 +21,7 @@ export const en = {
   "endscreen.joinNext": "Join next game →",
   "endscreen.createGame": "Create your own game",
   "endscreen.mainMenu": "Main menu",
+  "endscreen.saveCard": "Save card",
   "rematch.waiting": "Waiting for {who}… ✕",
   "rematch.prompt": "{who} wants to run it back",
   "rematch.accept": "Accept",

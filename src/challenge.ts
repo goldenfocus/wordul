@@ -5,7 +5,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.ts";
 import type { ChallengeState, ChallengeAttempt } from "./challenge-core.ts";
-import { toMeta, computeRecord, ghostsOf } from "./challenge-core.ts";
+import { toMeta, computeRecord, ghostsOf, sanitizeGhosts } from "./challenge-core.ts";
 import type { GhostTape } from "./ghost-core.ts";
 
 export class Challenge extends DurableObject<Env> {
@@ -20,7 +20,9 @@ export class Challenge extends DurableObject<Env> {
       const body = (await req.json()) as Omit<ChallengeState, "createdAt" | "attempts">;
       const existing = await this.load();
       if (existing) return Response.json({ id: existing.id });
-      const state: ChallengeState = { ...body, createdAt: Date.now(), attempts: [] };
+      // Client-supplied ghost tape (the owner's run, re-cut at mint): validate or drop —
+      // a bad tape degrades to a ghost-less challenge, never a failed mint.
+      const state: ChallengeState = { ...body, ghosts: sanitizeGhosts(body.ghosts), createdAt: Date.now(), attempts: [] };
       await this.ctx.storage.put("state", state);
       return Response.json({ id: state.id });
     }

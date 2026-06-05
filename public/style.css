@@ -2214,15 +2214,15 @@ body.playing .room-tabs { display: none; }
   color: var(--muted); font: 600 16px var(--font-body, system-ui); /* >=16px: no iOS focus-zoom */
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.share-copy, .share-native {
+.share-copy, .share-native, .share-save {
   padding: 11px 18px; border-radius: 10px; border: 0; cursor: pointer;
   font: 700 13px var(--font-body, system-ui); letter-spacing: 0.02em;
   color: var(--fg); white-space: nowrap;
   background: color-mix(in srgb, var(--fg) 8%, transparent);
   transition: background 0.16s, transform 0.1s;
 }
-.share-copy:hover, .share-native:hover { background: color-mix(in srgb, var(--fg) 14%, transparent); }
-.share-copy:active, .share-native:active { transform: translateY(1px); }
+.share-copy:hover, .share-native:hover, .share-save:hover { background: color-mix(in srgb, var(--fg) 14%, transparent); }
+.share-copy:active, .share-native:active, .share-save:active { transform: translateY(1px); }
 .share-copy.ok { background: var(--hot); color: #fff; }
 .share-row.no-native .share-native { display: none; }
 

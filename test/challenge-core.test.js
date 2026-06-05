@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeChallengeId, computeRecord, toMeta, ghostsOf } from "/src/challenge-core.ts";
+import { makeChallengeId, computeRecord, toMeta, ghostsOf, sanitizeGhosts } from "/src/challenge-core.ts";
 
 describe("challenge-core", () => {
   it("makeChallengeId produces a 5-char base62 id from injected rng", () => {
@@ -63,5 +63,70 @@ describe("ghostsOf", () => {
     const out = ghostsOf({ ...base, ghosts: tape });
     expect(out.ghosts).toEqual(tape);
     expect(JSON.stringify(out)).not.toContain("CRANE");
+  });
+});
+
+// Mint-time gate for client-supplied tapes: POST /api/challenge forwards raw JSON
+// into the DO, so anything not provably a masks-only tape must be dropped whole.
+describe("sanitizeGhosts", () => {
+  const valid = () => ({
+    v: 1, wordLength: 5, maxGuesses: 6,
+    players: [{ username: "papa", host: true }],
+    events: [
+      { t: 4500, u: "papa", k: "guess", mask: ["cold", "warm", "hot", "cold", "cold"], status: "playing" },
+      { t: 9000, u: "papa", k: "guess", mask: ["hot", "hot", "hot", "hot", "hot"], status: "won" },
+      { t: 9000, u: "papa", k: "finish", status: "won", guesses: 2 },
+    ],
+  });
+
+  it("accepts a well-formed tape and strips unknown keys", () => {
+    const tape = valid();
+    tape.smuggled = "SLATE";
+    tape.events[0].word = "CRANE";
+    tape.players[0].word = "CRANE";
+    const out = sanitizeGhosts(tape);
+    expect(out).toBeTruthy();
+    expect(JSON.stringify(out)).not.toContain("CRANE");
+    expect(JSON.stringify(out)).not.toContain("SLATE");
+    expect(out.events).toHaveLength(3);
+    expect(out.events[0].mask).toEqual(["cold", "warm", "hot", "cold", "cold"]);
+  });
+
+  it("rejects non-color mask values", () => {
+    const tape = valid();
+    tape.events[0].mask[2] = "A"; // a letter where a color belongs
+    expect(sanitizeGhosts(tape)).toBeUndefined();
+  });
+
+  it("rejects a mask whose length doesn't match wordLength", () => {
+    const tape = valid();
+    tape.events[0].mask = ["hot", "hot"];
+    expect(sanitizeGhosts(tape)).toBeUndefined();
+  });
+
+  it("rejects garbage shapes outright", () => {
+    expect(sanitizeGhosts(undefined)).toBeUndefined();
+    expect(sanitizeGhosts(null)).toBeUndefined();
+    expect(sanitizeGhosts("tape")).toBeUndefined();
+    expect(sanitizeGhosts({ v: 2 })).toBeUndefined();
+    expect(sanitizeGhosts({ ...valid(), events: "x" })).toBeUndefined();
+    expect(sanitizeGhosts({ ...valid(), players: [] })).toBeUndefined();
+  });
+
+  it("rejects an oversized tape (event cap) and absurd dimensions", () => {
+    const tape = valid();
+    tape.events = Array.from({ length: 5001 }, (_, i) => ({ t: i, u: "papa", k: "typing", len: 1 }));
+    expect(sanitizeGhosts(tape)).toBeUndefined();
+    expect(sanitizeGhosts({ ...valid(), wordLength: 99 })).toBeUndefined();
+    expect(sanitizeGhosts({ ...valid(), maxGuesses: 0 })).toBeUndefined();
+  });
+
+  it("forces t monotonic and finite", () => {
+    const tape = valid();
+    tape.events[1].t = -5; // travels back in time
+    expect(sanitizeGhosts(tape)).toBeUndefined();
+    const inf = valid();
+    inf.events[0].t = Infinity;
+    expect(sanitizeGhosts(inf)).toBeUndefined();
   });
 });
