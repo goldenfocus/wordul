@@ -1257,6 +1257,38 @@ function speakWinReveal(answer) {
   if (speak && raw) speakTemplated(VOICE_EDITION, raw, { answer, pauseMs: 1000 }, revealVoice);
 }
 
+// Speech-only twin of showCompanion("loss") for surfaces that own their screen (the
+// daily's curated #dailyUnlock): the spoken "the word was…" reveal without a toast
+// stacking over the curated card.
+function speakLossReveal(answer) {
+  const { raw, speak, revealVoice } = companionReact("loss", { answer });
+  if (speak && raw) speakTemplated(VOICE_EDITION, raw, { answer }, revealVoice);
+}
+
+// THE single end-game announcer. Every finish — race, arena, duel, forfeit, daily —
+// funnels through here, so the chime + companion quip + spoken word reveal can never
+// drift apart per mode. (The server's "The word was X" system CHAT line in room.ts is
+// the text record, a separate surface; voice happens only here.)
+//   won        — picks the win celebration (chime + quip + winReveal) vs the loss reveal
+//   answer     — the word; win paths should fall back to the winner's last guess
+//   guessesUsed— tiers the win quip (genius/clutch)
+//   delayMs    — let the final row's flip land first (daily uses 1500ms)
+//   quip       — false = speech only, for screens with their own curated reveal (daily)
+function announceGameEnd({ won, answer, guessesUsed, delayMs = 0, quip = true }) {
+  const fire = () => {
+    if (won) {
+      playChime([[523, 0], [659, 0.1], [784, 0.2], [1047, 0.32]]); // the race-win arpeggio
+      if (quip) showCompanion("win", { guessesUsed }); // text-only quip (voice yields to the reveal)
+      speakWinReveal(answer);
+    } else if (quip) {
+      showCompanion("loss", { answer }); // toast + spoken reveal in one
+    } else {
+      speakLossReveal(answer);
+    }
+  };
+  if (delayMs) setTimeout(fire, delayMs); else fire();
+}
+
 // --- Idle taunts: the companion checks in when you go quiet mid-game. ---
 let idleTimer = null;
 const IDLE_FIRST_MS = 180000; // 3 min of silence before the companion checks in
@@ -1971,15 +2003,15 @@ function onServerMessage(msg) {
     if (game.isDaily && (personallyWon || personallyLost)) {
       game.pendingCashOut = true; // ARM on the transition edge (this session earned it)…
       captureDailySolve(game.dailyDate, me); // client-only — powers the home's letter stamp
-      // The win moment: a chime + the spoken announcement, timed to land as the final
-      // row's flip completes (same 1500ms pacing handleGameOver uses for races). The
-      // transition edge fires this exactly once; reloads of a finished daily stay quiet.
-      if (personallyWon) {
-        const answer = msg.room.word || me.guesses[me.guesses.length - 1]?.word; // a win's last guess IS the word
-        setTimeout(() => {
-          playChime([[523, 0], [659, 0.1], [784, 0.2], [1047, 0.32]]); // the race-win arpeggio
-          speakWinReveal(answer);
-        }, 1500);
+      // The end moment, timed to land as the final row's flip completes (same 1500ms
+      // pacing handleGameOver uses for races). The transition edge fires this exactly
+      // once; reloads of a finished daily stay quiet. quip:false — the curated
+      // #dailyUnlock owns the screen, so it's speech (+ win chime) only.
+      // hasShownEndStats guard: on a daily it's only ever set by forfeit(), which already
+      // announced the loss — without it a give-up would speak the reveal twice.
+      if (!game.hasShownEndStats) {
+        const answer = msg.room.word || (personallyWon ? me.guesses[me.guesses.length - 1]?.word : null); // a win's last guess IS the word
+        announceGameEnd({ won: personallyWon, answer, guessesUsed: me.guesses.length, delayMs: 1500, quip: false });
       }
     }
     // …FIRE once the mint confirms. The arm/fire split matters twice over: a reloaded
@@ -3376,7 +3408,7 @@ function forfeit(reason) {
   // Tell the server we're out: it marks us lost (others see OUT) and the next snapshot
   // reveals the word to US, so the end-screen word card has it by the time it opens.
   send({ type: "resign" });
-  showCompanion("loss", { answer: snap.word });
+  announceGameEnd({ won: false, answer: snap.word });
   triggerLoseSequence(snap, me);
 }
 
@@ -3415,12 +3447,14 @@ function handleGameOver(snap) {
       winLog.logLine(`${ev.kind}${ev.letter ? " " + String(ev.letter).toUpperCase() : ""}  +${ev.delta}`, { tone: "gain" });
     }
     triggerWinCelebration();
-    playChime([[523, 0], [659, 0.1], [784, 0.2], [1047, 0.32]]);
-    showCompanion("win", { guessesUsed: me.guesses.length }); // text-only quip (voice yields to the reveal)
     // "Congratulations — you found the word… [beat] {answer}". snap.word can be absent
     // while others still race (no leaks to the wire) — but the winner's own last accepted
     // guess IS the word, so the announcement never goes silent on a live-race solve.
-    speakWinReveal(snap.word || me.guesses[me.guesses.length - 1]?.word);
+    announceGameEnd({
+      won: true,
+      answer: snap.word || me.guesses[me.guesses.length - 1]?.word,
+      guessesUsed: me.guesses.length,
+    });
     // Same gentle pacing as before — wait for the final row's flip to finish.
     setTimeout(
       () => openStats({ snap, me, won, justFinished: true, lastGuessCount: guessCount }),
@@ -3428,7 +3462,7 @@ function handleGameOver(snap) {
     );
   } else {
     // Loss: let the player's last row flip first (if they made one), THEN explode.
-    showCompanion("loss", { answer: snap.word });
+    announceGameEnd({ won: false, answer: snap.word });
     const lastFlipDoneAt = guessCount > 0 ? 1500 : 200;
     setTimeout(() => triggerLoseSequence(snap, me), lastFlipDoneAt);
   }
