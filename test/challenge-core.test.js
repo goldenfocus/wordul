@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeChallengeId, computeRecord, toMeta } from "/src/challenge-core.ts";
+import { makeChallengeId, computeRecord, toMeta, ghostsOf } from "/src/challenge-core.ts";
 
 describe("challenge-core", () => {
   it("makeChallengeId produces a 5-char base62 id from injected rng", () => {
@@ -41,5 +41,27 @@ describe("challenge-core", () => {
     expect(meta.owner).toBe("yan");
     expect(meta.ownerScore).toBe("3/6");
     expect(meta.wordLength).toBe(5);
+  });
+});
+
+describe("ghostsOf", () => {
+  const base = {
+    id: "Ab3Xy", word: "CRANE", wordLength: 5, owner: "paul",
+    ownerScore: "4/6", ownerGrid: [], createdAt: 1, attempts: [],
+  };
+
+  it("returns null ghosts when no tape was filed", () => {
+    expect(ghostsOf(base)).toEqual({ ghosts: null });
+  });
+
+  it("returns the tape and NEVER the word", () => {
+    const tape = {
+      v: 1, wordLength: 5, maxGuesses: 6,
+      players: [{ username: "paul", host: true }],
+      events: [{ t: 900, u: "paul", k: "guess", mask: ["hot", "hot", "hot", "hot", "hot"], status: "won" }],
+    };
+    const out = ghostsOf({ ...base, ghosts: tape });
+    expect(out.ghosts).toEqual(tape);
+    expect(JSON.stringify(out)).not.toContain("CRANE");
   });
 });

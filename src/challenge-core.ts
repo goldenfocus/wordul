@@ -1,4 +1,6 @@
 // src/challenge-core.ts — pure, dependency-free challenge logic (unit-tested).
+import type { GhostTape } from "./ghost-core.ts";
+
 export type ChallengeAttempt = {
   username: string;
   score: string;      // "3/6" or "X/6"
@@ -18,6 +20,7 @@ export type ChallengeState = {
   ownerGrid: string[][];
   createdAt: number;
   attempts: ChallengeAttempt[];
+  ghosts?: GhostTape;  // original race's replay tape (masks only); absent on plain challenges
 };
 
 export type ChallengeMeta = {
@@ -54,4 +57,9 @@ export function toMeta(state: ChallengeState): ChallengeMeta {
     wordLength: state.wordLength,
     record: computeRecord(state.attempts),
   };
+}
+
+// The wordless ghost view — the ONLY shape /ghosts may return (answer never ships).
+export function ghostsOf(state: ChallengeState): { ghosts: GhostTape | null } {
+  return { ghosts: state.ghosts ?? null };
 }
