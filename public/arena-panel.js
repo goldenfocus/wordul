@@ -34,29 +34,50 @@ export function pickNextGame(games, currentRoutePath) {
   return next ? next.routePath : null;
 }
 
+// "taken/capacity" string for a row; defaults to a 1v1 when a rec omits seats.
+export function seatLabel(game) {
+  return (game && game.seats) || "1/2";
+}
+
+// FOMO highlight: a bigger room one seat from full → "grab the last seat" energy (the
+// 4/5-vs-your-1/6 moment). Gated to capacity ≥ 3 so a plain 1/2 (and the missing-seats
+// default) isn't flagged — otherwise nearly every room would glow and the cue is noise.
+// A full room is about to vanish (unjoinable), so it's not hot either. Malformed → false.
+export function isHot(game) {
+  const [t, c] = seatLabel(game).split("/").map((n) => parseInt(n, 10));
+  return Number.isFinite(t) && Number.isFinite(c) && c >= 3 && c - t === 1;
+}
+
 const POLL_MS = 8000;
 
 // Render the open-games list into `mountEl`, polling while mounted. Returns a stop()
 // that clears the poll — the caller MUST invoke it on teardown (leaving the surface).
 // onJoin(routePath) is called when a row is tapped (typically → navigate(routePath)).
-export function mountArenaList(mountEl, { onJoin } = {}) {
+// opts.excludePath: drop the row for that routePath (the room you're already sitting in)
+//   and, when given, show the "you're first — others trickle in" lobby copy on an empty list.
+export function mountArenaList(mountEl, { onJoin, excludePath } = {}) {
   if (!mountEl) return () => {};
   let stopped = false;
   let timer = null;
+  const inLobby = excludePath != null; // rail-in-your-room mode vs the standalone /arena list
 
   const draw = (games, isError) => {
     if (stopped) return;
-    const state = arenaEmptyState(games, isError);
+    const visible = Array.isArray(games) ? games.filter((g) => g && g.routePath !== excludePath) : games;
+    const state = arenaEmptyState(visible, isError);
     if (state === "loading") { mountEl.innerHTML = `<div class="arena-state">Finding opponents…</div>`; return; }
     if (state === "error") { mountEl.innerHTML = `<div class="arena-state">Couldn't reach the Arena. Retrying…</div>`; return; }
-    if (state === "empty") { mountEl.innerHTML = `<div class="arena-state">No open games right now.</div>`; return; }
+    if (state === "empty") {
+      mountEl.innerHTML = `<div class="arena-state">${inLobby ? "You're first. Others will trickle in…" : "No open games right now."}</div>`;
+      return;
+    }
     const list = document.createElement("div");
     list.className = "arena-list";
-    for (const g of games) {
+    for (const g of visible) {
       const p = arenaRowProps(g);
       const row = document.createElement("button");
       row.type = "button";
-      row.className = "arena-row";
+      row.className = "arena-row" + (isHot(g) ? " is-hot" : "");
       row.dataset.edition = p.edition;
       row.innerHTML =
         `<span class="arena-row-avatar" aria-hidden="true">${p.avatar}</span>` +

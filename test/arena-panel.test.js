@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { arenaRowProps, arenaEmptyState, pickNextGame } from "../public/arena-panel.js";
+import { arenaRowProps, arenaEmptyState, pickNextGame, seatLabel, isHot } from "../public/arena-panel.js";
 
 const game = {
   routePath: "/@arena/maya-0",
@@ -37,6 +37,34 @@ describe("arenaEmptyState (F2)", () => {
   });
   it("non-empty array → list", () => {
     expect(arenaEmptyState([game], false)).toBe("list");
+  });
+});
+
+describe("seatLabel (F4)", () => {
+  it("returns the seats string", () => {
+    expect(seatLabel({ seats: "4/5" })).toBe("4/5");
+  });
+  it("defaults to 1/2 when seats are missing", () => {
+    expect(seatLabel({})).toBe("1/2");
+    expect(seatLabel(null)).toBe("1/2");
+  });
+});
+
+describe("isHot (F5) — FOMO highlight for near-full rooms", () => {
+  it("true when exactly one seat remains", () => {
+    expect(isHot({ seats: "4/5" })).toBe(true);
+    expect(isHot({ seats: "5/6" })).toBe(true);
+  });
+  it("false with two or more seats free", () => {
+    expect(isHot({ seats: "1/6" })).toBe(false);
+    expect(isHot({ seats: "3/5" })).toBe(false);
+  });
+  it("false when full (about to vanish, not joinable)", () => {
+    expect(isHot({ seats: "5/5" })).toBe(false);
+  });
+  it("false for malformed/missing seats", () => {
+    expect(isHot({})).toBe(false);
+    expect(isHot({ seats: "??" })).toBe(false);
   });
 });
 
