@@ -3068,7 +3068,4 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
   background: color-mix(in srgb, var(--bg) 78%, transparent);
   backdrop-filter: blur(6px);
 }
-.ghost-ready-card { text-align: center; padding: 28px 24px; max-width: 420px; }
-.ghost-ready-title { font-size: 1.6rem; font-weight: 800; margin-bottom: 10px; }
-.ghost-ready-sub { opacity: 0.85; line-height: 1.45; margin-bottom: 20px; }
 .badge.ghost-badge { opacity: 0.8; }

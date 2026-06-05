@@ -2987,30 +2987,14 @@ function resetGhostReplay() {
   game.ghostPlayers = [];
 }
 
-// Tap-armed start for a ghost challenge: the field is loaded, the player fires the gun.
+// Tap-armed start for a ghost challenge: the field waits, dimmed, behind a single
+// floating button — no card, no explainer (the surreal beat IS the explanation).
 // On tap: local 3-2-1 (reuses the duel overlay), then the start message — the server
 // flips to playing and the snapshot transition starts the replay clock (onServerMessage).
 function showGhostReadyOverlay() {
-  const tape = game.ghostTape;
-  const host = tape && tape.players.find((p) => p.host);
   const el = document.createElement("div");
   el.id = "ghostReady";
   el.className = "ghost-ready-overlay";
-  // DOM-built, no innerHTML — usernames are server-sanitized, but textContent keeps
-  // the no-markup-injection rule airtight (house style, same as toast()).
-  const card = document.createElement("div");
-  card.className = "ghost-ready-card";
-  const title = document.createElement("div");
-  title.className = "ghost-ready-title";
-  title.textContent = "👻 Ghost race";
-  const sub = document.createElement("div");
-  sub.className = "ghost-ready-sub";
-  const others = tape.players.length - 1;
-  const fieldLine = (host ? `@${host.username}` : "The field")
-    + (others > 0 ? ` + ${others} racer${others > 1 ? "s" : ""}` : "");
-  sub.appendChild(document.createTextNode(`${fieldLine} already ran this word.`));
-  sub.appendChild(document.createElement("br"));
-  sub.appendChild(document.createTextNode("Beat the replay — every keystroke, as it happened."));
   const btn = document.createElement("button");
   btn.className = "hero-btn";
   btn.id = "ghostGoBtn";
@@ -3018,8 +3002,7 @@ function showGhostReadyOverlay() {
   label.className = "hero-btn-label";
   label.textContent = "I'm ready — GO";
   btn.appendChild(label);
-  card.append(title, sub, btn);
-  el.appendChild(card);
+  el.appendChild(btn);
   document.body.appendChild(el);
   btn.addEventListener("click", () => {
     el.remove();
