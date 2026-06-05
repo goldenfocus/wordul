@@ -183,6 +183,24 @@ export function setDefaultEdition(id) {
   return ed.id;
 }
 
+// Paint an edition's CHROME palette + display font onto a single element as inline CSS
+// custom properties, scoped to that element's subtree. Unlike applyEdition (which writes
+// <html> globally and persists), this lets many cards each wear a DIFFERENT edition at
+// once — the Worlds strip / theater. Board colors are intentionally left alone (cards
+// don't render a board). Never touches localStorage. Falls back to the default edition.
+const CARD_VARS = {
+  accent: "--accent", bgCard: "--bg-card", fg: "--fg", border: "--border", muted: "--muted",
+};
+export function paintEditionVars(el, id) {
+  if (!el) return;
+  const ed = getEdition(id);
+  for (const [k, cssVar] of Object.entries(CARD_VARS)) {
+    if (ed.palette[k] != null) el.style.setProperty(cssVar, ed.palette[k]);
+  }
+  if (ed.fonts?.display) el.style.setProperty("--font-display", ed.fonts.display);
+  el.dataset.edition = ed.id;
+}
+
 function injectFontLink(id, href) {
   const elId = `wordul-font-${id}`;
   if (document.getElementById(elId)) return;

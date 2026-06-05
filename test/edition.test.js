@@ -201,3 +201,28 @@ describe("edition try-on vs default persistence", () => {
     expect(getActiveEditionId()).toBe("default");
   });
 });
+
+import { paintEditionVars } from "/edition.js";
+import { getEdition } from "/editions/index.js";
+
+describe("paintEditionVars — per-element edition chrome", () => {
+  it("sets the edition's accent + card bg + display font on the element, not <html>", () => {
+    document.documentElement.dataset.edition = "default";
+    const el = document.createElement("div");
+    paintEditionVars(el, "jackpot");
+    const ed = getEdition("jackpot");
+    expect(el.style.getPropertyValue("--accent")).toBe(ed.palette.accent);
+    expect(el.style.getPropertyValue("--bg-card")).toBe(ed.palette.bgCard);
+    expect(el.style.getPropertyValue("--font-display")).toBe(ed.fonts.display);
+    expect(el.dataset.edition).toBe("jackpot");
+    // It must NOT mutate the global <html> default.
+    expect(document.documentElement.dataset.edition === "jackpot").toBe(false);
+  });
+
+  it("falls back to the default edition for an unknown id (never throws)", () => {
+    const el = document.createElement("div");
+    expect(() => paintEditionVars(el, "not-real")).not.toThrow();
+    const def = getEdition("default");
+    expect(el.style.getPropertyValue("--accent")).toBe(def.palette.accent);
+  });
+});
