@@ -59,6 +59,7 @@ export type PlayerState = {
   points: number;        // live in-game points (earned − spent); reset each round
   pointsSpent: number;   // running power-up spend this round (internal accumulator)
   scored?: boolean;        // daily: this player's one result has been recorded (mint once)
+  wordulCounted?: boolean; // wordul: this player's play has been counted (bump once per player)
   goldAwarded?: number;    // daily: gold actually minted on a confirmed (res.ok) ledger write
   receipt?: SettlementReceipt; // race: settlement receipt, set ONLY after a confirmed (res.ok) mint
   resigned?: boolean;      // gave up (vs ran out of guesses) — both land status "lost"

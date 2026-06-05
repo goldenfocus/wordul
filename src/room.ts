@@ -562,6 +562,9 @@ export class Room extends DurableObject<Env> {
       void this.registerRoom();
     }
     await this.seedDailyIfNeeded();
+    // A published wordul at <owner>/<slug> seeds the same one-shot engine (cheap no-op for
+    // daily rooms — they already set isDaily+word above — and for non-wordul custom rooms).
+    await this.seedWordulIfNeeded();
     // Daily gold is mint-confirmed: if a player finished but a prior mint failed (scored
     // still false), retry now that they're back. Idempotent — scorePlayer only marks
     // scored on a confirmed ledger write.
@@ -626,23 +629,68 @@ export class Room extends DurableObject<Env> {
         this.pushSystem("Today's Wordul is warming up — refresh in a sec.");
         return;
       }
-      this.state.isDaily = true;
-      this.state.word = word;
-      this.state.wordLength = word.length;
-      this.state.maxGuesses = guessesFor(word.length);
-      this.state.edition = world.edition || "default";
-      this.state.ruleset = { ...VANILLA }; // the global daily is the fair flagship board
-      this.state.voice = world.voice || "yang";
-      this.state.story = world.story ?? null;
-      this.state.colorScheme = world.colorScheme ?? null;
-      this.state.vibeTitle = world.vibeTitle;
-      this.state.phase = "playing";    // async one-shot: always live, no lobby
-      this.state.round = 1;
-      this.state.startedAt = this.state.startedAt ?? Date.now();
-      this.emitRoundStarted();
+      this.applySeededWorld(world);
     } catch (e) {
       console.error("seedDaily failed", this.state.path, (e as Error).message);
       this.pushSystem("Today's Wordul is warming up — refresh in a sec.");
+    }
+  }
+
+  // Apply a resolved one-shot World to room state: lock the word, theme/story/palette,
+  // and flip the board straight to "playing". Shared by seedDailyIfNeeded and
+  // seedWordulIfNeeded so a daily room and a wordul room have identical post-seed setup.
+  private applySeededWorld(world: {
+    word: string; edition: string; voice: string;
+    story: { title: string; body: string; tip?: string };
+    colorScheme?: { a1: string; a2: string; a3: string };
+    vibeTitle?: string;
+  }): void {
+    const word = (world.word ?? "").toUpperCase();
+    this.state.isDaily = true;
+    this.state.word = word;
+    this.state.wordLength = word.length;
+    this.state.maxGuesses = guessesFor(word.length);
+    this.state.edition = world.edition || "default";
+    this.state.ruleset = { ...VANILLA }; // one-shot puzzles (daily + wordul) are the fair flagship board
+    this.state.voice = world.voice || "yang";
+    this.state.story = world.story ?? null;
+    this.state.colorScheme = world.colorScheme ?? null;
+    this.state.vibeTitle = world.vibeTitle;
+    this.state.phase = "playing";    // async one-shot: always live, no lobby
+    this.state.round = 1;
+    this.state.startedAt = this.state.startedAt ?? Date.now();
+    this.emitRoundStarted();
+  }
+
+  // True when this room is playing a published wordul (path <owner>/<slug>, seeded to
+  // isDaily) rather than the calendar daily (path daily/<date>). The discriminator:
+  // isDaily is set, but the path is NOT a daily date. Used to count plays + gate gold.
+  private isWordulRoom(): boolean {
+    return !!this.state.isDaily && !dailyDateOf(this.state.path);
+  }
+
+  // A room whose path is <owner>/<slug> AND matches a published wordul plays like a daily:
+  // locked word, straight to "playing", theme/story from the wordul. Resolves server→server
+  // from the owner's Worduls DO (which locks the word). Idempotent — seeds once.
+  private async seedWordulIfNeeded(): Promise<void> {
+    if (this.state.isDaily && this.state.word) return; // already seeded (daily or wordul)
+    const [owner, slug] = this.state.path.split("/");
+    if (!owner || !slug || dailyDateOf(this.state.path)) return; // not an owner/slug room
+    try {
+      const res = await this.env.WORDULS.get(this.env.WORDULS.idFromName(owner))
+        .fetch(`https://do/resolve?slug=${encodeURIComponent(slug)}`);
+      if (res.status === 404) return; // not a wordul → normal custom room, leave untouched
+      if (!res.ok) { this.pushSystem("This wordul is warming up — refresh in a sec."); return; }
+      const world = (await res.json()) as {
+        word: string; edition: string; voice: string; rows?: number;
+        story: { title: string; body: string; tip?: string };
+        colorScheme?: { a1: string; a2: string; a3: string }; vibeTitle?: string;
+      };
+      const word = (world.word ?? "").toUpperCase();
+      if (!/^[A-Z]+$/.test(word)) { this.pushSystem("This wordul is warming up — refresh in a sec."); return; }
+      this.applySeededWorld(world);
+    } catch (e) {
+      console.error("seedWordul failed", this.state.path, (e as Error).message);
     }
   }
 
@@ -1765,6 +1813,21 @@ export class Room extends DurableObject<Env> {
   // Completion router. Race rooms finish all-at-once (maybeFinish); daily rooms score
   // each player the moment THEY finish (won/lost), exactly once, with no global finish.
   private async afterPlayerStatus(player: PlayerState): Promise<void> {
+    // Wordul play counter — the "watch it tick up" loop. Bump once per distinct human who
+    // reaches a terminal status (won/lost/resigned). Guarded by wordulCounted so reconnects
+    // and the hello-retry never double-count. Fire-and-forget (best effort).
+    if (
+      this.isWordulRoom() && !player.isBot &&
+      player.status !== "playing" && !player.wordulCounted
+    ) {
+      player.wordulCounted = true;
+      const [owner, slug] = this.state.path.split("/");
+      this.ctx.waitUntil(
+        this.env.WORDULS.get(this.env.WORDULS.idFromName(owner))
+          .fetch(`https://do/play?slug=${encodeURIComponent(slug)}`, { method: "POST" })
+          .catch((e) => console.error("wordul play bump failed", this.state.path, (e as Error).message)),
+      );
+    }
     if (!this.state.isDaily) {
       await this.maybeFinish();
       return;
@@ -1846,6 +1909,14 @@ export class Room extends DurableObject<Env> {
     if (player.isBot) {
       player.scored = true;
       player.goldAwarded = gold;
+      return;
+    }
+    // Wordul rooms record the leaderboard + solveGrid above, but DO NOT mint daily gold:
+    // worduls are user-authored and unlimited, so minting per solve would be a gold farm.
+    // Mark scored (so the hello-retry stops) and goldAwarded=0. (Daily path below unchanged.)
+    if (this.isWordulRoom()) {
+      player.scored = true;
+      player.goldAwarded = 0;
       return;
     }
     // Resigners forfeit to 0 gold — skip the pointless 0-delta ledger write, but still
