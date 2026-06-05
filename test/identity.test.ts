@@ -41,13 +41,17 @@ describe("roomPath", () => {
 });
 
 describe("isReserved", () => {
-  it("flags brand/role names (normalized)", () => {
+  it("flags brand/role/impersonation names (normalized)", () => {
     expect(isReserved("admin")).toBe(true);
     expect(isReserved("WORDUL")).toBe(true);   // normalized before lookup
     expect(isReserved(" Official ")).toBe(true);
+    expect(isReserved("wordle")).toBe(true);   // the Wordle namesake — impersonation bait
+    expect(isReserved("support")).toBe(true);
   });
-  it("allows ordinary names", () => {
-    expect(isReserved("zang")).toBe(false);
+  it("lets real people (incl. the owners) claim their handles", () => {
+    for (const owner of ["yan", "antonio", "yanik", "zang"]) {
+      expect(isReserved(owner)).toBe(false);
+    }
     expect(isReserved("maple_otter")).toBe(false);
   });
   it("keeps the anchor word reserved (cannot register @wordul)", () => {

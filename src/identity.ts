@@ -32,13 +32,26 @@ export function roomPath(owner: string, slug: string): string {
   return `${owner}/${slug}`;
 }
 
-/** Names that may NOT be claimed via the open form (brand, role, impersonation bait).
+/** Names that may NOT be claimed via the open form — impersonation/brand/system bait only.
+ *  Real people (incl. the owners: yan, antonio, yanik, zang) claim their handles like anyone
+ *  else; only names that could impersonate the product, staff, or system are reserved.
  *  Lowercase, already-normalized form. Maintained here in version control (no KV hop). */
 export const RESERVED_USERNAMES: ReadonlySet<string> = new Set([
-  "wordul", "admin", "administrator", "official", "mod", "moderator", "staff",
-  "support", "help", "root", "system", "owner", "team", "wordul-team",
-  "yan", "yang", "jr", "goldenfocus", "golden-focus",
-  "api", "www", "mail", "null", "undefined", "anonymous", "guest",
+  // Product / brand impersonation (incl. the Wordle namesake)
+  "wordul", "worduls", "wordule", "wordulofficial", "wordul-team",
+  "wordle", "wordles", "wordleofficial", "nyt", "nytimes",
+  // Authority / staff impersonation
+  "admin", "admins", "administrator", "official", "verified", "mod", "mods",
+  "moderator", "moderation", "staff", "support", "helpdesk", "help",
+  "security", "abuse", "billing", "owner", "team", "root", "system",
+  "sysadmin", "superuser",
+  // Company brand
+  "goldenfocus", "golden-focus",
+  // System / auth / reserved routes
+  "api", "www", "mail", "email", "login", "signin", "signup", "register",
+  "logout", "account", "accounts", "settings", "profile", "password",
+  "null", "undefined", "none", "anonymous", "guest", "nobody", "everyone",
+  "deleted", "bot", "bots",
 ]);
 
 /** True when a normalized username is reserved and cannot be claimed via the open path. */
