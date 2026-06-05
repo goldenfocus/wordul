@@ -92,6 +92,64 @@ describe("playPayoutSequence — gold-sum invariant (no double-award, no drift)"
     expect(getGold()).toBe(123);
   });
 
+  it("daily wallet adapter: round score takes the total, the persistent wallet is untouched", async () => {
+    // §A: in a daily, discoveries must drive an EPHEMERAL round-score counter, never the
+    // sacred gold wallet. The caller hands playPayoutSequence a `wallet` adapter; the
+    // sequence reads/writes through it and ticks the passed hud — getGold() must not move.
+    setGold(5000);
+    const walletBefore = getGold();
+    let score = 0;
+    const wallet = { get: () => score, add: (d) => { score += d; }, drain: (d) => { score -= d; } };
+    const hud = document.createElement("div");
+    document.body.appendChild(hud);
+    const ng = 2, ny = 1; // mult 2 → combo finale present
+    await playPayoutSequence({
+      discoveries: discoveries(ng, ny),
+      mult: comboMultiplier(ng + ny),
+      hud,
+      wallet,
+      reducedMotion: false,
+    });
+    expect(score).toBe(oldLump(ng, ny)); // the round score got the full total
+    expect(getGold()).toBe(walletBefore); // the persistent gold wallet never moved
+  });
+
+  it("daily wallet adapter (reducedMotion) also leaves the wallet untouched", async () => {
+    setGold(5000);
+    const walletBefore = getGold();
+    let score = 0;
+    const wallet = { get: () => score, add: (d) => { score += d; }, drain: (d) => { score -= d; } };
+    await playPayoutSequence({
+      discoveries: discoveries(3, 2),
+      mult: comboMultiplier(5),
+      wallet,
+      reducedMotion: true,
+    });
+    expect(score).toBe(oldLump(3, 2));
+    expect(getGold()).toBe(walletBefore);
+  });
+
+  it("F5: the visible +N numbers in the log lines sum to the guess's real delta", async () => {
+    // §E GOLD-SUM display contract: the combo finale must read as a delta/total, not an
+    // increment that double-counts the base. Parse every visible "+N" from the emitted
+    // log lines; their sum MUST equal the real total awarded (round(base*mult)).
+    const lines = [];
+    const log = { logLine: (t) => lines.push(t), addInstant: (t) => lines.push(t) };
+    const ng = 3, ny = 2; // base 400, mult 3, total 1200, bonus 800
+    setGold(0);
+    await playPayoutSequence({
+      discoveries: discoveries(ng, ny),
+      mult: comboMultiplier(ng + ny),
+      log,
+      reducedMotion: false,
+    });
+    const visibleSum = lines
+      .flatMap((l) => [...String(l).matchAll(/\+(\d+)/g)].map((m) => Number(m[1])))
+      .reduce((s, n) => s + n, 0);
+    expect(visibleSum).toBe(oldLump(ng, ny)); // 1200, not 400+1200
+    expect(getGold()).toBe(oldLump(ng, ny));  // balance still exactly the total
+  });
+
   it("invokes the log + getTile hooks per beat and a combo finale for >=2", async () => {
     const lines = [];
     const log = { logLine: (t, o) => lines.push({ t, o }), addInstant: (t, o) => lines.push({ t, o }) };

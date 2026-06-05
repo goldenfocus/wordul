@@ -2537,9 +2537,10 @@ body.hub-home .topbar-stats { display: flex; }
   position: relative; z-index: 1;
   animation: daily-child-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.daily-unlock > .daily-goody  { animation-delay: 0.10s; }
-.daily-unlock > .daily-story  { animation-delay: 0.20s; }
-.daily-unlock > .daily-bridge { animation-delay: 0.32s; }
+.daily-unlock > .daily-goody   { animation-delay: 0.10s; }
+.daily-unlock > .daily-cashout { animation-delay: 0.16s; }
+.daily-unlock > .daily-story   { animation-delay: 0.24s; }
+.daily-unlock > .daily-bridge  { animation-delay: 0.36s; }
 @keyframes daily-child-rise {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: none; }
@@ -2564,6 +2565,33 @@ body.hub-home .topbar-stats { display: flex; }
   0%   { text-shadow: 0 0 0 rgba(240,193,75,0); }
   35%  { text-shadow: 0 0 26px rgba(240,193,75,0.85), 0 0 64px rgba(240,193,75,0.4); }
   100% { text-shadow: 0 0 16px rgba(240,193,75,0.55), 0 0 44px rgba(240,193,75,0.22); }
+}
+
+/* §B cash-out breakdown — an honest, quiet ledger of where the minted gold came from
+   (score / daily / speed). Centered, gold-tinted, each line a small +N source. */
+.daily-cashout {
+  list-style: none;
+  margin: -8px 0 18px;
+  padding: 0;
+  text-align: center;
+}
+.daily-cashout-row {
+  font-size: 13px; line-height: 1.7;
+  color: #f0c14b;
+  opacity: 0.86;
+  letter-spacing: .01em;
+}
+
+/* §A ephemeral ROUND SCORE — the in-play counter the daily payout drives instead of the
+   sacred ◆ wallet. A small gold chip above the board; the count-up is tweened by the
+   payout animation, never touching the persistent gold HUD. */
+.round-score {
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 15px; letter-spacing: .04em;
+  color: #f0c14b;
+  margin: 0 0 8px;
+  text-shadow: 0 0 10px rgba(240,193,75,0.35);
 }
 
 /* The story, beautifully set: a kicker label, a display title, muted body at a

@@ -184,10 +184,18 @@
       <p id="powerHints" class="power-hints" hidden></p>
 
       <div id="queueStrip" class="queue-strip" hidden></div>
+      <!-- Daily only: an ephemeral ROUND SCORE that the discovery payout drives instead of the
+           sacred ◆ gold wallet (which never moves from daily play; the mint is cashed out once
+           at the end). Hidden in race rooms, where #goldHud takes the live ticks. -->
+      <div id="roundScore" class="round-score" hidden aria-live="polite"></div>
       <div id="boards" class="boards"></div>
       <div id="messageRow" class="message-row" aria-live="polite"></div>
       <section id="dailyUnlock" class="daily-unlock" hidden>
         <p class="daily-goody" id="dailyGoody"></p>
+        <!-- §B cash-out: an honest line-by-line breakdown of the minted gold (score → +N,
+             daily +100, speed +X), populated by cashOutDaily once the server confirms the
+             mint. Sums to me.goldAwarded; hidden until there's a confirmed positive mint. -->
+        <ul class="daily-cashout" id="dailyCashout" hidden aria-live="polite"></ul>
         <article class="daily-story" id="dailyStory"></article>
         <div class="daily-bridge">
           <a href="/" class="btn primary block daily-bridge-btn" id="dailyBridgeBtn"></a>

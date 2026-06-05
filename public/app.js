@@ -1650,6 +1650,31 @@ function refreshGold() {
     .catch(() => {});
 }
 
+// DAILY round-score (§A): discoveries + penalties during a daily must NOT move the sacred
+// ◆ gold wallet — that mint is server-authoritative and cashed out ONCE at the end. So in a
+// daily we route the payout/drain choreography through this ephemeral counter instead. It's
+// backed by game.goldThisRound (the same running per-round tally the end screen reads), and
+// it paints #roundScore. Race rooms keep the default wallet adapter (live #goldHud ticks).
+const roundScoreWallet = {
+  get: () => game.goldThisRound || 0,
+  add: (d) => { game.goldThisRound = (game.goldThisRound || 0) + d; },
+  drain: (d) => { game.goldThisRound = (game.goldThisRound || 0) - d; },
+};
+// The chip prefix the count-up animation prepends to the number, so the static render and the
+// animated ticks share one format ("<label> <n>"). animateCount writes `${prefix}${n}`, so the
+// label lives in the prefix; keep the trailing space.
+const ROUND_SCORE_PREFIX = () => t("daily.roundScorePrefix") + " ";
+// Paint the round-score chip from the current tally. The payout animation tweens the number
+// itself (via the wallet adapter + #roundScore as its hud); this is the static render used
+// on mount / reveal so the chip is never blank or stale between animated ticks.
+function renderRoundScore() {
+  const el = $("#roundScore");
+  if (!el) return;
+  el.hidden = !game.isDaily;
+  if (!game.isDaily) return;
+  el.textContent = `${ROUND_SCORE_PREFIX()}${game.goldThisRound || 0}`;
+}
+
 // In-room head-to-head record against the current opponent, shown beside the room name.
 // Keyed off the opponent's VISIBLE username (no bot-only field on the wire) — present in
 // game.myH2H only for personas the player has faced before.
@@ -1776,13 +1801,20 @@ function onServerMessage(msg) {
           game.deadLetterReuse.set(letter, reuse + 1);
         }
         penalty = Math.min(penalty, GOLD.wastedCapPerGuess);
+        // §A: in a daily, the payout/drain choreography drives the EPHEMERAL #roundScore (via
+        // the round-score wallet adapter) — the sacred ◆ gold HUD must NOT move. The adapter
+        // itself mutates game.goldThisRound, so the manual ±game.goldThisRound bookkeeping below
+        // is RACE-ONLY (gated on !isDaily) to avoid double-counting. Race keeps live #goldHud.
+        const payoutOpts = game.isDaily
+          ? { wallet: roundScoreWallet, hud: $("#roundScore"), prefix: ROUND_SCORE_PREFIX() }
+          : { hud: $("#goldHud") };
         // Drain + red log lines. Caller owns the line text; goldDrain stays generic.
-        if (penalty > 0) game.goldThisRound = (game.goldThisRound || 0) - penalty;
+        if (penalty > 0 && !game.isDaily) game.goldThisRound = (game.goldThisRound || 0) - penalty;
         const runDrain = () => {
           if (penalty <= 0) return;
           if (!game.snapshot || game.hasShownEndStats) return; // game ended / left room — don't drain off-screen
           const reducedMotion = getSettings().reducedMotion;
-          goldDrain(penalty, reducedMotion, playChime);
+          goldDrain(penalty, reducedMotion, playChime, payoutOpts);
           const log = getHacklog();
           for (const line of penaltyLines) log?.logLine(line, { tone: "loss" });
           mistakeFx(activeMistakeFx(), wasted.letters); // sensory punishment for the sloppy reuse (room-themed)
@@ -1790,10 +1822,10 @@ function onServerMessage(msg) {
         };
 
         if (discoveries > 0) {
-          const balanceBefore = getGold();
-          // Record the structured replay entry up front (deterministic: balanceAfter =
-          // before + total, since the sequence awards exactly `total`). Persisted now so
-          // a refresh/end-screen can render "your run, line by line" even mid-payout.
+          // Replay tracks the running balance: the ROUND SCORE in a daily (the ◆ wallet is
+          // frozen until cash-out), the live ◆ balance in a race. Either way balanceAfter =
+          // before + total, since the sequence awards exactly `total`.
+          const balanceBefore = game.isDaily ? (game.goldThisRound || 0) : getGold();
           recordReplayEntry({
             guessIndex,
             events: discoveryList.map((d) => ({
@@ -1802,7 +1834,10 @@ function onServerMessage(msg) {
             combo: { discoveries, mult, bonus },
             balanceAfter: balanceBefore + total,
           });
-          game.goldThisRound = (game.goldThisRound || 0) + total;
+          // Race-only: bump the per-round tally here. In a daily the round-score wallet adapter
+          // (passed into playPayoutSequence below) owns game.goldThisRound, so adding here too
+          // would double-count.
+          if (!game.isDaily) game.goldThisRound = (game.goldThisRound || 0) + total;
           const reducedMotion = getSettings().reducedMotion;
           const log = getHacklog();
           // Start the payout after the row finishes flipping, so coins land as colors do.
@@ -1816,7 +1851,7 @@ function onServerMessage(msg) {
             playPayoutSequence({
               discoveries: discoveryList,
               mult,
-              hud: $("#goldHud"),
+              ...payoutOpts, // §A: daily → round-score wallet + #roundScore; race → live #goldHud
               getTile: getMyFreshTile,
               log,
               playChime,
@@ -1861,11 +1896,12 @@ function onServerMessage(msg) {
       handleGameOver(msg.room);
     }
     if (msg.room.phase === "finished") refreshGold(); // reconcile persistent balance after cash-out
-    // Daily rooms never globally "finish" (per-player async scoring) — so reconcile the
-    // gold HUD the moment YOU personally complete, the same way the race path does on
-    // finish, so the daily goody mint actually shows up in the HUD.
+    // Daily rooms never globally "finish" (per-player async scoring) — so the moment YOU
+    // personally complete, run the honest §B CASH-OUT: a single ONLY-UP animation that counts
+    // the ◆ wallet up by the server-confirmed mint (me.goldAwarded) with coins flying onto the
+    // pile — replacing the old silent refreshGold() snap. captureDailySolve still stamps home.
     if (game.isDaily && (personallyWon || personallyLost)) {
-      refreshGold();
+      cashOutDaily(me);
       captureDailySolve(game.dailyDate, me); // client-only — powers the home's letter stamp
     }
     render();
@@ -1884,8 +1920,17 @@ function onServerMessage(msg) {
     // game.pending still holds the rejected letters (we never cleared them above).
     const rejected = (game.pending || "").toUpperCase();
     const reducedMotion = getSettings().reducedMotion;
-    goldDrain(GOLD.invalidPenalty, reducedMotion, playChime);
-    game.goldThisRound = (game.goldThisRound || 0) - GOLD.invalidPenalty;
+    // §A: daily drains the ephemeral #roundScore (wallet frozen); race drains live #goldHud.
+    // The round-score adapter mutates game.goldThisRound itself, so the manual subtract below
+    // is race-only to avoid double-counting.
+    if (game.isDaily) {
+      goldDrain(GOLD.invalidPenalty, reducedMotion, playChime, {
+        wallet: roundScoreWallet, hud: $("#roundScore"), prefix: ROUND_SCORE_PREFIX(),
+      });
+    } else {
+      goldDrain(GOLD.invalidPenalty, reducedMotion, playChime, { hud: $("#goldHud") });
+      game.goldThisRound = (game.goldThisRound || 0) - GOLD.invalidPenalty;
+    }
     const log = getHacklog();
     log?.logLine(
       `rejected  ${rejected || reason}  −${GOLD.invalidPenalty}`,
@@ -2046,6 +2091,66 @@ function celebrateDailyUnlock() {
   }
 }
 
+// §B CASH-OUT — the honest, ONLY-UP gold reveal at the end of a daily. During play the
+// sacred ◆ wallet never moved (discoveries pumped the ephemeral #roundScore instead); the
+// server minted the real gold once, server-authoritatively. So at finish we count the ◆ HUD
+// UP from its pre-mint value to pre-mint + mint, fly coins onto the pile, and lay out an
+// honest breakdown. The displayed mint is the SERVER's confirmed me.goldAwarded — never
+// fabricated. Idempotent per solve (guarded by game.cashedOut).
+//
+// Breakdown honesty: the client knows the total (goldAwarded), the player's final daily
+// points (me.points, spend-excluded — see Layer 1), and the flat daily bonus constant.
+// scoreGold = round(points/100) mirrors the server's goldFromPoints; the speed bonus is the
+// honest REMAINDER (mint − scoreGold − dailyBonus, floored at 0), so the three lines always
+// sum to the server total without re-deriving the wall-clock speed curve on the client.
+const DAILY_GOLD_BONUS = 100; // mirrors src/room.ts DAILY_GOLD_BONUS
+function cashOutDaily(me) {
+  if (game.cashedOut) return;
+  game.cashedOut = true;
+  const mint = (me && typeof me.goldAwarded === "number") ? Math.max(0, me.goldAwarded) : 0;
+  // Honest breakdown components (sum === mint).
+  const scoreGold = Math.max(0, Math.round((me?.points || 0) / 100));
+  const dailyBonus = mint > 0 ? DAILY_GOLD_BONUS : 0;
+  const speedGold = Math.max(0, mint - scoreGold - dailyBonus);
+  renderCashoutBreakdown({ scoreGold, dailyBonus, speedGold });
+  const reducedMotion = getSettings().reducedMotion;
+  // Reconcile from the server (source of truth), then count UP by the mint. Reduced motion:
+  // a silent snap (renderGold inside refreshGold), exactly the old behavior. Full motion:
+  // pin the HUD to (balance − mint) so awardGold tweens old → balance and coins land.
+  const name = getUsername();
+  if (!name) { refreshGold(); return; }
+  fetch(`/api/user/${encodeURIComponent(name)}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((p) => {
+      const balance = p && typeof p.gold === "number" ? p.gold : null;
+      if (balance == null) { refreshGold(); return; }
+      if (reducedMotion || mint <= 0) { setGold(balance); renderGoldHud(); return; }
+      setGold(Math.max(0, balance - mint)); renderGoldHud(); // pre-mint floor
+      awardGold(mint, false); // ONLY-UP: tweens (balance − mint) → balance, coins fly to the pile
+    })
+    .catch(() => refreshGold());
+}
+
+// Paint the §B cash-out breakdown list. Each line is one honest gold source; the list is
+// hidden when there's nothing to show (a 0-gold miss). Reuses the daily-cashout slot.
+function renderCashoutBreakdown({ scoreGold, dailyBonus, speedGold }) {
+  const el = $("#dailyCashout");
+  if (!el) return;
+  const rows = [];
+  if (scoreGold > 0) rows.push(t("daily.cashoutScore", { gold: scoreGold }));
+  if (dailyBonus > 0) rows.push(t("daily.cashoutDaily", { gold: dailyBonus }));
+  if (speedGold > 0) rows.push(t("daily.cashoutSpeed", { gold: speedGold }));
+  if (!rows.length) { el.hidden = true; el.textContent = ""; return; }
+  el.textContent = "";
+  for (const text of rows) {
+    const li = document.createElement("li");
+    li.className = "daily-cashout-row";
+    li.textContent = text;
+    el.appendChild(li);
+  }
+  el.hidden = false;
+}
+
 function renderGames(snap) {
   const panel = $("#gamesPanel");
   if (!panel) return;
@@ -2131,6 +2236,14 @@ function render() {
     // The lobby bar's controls (choose-mode / start / play-again) are all meaningless for
     // the daily (it auto-starts, never resets) — hide the otherwise-empty bar entirely.
     const lobbyBar = $(".lobby-bar"); if (lobbyBar) lobbyBar.hidden = true;
+    // §A: the ephemeral round-score chip rides ABOVE the board while you're still solving.
+    // The payout animation tweens its number; this paints/refreshes the static value and
+    // hides it once you're done (the goody + ◆ cash-out own the end screen).
+    const rs = $("#roundScore");
+    if (rs) {
+      const playing = me && me.status === "playing";
+      if (playing) renderRoundScore(); else rs.hidden = true;
+    }
   }
   if (game.isDaily) renderDailyUnlock(snap, me);
 
@@ -2241,6 +2354,7 @@ function resetRound(round) {
   game.hasShownEndStats = false;
   game.finishReason = null; // C4: how this round ended, from my view — fresh each round
   game.goldThisRound = 0; // per-round earnings, shown as your score on the end screen
+  game.cashedOut = false; // §B: re-arm the daily cash-out for this round's solve (one mint, once)
   // Clearer-wins: a fresh round starts an empty replay + a cleared hacker-log.
   game.replay = [];
   clearPayoutTimers(); // cancel any pending payout/drain from the prior round + reset payingOut

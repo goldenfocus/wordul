@@ -11,6 +11,13 @@
 // right after awarding so per-round earnings stay app-owned.
 import { getGold, addGold, drainGold } from "/edition.js";
 
+// The default "wallet": the sacred persistent gold balance (edition.js). A caller can
+// pass a different adapter — e.g. the DAILY round-score counter — so the SAME payout/drain
+// choreography drives an EPHEMERAL display instead of the real gold balance. Daily
+// discoveries must never move the ◆ wallet (the mint is server-authoritative, cashed out
+// once at the end); they pump #roundScore through a counter adapter instead.
+const GOLD_WALLET = { get: getGold, add: addGold, drain: drainGold };
+
 // --- Gold economy: earn on progress, with combo multipliers, raining from the sky. ---
 export const GOLD = {
   green: 100,             // each newly-revealed green
@@ -51,16 +58,20 @@ export function comboMultiplier(discoveries) {
 }
 
 // Add gold and play the "raining from the sky" payout: balance counts up + coins fall.
-export function awardGold(delta, reducedMotion) {
+// `wallet` (default = the real gold balance) lets a daily round-score counter borrow the
+// same animation; `hud`/`prefix` let it target a non-#goldHud element (e.g. #roundScore).
+export function awardGold(delta, reducedMotion, opts = {}) {
   if (!delta) return;
-  const before = getGold();
-  addGold(delta);
-  let hud = document.getElementById("goldHud");
-  if (!hud) { renderGoldHud(); hud = document.getElementById("goldHud"); }
+  const wallet = opts.wallet || GOLD_WALLET;
+  const prefix = opts.prefix ?? "◆ ";
+  const before = wallet.get();
+  wallet.add(delta);
+  let hud = opts.hud;
+  if (!hud) { hud = document.getElementById("goldHud"); if (!hud) { renderGoldHud(); hud = document.getElementById("goldHud"); } }
   if (!hud) return;
-  const after = getGold();
+  const after = wallet.get();
   if (!reducedMotion) spawnGoldCoins(Math.min(28, Math.max(6, Math.round(delta / 18))));
-  animateCount(hud, before, after);
+  animateCount(hud, before, after, 650, prefix);
   hud.classList.remove("gold-bump"); void hud.offsetWidth; hud.classList.add("gold-bump");
 }
 
@@ -71,28 +82,30 @@ export function awardGold(delta, reducedMotion) {
 // becomes reachable. The red hacker-log line is emitted by the CALLER (so its text
 // matches the trigger), not here — goldDrain stays generic. Signature mirrors
 // awardGold(delta, reducedMotion); `amount` is the positive drain.
-export function goldDrain(amount, reducedMotion, playChime) {
+export function goldDrain(amount, reducedMotion, playChime, opts = {}) {
   if (!amount || amount <= 0) return;
-  const before = getGold();
-  drainGold(amount);
-  let hud = document.getElementById("goldHud");
-  if (!hud) { renderGoldHud(); hud = document.getElementById("goldHud"); }
+  const wallet = opts.wallet || GOLD_WALLET;
+  const prefix = opts.prefix ?? "◆ ";
+  const before = wallet.get();
+  wallet.drain(amount);
+  let hud = opts.hud;
+  if (!hud) { hud = document.getElementById("goldHud"); if (!hud) { renderGoldHud(); hud = document.getElementById("goldHud"); } }
   if (!hud) return;
-  const after = getGold();
-  animateCount(hud, before, after);
+  const after = wallet.get();
+  animateCount(hud, before, after, 650, prefix);
   hud.classList.remove("gold-bump-loss"); void hud.offsetWidth; hud.classList.add("gold-bump-loss");
   if (!reducedMotion && typeof playChime === "function") playChime([[392, 0], [330, 0.08]]); // descending: a sad trombone, lite
 }
 
 // Tween the balance number old→new with an easeOutCubic so it visibly climbs.
 // `dur` is tunable so per-beat payout ticks can climb faster than the lump bump.
-function animateCount(el, from, to, dur = 650) {
+function animateCount(el, from, to, dur = 650, prefix = "◆ ") {
   if (!el) return;
   const start = performance.now();
   function step(now) {
     const t = Math.min(1, (now - start) / dur);
     const v = Math.round(from + (to - from) * (1 - Math.pow(1 - t, 3)));
-    el.textContent = `◆ ${v}`;
+    el.textContent = `${prefix}${v}`;
     if (t < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
@@ -149,6 +162,9 @@ function spawnGoldFloater(tile, value) {
 //   celebrateCombo (count, mult) app-owned combo flourish (optional; finale)
 //   reducedMotion / fastPayouts → award the whole total instantly, lines instant, no beats
 //   onBalanceChange()  called after every balance mutation so callers can refresh the HUD
+//   wallet         { get, add, drain } adapter (default = the real gold balance). DAILY passes
+//                  a round-score counter so discoveries pump #roundScore, never the ◆ wallet.
+//   prefix         HUD text prefix for the count-up (default "◆ "; daily passes "" for a bare score)
 // Resolves once the full sequence (incl. finale) has been applied to the balance.
 export function playPayoutSequence(opts = {}) {
   const {
@@ -161,6 +177,8 @@ export function playPayoutSequence(opts = {}) {
     reducedMotion = false,
     onBalanceChange = null,
   } = opts;
+  const wallet = opts.wallet || GOLD_WALLET;
+  const prefix = opts.prefix ?? "◆ ";
   let hud = opts.hud || document.getElementById("goldHud");
 
   const base = discoveries.reduce((s, d) => s + (d.value || 0), 0);
@@ -173,13 +191,16 @@ export function playPayoutSequence(opts = {}) {
 
   // Fast path: reducedMotion / fast-payouts → one award, all lines instant, no pauses.
   if (reducedMotion) {
-    awardGold(total, true);          // awardGold's own coin-rain is already suppressed when reducedMotion
+    awardGold(total, true, { wallet, hud, prefix }); // coin-rain already suppressed under reducedMotion
     for (const d of discoveries) {
       log?.addInstant(`> ${d.kind} ${String(d.letter || "").toUpperCase()} pos ${d.index + 1}  +${d.value}`, {
         tone: "gain",
       });
     }
-    if (hasCombo) log?.addInstant(`> ✦ ${mult}× COMBO  +${total}`, { tone: "combo" });
+    // GOLD-SUM (F5): the per-discovery lines already show +base; the combo line shows ONLY
+    // the +bonus delta (with a (=total) annotation), so the visible +N numbers sum to the
+    // real total — never base+total. The bonus equals round(base*mult) − base.
+    if (hasCombo) log?.addInstant(`> ↳ ×${mult} combo  +${bonus}  (=${total})`, { tone: "combo" });
     onBalanceChange?.();
     return Promise.resolve();
   }
@@ -203,9 +224,9 @@ export function playPayoutSequence(opts = {}) {
         setTimeout(() => tile.classList && tile.classList.remove("gold-glow"), PAYOUT_BEAT_MS);
         spawnGoldFloater(tile, d.value);
       }
-      const before = getGold();
-      addGold(d.value);
-      animateCount(hud, before, getGold(), Math.max(180, PAYOUT_BEAT_MS - 80));
+      const before = wallet.get();
+      wallet.add(d.value);
+      animateCount(hud, before, wallet.get(), Math.max(180, PAYOUT_BEAT_MS - 80), prefix);
       onBalanceChange?.();
       playChime?.([[C5 * Math.pow(2, i / 12), 0]]);
       log?.logLine(
@@ -217,15 +238,18 @@ export function playPayoutSequence(opts = {}) {
     }
 
     function finale() {
-      const before = getGold();
-      addGold(bonus);                // base→total: the combo bonus lands last
-      const after = getGold();
-      animateCount(hud, before, after, 520);
+      const before = wallet.get();
+      wallet.add(bonus);             // base→total: the combo bonus lands last
+      const after = wallet.get();
+      animateCount(hud, before, after, 520, prefix);
       if (hud) { hud.classList.remove("gold-bump"); void hud.offsetWidth; hud.classList.add("gold-bump"); }
       spawnGoldCoins(Math.min(28, Math.max(6, Math.round(total / 18))));
       onBalanceChange?.();
       celebrateCombo?.(discoveries.length, mult);
-      log?.logLine(`✦ ${mult}× COMBO  +${total}`, { tone: "combo" });
+      // GOLD-SUM (F5): the finale reads as a TOTAL, not a fresh +total increment. Show only
+      // the +bonus delta (the beats already paid +base) with a (=total) tally, so the visible
+      // +N numbers sum to the real delta: Σbeats(+base) + finale(+bonus) === total.
+      log?.logLine(`↳ ×${mult} combo  +${bonus}  (=${total})`, { tone: "combo" });
       setTimeout(resolve, PAYOUT_BEAT_MS);
     }
 

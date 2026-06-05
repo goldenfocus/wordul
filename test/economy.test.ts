@@ -149,6 +149,40 @@ describe("daily mint formula (spec §B + §C)", () => {
     expect(mint(0, 90000)).toBe(0 + 100 + goldFromPoints(speedBonusPoints(90000)));
     expect(goldFromPoints(speedBonusPoints(90000))).toBe(3); // 250/100 → 2.5 → round → 3
   });
+
+  // §B CLIENT CASH-OUT breakdown honesty. app.js cashOutDaily reconstructs the goody breakdown
+  // from what the client actually has on the wire: the SERVER total (me.goldAwarded), the
+  // player's final daily points (me.points), and the flat daily bonus constant. It derives
+  //   scoreGold = round(points/100)            (mirrors goldFromPoints)
+  //   dailyBonus = 100 (when there is any mint)
+  //   speedGold  = max(0, mint − scoreGold − dailyBonus)   ← the HONEST remainder
+  // The contract: those three displayed legs always SUM to the server's goldAwarded — the
+  // total stays authoritative, nothing is fabricated, and the speed leg matches the server's
+  // own speed bonus exactly (since score+daily+speed === mint on the server too).
+  const DAILY_GOLD_BONUS_CLIENT = 100; // mirror of app.js DAILY_GOLD_BONUS (= room.ts)
+  const clientBreakdown = (goldAwarded: number, points: number) => {
+    const scoreGold = Math.max(0, Math.round(points / 100));
+    const dailyBonus = goldAwarded > 0 ? DAILY_GOLD_BONUS_CLIENT : 0;
+    const speedGold = Math.max(0, goldAwarded - scoreGold - dailyBonus);
+    return { scoreGold, dailyBonus, speedGold };
+  };
+
+  it("client cash-out legs sum to the server's confirmed mint (never fabricated)", () => {
+    for (const [points, elapsedMs] of [[3500, 0], [3500, SPEED_WINDOW_MS], [0, 90000], [120, 45000]] as const) {
+      const goldAwarded = mint(points, elapsedMs); // the server total the wire delivers
+      const { scoreGold, dailyBonus, speedGold } = clientBreakdown(goldAwarded, points);
+      expect(scoreGold + dailyBonus + speedGold).toBe(goldAwarded); // legs sum to the total
+      expect(scoreGold).toBe(goldFromPoints(points));               // score leg is honest
+      // The remainder leg equals the server's own wall-clock speed bonus, exactly.
+      expect(speedGold).toBe(goldFromPoints(speedBonusPoints(elapsedMs)));
+    }
+  });
+
+  it("a zero mint shows no breakdown legs (nothing to claim)", () => {
+    const { scoreGold, dailyBonus, speedGold } = clientBreakdown(0, 0);
+    expect(scoreGold + dailyBonus + speedGold).toBe(0);
+    expect(dailyBonus).toBe(0); // no daily-bonus line when the server minted nothing
+  });
 });
 
 describe("balance", () => {
