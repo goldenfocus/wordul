@@ -302,7 +302,10 @@ export class Room extends DurableObject<Env> {
       const p = this.state.players.find((p) => p.username === username);
       if (p && p.connected) {
         p.connected = false;
-        this.pushSystem(`${p.username} left`);
+        // Daily rooms persist NO presence lines: hundreds flow through over 24h and every
+        // mobile background/foreground flap closed a WS — the 40-slot chat ring filled with
+        // "left/reconnected" noise and real chat fell out. Race lobbies keep them (useful).
+        if (!this.state.isDaily) this.pushSystem(`${p.username} left`);
       }
       // A pending rematch dies if either participant drops; the survivor (the
       // proposer, if it was the recipient who left) is settled Home via cancelled{left}.
@@ -448,7 +451,7 @@ export class Room extends DurableObject<Env> {
       const wasOffline = !existing.connected;
       existing.connected = true;
       existing.scienceOptOut = !!scienceOptOut;
-      if (wasOffline) this.pushSystem(`${username} reconnected`);
+      if (wasOffline && !this.state.isDaily) this.pushSystem(`${username} reconnected`);
     } else {
       // Seeded room = exactly 1 persona (bot) + 1 human. A 2nd distinct human gets
       // handed the share challenge (same word + ghosts) instead of a dead-end.
@@ -516,7 +519,7 @@ export class Room extends DurableObject<Env> {
       ) {
         this.state.publicArena = true;
       }
-      this.pushSystem(`${username} joined`);
+      if (!this.state.isDaily) this.pushSystem(`${username} joined`);
     }
 
     // Register this player in the directory so profiles are discoverable (sitemap). Best-effort.
