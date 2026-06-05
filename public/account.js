@@ -84,8 +84,17 @@ export async function openSecureSheet(username, onClaimed) {
 
   overlay.querySelector(".acct-roll").addEventListener("click", roll);
   overlay.querySelector(".acct-cancel").addEventListener("click", close);
-  overlay.querySelector(".acct-copy").addEventListener("click", () => {
-    navigator.clipboard?.writeText(phraseEl.textContent || "").catch(() => {});
+  const copyBtn = overlay.querySelector(".acct-copy");
+  copyBtn.addEventListener("click", async () => {
+    if (!nonce) return; // nothing real to copy (still on the placeholder or an error)
+    try {
+      if (!navigator.clipboard) throw new Error("no clipboard");
+      await navigator.clipboard.writeText(phraseEl.textContent || "");
+      copyBtn.textContent = "Copied ✅";
+    } catch {
+      copyBtn.textContent = "Select & ⌘C";
+    }
+    setTimeout(() => { copyBtn.textContent = "Copy"; }, 1600);
   });
   ackBox.addEventListener("change", sync);
   overlay.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
