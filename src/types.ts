@@ -5,6 +5,7 @@ import type { RoomScore } from "./scoreboard.ts";
 import type { RoomMode } from "./modes.ts";
 import type { LedgerTx } from "./economy.ts";
 import type { AuthRecord, PendingClaim } from "./account-core.ts";
+import type { GhostTape } from "./ghost-core.ts";
 
 export type OwnedRoom = { slug: string; name: string; lastPlayedAt: number };
 
@@ -116,6 +117,7 @@ export type RoomSnapshot = {
   colorScheme?: { a1: string; a2: string; a3: string } | null; // palette → CSS-var re-theme
   vibeTitle?: string;      // curated title; becomes the daily board title when present
   seed?: SeedMarker;       // INTERNAL ONLY — present on seeded bot rooms; stripped outbound (Slice C)
+  tape?: GhostTape | null; // INTERNAL ONLY — seeded round's ghost tape; persisted with state (survives hibernation), stripped outbound
   publicArena?: boolean;   // INTERNAL ONLY — a human-hosted public Arena room; stripped outbound
   // Rematch handshake — INTERNAL ONLY; stripped outbound in snapshotFor (like seed/publicArena).
   rematch?: { proposer: string; deadline: number } | null;

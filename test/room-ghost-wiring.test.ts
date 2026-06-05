@@ -26,6 +26,14 @@ describe("seeded arena ghost wiring (spec 2026-06-05-arena-ghost-replay)", () =>
     expect(src).toContain('"https://do/tape"');
   });
 
+  it("tape lives on persisted state (hibernation recycles the instance mid-race) and is stripped outbound", () => {
+    // Regression: a `private tape` class field dies between bot-turn alarms — the live
+    // smoke on 2026-06-05 lost the whole tape that way. It must ride this.state.
+    expect(src).not.toMatch(/private tape\b/);
+    expect(src).toContain("this.state.tape");
+    expect(src).toContain("tape: undefined,"); // snapshotFor strip, like `seed`
+  });
+
   it("tape records masks via tapePush, never a word field", () => {
     // every tapePush callsite in room.ts must not pass the guess word
     const calls = src.split("tapePush(").slice(1).map((s) => s.slice(0, 200));

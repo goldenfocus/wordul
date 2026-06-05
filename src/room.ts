@@ -95,9 +95,10 @@ export class Room extends DurableObject<Env> {
   private state: RoomSnapshot;
   /** In-memory only — fine if hibernation wipes it; we just reset throttle. */
   private chatThrottle = new Map<string, number>();
-  /** Ghost tape for the current seeded round. In-memory only — a mid-race eviction
-   *  loses it (replay degrades to no ghosts); typing must never hammer DO storage. */
-  private tape: GhostTape | null = null;
+  // NOTE: the ghost tape lives on this.state.tape (NOT a class field) — the hibernation
+  // API recycles this instance between bot turns, so in-memory state dies mid-race. It
+  // rides the existing persist points (every guess); typing pulses between persists are
+  // the only thing a hibernation can drop. Stripped outbound in snapshotFor like `seed`.
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -770,7 +771,7 @@ export class Room extends DurableObject<Env> {
         if (res.ok) this.state.shareChallengeId = id;
         else console.error("share-challenge mint non-ok", res.status);
       } catch (e) { console.error("share-challenge mint failed", (e as Error).message); }
-      this.tape = newTape(this.state.wordLength, this.state.maxGuesses,
+      this.state.tape = newTape(this.state.wordLength, this.state.maxGuesses,
         this.state.players.map((p) => ({ username: p.username, host: !p.isBot })));
     }
     this.state.phase = "playing";
@@ -951,8 +952,8 @@ export class Room extends DurableObject<Env> {
     if (!player || player.status !== "playing") return;
     const n = Number.isFinite(lenRaw) ? Math.floor(lenRaw) : 0;
     const len = Math.max(0, Math.min(this.state.wordLength, n));
-    if (this.tape && this.state.seed && this.state.startedAt) {
-      tapePush(this.tape, { t: this.tapeT(Date.now()), u: username, k: "typing", len });
+    if (this.state.tape && this.state.seed && this.state.startedAt) {
+      tapePush(this.state.tape, { t: this.tapeT(Date.now()), u: username, k: "typing", len });
     }
     const payload = JSON.stringify({ type: "typing", username, len } satisfies ServerMessage);
     for (const other of this.ctx.getWebSockets()) {
@@ -973,8 +974,8 @@ export class Room extends DurableObject<Env> {
     const bot = this.state.players.find((p) => p.username === username);
     if (!bot || !bot.isBot || bot.status !== "playing") return;
     const n = Math.max(0, Math.min(this.state.wordLength, Math.floor(len)));
-    if (this.tape && this.state.seed && this.state.startedAt) {
-      tapePush(this.tape, { t: this.tapeT(Date.now()), u: username, k: "typing", len: n });
+    if (this.state.tape && this.state.seed && this.state.startedAt) {
+      tapePush(this.state.tape, { t: this.tapeT(Date.now()), u: username, k: "typing", len: n });
     }
     const payload = JSON.stringify({ type: "typing", username, len: n } satisfies ServerMessage);
     for (const ws of this.ctx.getWebSockets()) {
@@ -1024,15 +1025,15 @@ export class Room extends DurableObject<Env> {
     } else if (player.guesses.length >= this.state.maxGuesses) {
       player.status = "lost";
     }
-    if (this.tape && this.state.seed && this.state.startedAt) {
-      tapePush(this.tape, { t: this.tapeT(now), u: player.username, k: "guess", mask, status: player.status });
+    if (this.state.tape && this.state.seed && this.state.startedAt) {
+      tapePush(this.state.tape, { t: this.tapeT(now), u: player.username, k: "guess", mask, status: player.status });
     }
     this.emitAcceptedGuess(player, mask, now);
     if (priorStatus === "playing" && player.status !== "playing") {
       player.finishedAt = now;
       this.emitPlayerFinished(player, player.status === "won" ? "won" : "lost", now);
-      if (this.tape && this.state.seed && this.state.startedAt) {
-        tapePush(this.tape, { t: this.tapeT(now), u: player.username, k: "finish", status: player.status === "won" ? "won" : "lost", guesses: player.guesses.length });
+      if (this.state.tape && this.state.seed && this.state.startedAt) {
+        tapePush(this.state.tape, { t: this.tapeT(now), u: player.username, k: "finish", status: player.status === "won" ? "won" : "lost", guesses: player.guesses.length });
       }
     }
     // First solve ends the race for everyone (live, non-daily rooms — Arena AND
@@ -1047,8 +1048,8 @@ export class Room extends DurableObject<Env> {
           other.status = "lost";
           if (other.finishedAt == null) other.finishedAt = now;
           this.emitPlayerFinished(other, "lost", now);
-          if (this.tape && this.state.seed && this.state.startedAt) {
-            tapePush(this.tape, { t: this.tapeT(now), u: other.username, k: "finish", status: "lost", guesses: other.guesses.length });
+          if (this.state.tape && this.state.seed && this.state.startedAt) {
+            tapePush(this.state.tape, { t: this.tapeT(now), u: other.username, k: "finish", status: "lost", guesses: other.guesses.length });
           }
         }
       }
@@ -1559,9 +1560,9 @@ export class Room extends DurableObject<Env> {
     // Seeded Arena: file the race's ghost tape with the share challenge so late
     // visitors race the original field in replay. The DO is first-write-wins, so a
     // re-entry can't double-file; best-effort like every other post-finish write.
-    if (this.state.seed && this.state.shareChallengeId && this.tape && this.tape.events.length) {
+    if (this.state.seed && this.state.shareChallengeId && this.state.tape && this.state.tape.events.length) {
       const cs = this.env.CHALLENGE.get(this.env.CHALLENGE.idFromName(this.state.shareChallengeId));
-      const body = JSON.stringify({ ghosts: this.tape });
+      const body = JSON.stringify({ ghosts: this.state.tape });
       this.ctx.waitUntil(cs.fetch(new Request("https://do/tape", {
         method: "POST", body, headers: { "content-type": "application/json" },
       })).catch((e) => console.error("tape file failed", (e as Error).message)));
@@ -1922,6 +1923,7 @@ export class Room extends DurableObject<Env> {
       // key (Slice D sets state.seed). TS doesn't enforce the shadow (seed isn't on the
       // declared outbound shape via this path), so this comment documents the dependency.
       seed: undefined,
+      tape: undefined, // internal-only ghost tape; ships to late visitors via the Challenge DO, never the room socket
       publicArena: undefined, // internal-only; not part of the client contract
       rematch: undefined,
       botRematchAt: undefined,
