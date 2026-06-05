@@ -657,6 +657,10 @@ const game = {
   finishReason: null, // 'solved' | 'lost' | 'bankrupt' | 'gave_up' | null
   stuck: false,
   errorCount: 0,
+  // Lobby → play transition: the lobby board is a single collapsed row; the first
+  // snapshot that leaves lobby blooms it out to the full grid (one-shot .blooming class).
+  wasLobby: false,
+  bloomTimer: null,
 };
 // Dependency bundle handed to the power-ups module (it must not import app.js — the
 // <script type="module"> entry — or the graph would cycle). All app-owned helpers it
@@ -2600,6 +2604,11 @@ function render() {
 
   syncModeChip(snap);
 
+  // Tries badge rides above the single-row lobby board (×N tries / word-length control,
+  // wired in a later task) — it only makes sense while waiting in the lobby.
+  const triesBadge = $("#triesBadge");
+  if (triesBadge) triesBadge.hidden = snap.phase !== "lobby";
+
   // Lobby rail: only while genuinely waiting in a multiplayer lobby (not the daily, which
   // auto-starts). Any other phase or the daily tears it down so its poll can't leak.
   if (snap.phase === "lobby" && !game.isDaily) mountLobbyRailIfNeeded();
@@ -2622,6 +2631,19 @@ function render() {
   setChromeVisibility(snap.phase);
 
   renderBoards(snap, me);
+  // Bloom-on-start: the lobby board is a single collapsed row; the first snapshot that
+  // leaves lobby has just re-rendered the full grid above — tag #boards once so its rows
+  // can animate in (keyframes land in a later task). One-shot: the class is cleared on
+  // the next render or after ~600ms, and game.wasLobby below re-arms it for the next lobby.
+  if (game.wasLobby && snap.phase !== "lobby") {
+    const boards = $("#boards");
+    if (boards) {
+      boards.classList.add("blooming");
+      clearTimeout(game.bloomTimer);
+      game.bloomTimer = setTimeout(() => boards.classList.remove("blooming"), 600);
+    }
+  }
+  game.wasLobby = snap.phase === "lobby";
   renderKeyboard($("#keyboard"), me);
   renderChat(snap);
   renderScoreboard(snap);
@@ -2940,6 +2962,10 @@ function renderBoards(snap, me) {
         ...(me ? [me] : []),
         ...snap.players.filter((p) => p.username !== getUsername()),
       ];
+  // Lobby: opponents have no board pre-start — show only your own single-row "word to
+  // fill" board (the per-row collapse happens below). Skipping opponent boards here keeps
+  // the waiting lobby calm; everyone's full board reappears the moment the game starts.
+  const lobbyOrdered = snap.phase === "lobby" && me ? [me] : ordered;
   // While my board's tiles are mid-explosion OR mid-payout (glow/floater anchored to
   // them), preserve the existing DOM so the animations don't get nuked by a snapshot
   // from another player's guess. Update everyone else's boards as normal.
@@ -2955,7 +2981,7 @@ function renderBoards(snap, me) {
   } else {
     root.textContent = "";
   }
-  for (const p of ordered) {
+  for (const p of lobbyOrdered) {
     if (preserveMine && p.username === getUsername()) continue; // keep existing animating board
     const board = document.createElement("div");
     board.className = "player-board" + (p.username === getUsername() ? "" : " spectator");
@@ -3002,7 +3028,13 @@ function renderBoards(snap, me) {
     const prevCount = game.lastGuessCounts.get(p.username) ?? 0;
     const freshRowIdx = p.guesses.length > prevCount ? p.guesses.length - 1 : -1;
 
-    for (let r = 0; r < rows; r++) {
+    // Lobby: collapse the board to a SINGLE row (the "word to fill") to free vertical
+    // space; it blooms to its full `rows` height when the game starts (see render()).
+    // The grid still carries --rows so the bloom expands to the right height.
+    const isLobby = snap.phase === "lobby";
+    const rowsToDraw = isLobby ? 1 : rows;
+
+    for (let r = 0; r < rowsToDraw; r++) {
       const row = document.createElement("div");
       row.className = "grid-row";
       row.style.setProperty("--cols", String(cols));
