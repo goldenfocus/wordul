@@ -192,6 +192,13 @@ export default {
       return stub.fetch(new Request("https://do/meta", { method: "GET" }));
     }
 
+    // Challenge ghost tape (no word): GET /api/challenge/<id>/ghosts
+    const ghostsMatch = url.pathname.match(/^\/api\/challenge\/([0-9A-Za-z]{5})\/ghosts$/);
+    if (ghostsMatch && req.method === "GET") {
+      const stub = env.CHALLENGE.get(env.CHALLENGE.idFromName(ghostsMatch[1]));
+      return stub.fetch(new Request("https://do/ghosts", { method: "GET" }));
+    }
+
     // Sitemap from the directory.
     if (url.pathname === "/sitemap.xml") {
       return sitemap(env, url.origin);

@@ -99,6 +99,7 @@ export type RoomSnapshot = {
   throne: { username: string; streak: number } | null; // duel: current king + win streak (KOTH)
   isDuel?: boolean;        // computed outbound: true when this room runs the duel (ready/seats/KOTH); absent on stored state
   challengeId?: string | null; // set when this room plays a pinned challenge word
+  shareChallengeId?: string | null; // seeded Arena: the challenge minted from THIS round's word — public, late visitors race it (+ its ghost tape)
   // Daily-mode (Wordul of the Day). Absent/false on normal race rooms.
   isDaily?: boolean;       // async one-shot, locked word, no resets, per-player scoring
   story?: { title: string; body: string; tip?: string } | null; // World story for the unlock
@@ -146,6 +147,7 @@ export type ServerMessage =
   | { type: "snapshot"; room: RoomSnapshot }
   | { type: "typing"; username: string; len: number } // relayed live-typing pulse (anonymous: count only)
   | { type: "error"; message: string }
+  | { type: "arena_handoff"; challengeId: string; host: string; hostDone: boolean } // seeded room is 1-human: route the visitor to the share challenge instead of a dead-end
   | { type: "invalid_guess"; reason: string }
   | { type: "revealed_letter"; index: number; letter: string }
   | { type: "vowels"; count: number }
