@@ -7,7 +7,7 @@ import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, 
 import { pickGuessEvent } from "/roomConfig.js";
 import { speakLine, speakTemplated } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
-import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence } from "/gold.js";
+import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence, dailyCashOutReady } from "/gold.js";
 import { createHacklog } from "/hacklog.js";
 import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, surfaceGiveUp, checkBankruptcy } from "/powerups.js";
 import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, detectLayout } from "/keyboard.js";
@@ -1920,14 +1920,22 @@ function onServerMessage(msg) {
       handleGameOver(msg.room);
     }
     if (msg.room.phase === "finished") refreshGold(); // reconcile persistent balance after cash-out
-    // Daily rooms never globally "finish" (per-player async scoring) — so the moment YOU
-    // personally complete, run the honest §B CASH-OUT: a single ONLY-UP animation that counts
-    // the ◆ wallet up by the server-confirmed mint (me.goldAwarded) with coins flying onto the
-    // pile — replacing the old silent refreshGold() snap. captureDailySolve still stamps home.
+    // Daily rooms never globally "finish" (per-player async scoring) — so once YOU are
+    // personally done, run the honest §B CASH-OUT: a single ONLY-UP animation that counts
+    // the ◆ wallet up by the server-confirmed mint (me.goldAwarded) with coins flying onto
+    // the pile. NOT keyed to the won/lost transition edge: the server's early "fast board
+    // flip" snapshot flips status BEFORE the mint lands, so the cash-out waits for the
+    // follow-up snapshot that carries a confirmed goldAwarded (dailyCashOutReady) — firing
+    // on the edge cashed out 0 and stranded the HUD at the pre-mint balance (the ◆0 bug).
     if (game.isDaily && (personallyWon || personallyLost)) {
-      cashOutDaily(me);
+      game.pendingCashOut = true; // ARM on the transition edge (this session earned it)…
       captureDailySolve(game.dailyDate, me); // client-only — powers the home's letter stamp
     }
+    // …FIRE once the mint confirms. The arm/fire split matters twice over: a reloaded
+    // already-finished daily has goldAwarded on its first snapshot but no transition (no
+    // replayed coin-rain), and a reconnect AFTER arming still cashes out on the re-join
+    // snapshot if the confirmed one was lost to the dropped socket.
+    if (game.isDaily && game.pendingCashOut && dailyCashOutReady(me, game.cashedOut)) cashOutDaily(me);
     render();
   } else if (msg.type === "invalid_guess") {
     // Letters are still in game.pending — we never cleared them. Shake the row and
@@ -2055,19 +2063,25 @@ function renderDailyUnlock(snap, me) {
   const won = me.status === "won";
   // Only a CONFIRMED gold mint sets player.goldAwarded (a number). Drive both the
   // copy and the celebration off it — never claim/float gold the server didn't grant.
-  const award = (me && typeof me.goldAwarded === "number") ? me.goldAwarded : 0;
+  const confirmed = me && typeof me.goldAwarded === "number";
+  const award = confirmed ? me.goldAwarded : 0;
   const goody = $("#dailyGoody");
-  if (goody && !goody.dataset.filled) {
+  // Fill on the early "fast board flip" snapshot (no goldAwarded yet → NoGold copy), then
+  // UPGRADE once when the mint-confirmed snapshot lands — without this the pre-mint copy
+  // stuck forever and a real award never showed (the ◆0 race, papa Jun 5 2026).
+  if (goody && (!goody.dataset.filled || (confirmed && goody.dataset.confirmed !== "1"))) {
     const word = snap.word || "";
     goody.textContent = won
       ? (award > 0 ? t("daily.goodySolved", { word, gold: award }) : t("daily.goodySolvedNoGold", { word }))
       : (award > 0 ? t("daily.goodyMissed", { word, gold: award }) : t("daily.goodyMissedNoGold", { word }));
     if (won) goody.classList.add("is-win"); // gold halo (CSS) — solve only
     goody.dataset.filled = "1";
+    if (confirmed) goody.dataset.confirmed = "1";
     // GOLD-FLIGHT: celebrate a confirmed gold solve once — bump the HUD + send a few
     // floaters rising toward it. Reuses the existing .gold-floater / gold-bump system;
     // skip entirely under reduced motion (the calm CSS appear covers that case), and
-    // skip when the mint credited 0 (no coins for a zero/failed award).
+    // skip when the mint credited 0 (no coins for a zero/failed award). Fires at most
+    // once: only the confirmed pass has award > 0, and it sets dataset.confirmed.
     if (won && award > 0 && !getSettings().reducedMotion) celebrateDailyUnlock();
   }
   const story = $("#dailyStory");
@@ -2384,6 +2398,7 @@ function resetRound(round) {
   game.finishReason = null; // C4: how this round ended, from my view — fresh each round
   game.goldThisRound = 0; // per-round earnings, shown as your score on the end screen
   game.cashedOut = false; // §B: re-arm the daily cash-out for this round's solve (one mint, once)
+  game.pendingCashOut = false; // §B: the new round hasn't earned a cash-out yet (armed on won/lost)
   // Clearer-wins: a fresh round starts an empty replay + a cleared hacker-log.
   game.replay = [];
   clearPayoutTimers(); // cancel any pending payout/drain from the prior round + reset payingOut

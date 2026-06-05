@@ -52,6 +52,16 @@ export function isBankrupt(gold, hardMode) {
   return !!hardMode && gold <= BANKRUPTCY_THRESHOLD;
 }
 
+// Pure predicate (unit-tested): may the daily §B cash-out fire for this player snapshot?
+// The daily server broadcasts TWICE on a finish — an early "fast board flip" snapshot
+// (status flipped, NO goldAwarded yet) and, after the awaited ledger mint, a confirmed
+// one (goldAwarded: number — room.ts scorePlayer sets it only on res.ok). Cashing out on
+// the first snapshot burned the one-shot guard with mint=0 (the ◆0 race), so: ready only
+// when the player is done AND the mint is confirmed AND the guard hasn't fired yet.
+export function dailyCashOutReady(me, cashedOut) {
+  return !cashedOut && !!me && me.status !== "playing" && typeof me.goldAwarded === "number";
+}
+
 // Multiple discoveries in ONE guess pay a combo bonus: 2→1.5×, 3→2×, 4→2.5×, 5→3×.
 export function comboMultiplier(discoveries) {
   return discoveries >= 2 ? 1 + (discoveries - 1) * 0.5 : 1;

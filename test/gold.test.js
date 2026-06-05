@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GOLD, comboMultiplier } from "/gold.js";
+import { GOLD, comboMultiplier, dailyCashOutReady } from "/gold.js";
 
 describe("comboMultiplier", () => {
   it("is 1× for 0 or 1 discovery (no combo)", () => {
@@ -44,5 +44,31 @@ describe("gold sum (earn formula with C1 constants)", () => {
   });
   it("3 greens = (300)×2 = 600", () => {
     expect(earned(3, 0)).toBe(600);
+  });
+});
+
+// Regression guard for the 0-gold cash-out race (papa's ◆0 → ◆119, Jun 5 2026):
+// the daily server broadcasts TWO snapshots on a solve — an early "fast board flip"
+// one (status flipped, NO goldAwarded yet) and, after the awaited ledger mint, the
+// confirmed one (goldAwarded: number). The client's one-shot cash-out must fire on
+// the SECOND, never burn its guard on the first.
+describe("dailyCashOutReady (mint-confirmed cash-out gate)", () => {
+  it("not ready on the pre-mint snapshot (status flipped, goldAwarded missing)", () => {
+    expect(dailyCashOutReady({ status: "won" }, false)).toBe(false);
+  });
+  it("ready once the server confirms the mint (goldAwarded is a number)", () => {
+    expect(dailyCashOutReady({ status: "won", goldAwarded: 119 }, false)).toBe(true);
+  });
+  it("ready for a confirmed 0-gold mint (resigner: goldAwarded === 0)", () => {
+    expect(dailyCashOutReady({ status: "lost", goldAwarded: 0 }, false)).toBe(true);
+  });
+  it("never ready while still playing, even if a stale goldAwarded exists", () => {
+    expect(dailyCashOutReady({ status: "playing", goldAwarded: 7 }, false)).toBe(false);
+  });
+  it("one-shot: never re-fires after the cash-out ran", () => {
+    expect(dailyCashOutReady({ status: "won", goldAwarded: 119 }, true)).toBe(false);
+  });
+  it("no player, no cash-out", () => {
+    expect(dailyCashOutReady(null, false)).toBe(false);
   });
 });
