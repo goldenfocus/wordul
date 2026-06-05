@@ -66,3 +66,21 @@ echo
 echo "✅ Shipped '$BRANCH' -> main -> prod."
 echo "   release tag: $REL"
 echo "   revert with: bash dev/revert.sh $BK   (or: npx wrangler rollback)"
+
+echo "▶ Cleanup: this worktree + branch are shipped & spent — removing them..."
+# Only auto-remove a CLEAN worktree under .claude/worktrees (never the root, never one
+# with unsaved work). A dirty tree is left in place with a manual hint, so nothing
+# unsaved is ever lost. Runs last — main is already updated + deployed by here.
+WT="$(git rev-parse --show-toplevel)"
+case "$WT" in
+  */.claude/worktrees/*)
+    cd "${WT%/.claude/worktrees/*}"   # step out to the root checkout BEFORE removing
+    if git worktree remove "$WT" 2>/dev/null; then
+      git branch -D "$BRANCH" 2>/dev/null || true
+      echo "   🧹 removed shipped worktree + branch '$BRANCH'."
+    else
+      echo "   ⚠️  '$WT' has unsaved work — left in place. Remove when ready:"
+      echo "       git worktree remove --force '$WT' && git branch -D '$BRANCH'"
+    fi ;;
+  *) echo "   (not a .claude/worktrees worktree — skipping cleanup.)" ;;
+esac

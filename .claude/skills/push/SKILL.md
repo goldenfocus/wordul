@@ -39,9 +39,27 @@ gh run watch "$(gh run list --workflow=deploy.yml --branch=main --limit=1 --json
 # 6. Smoke
 curl -s -o /dev/null -w 'home %{http_code}\n' https://wordul.com/
 curl -s -o /dev/null -w 'room %{http_code}\n' https://wordul.com/@bingo/perky-ocelot
+
+# 7. Cleanup — prod is live, so this worktree + branch are spent. Auto-remove ONLY a clean
+#    worktree under .claude/worktrees (never the root, never one with unsaved work). A dirty
+#    tree is left in place with a manual hint, so nothing unsaved is ever lost. Run this
+#    LAST — only after the smoke curls are 200.
+WT="$(git rev-parse --show-toplevel)"; BR="$(git branch --show-current)"
+case "$WT" in
+  */.claude/worktrees/*)
+    cd "${WT%/.claude/worktrees/*}"   # step out to the root checkout BEFORE removing
+    if git worktree remove "$WT" 2>/dev/null; then
+      git branch -D "$BR" 2>/dev/null || true
+      echo "🧹 removed shipped worktree + branch '$BR'"
+    else
+      echo "⚠️  '$WT' has unsaved work — left in place. Remove when ready:"
+      echo "    git worktree remove --force '$WT' && git branch -D '$BR'"
+    fi ;;
+  *) echo "(not a .claude/worktrees worktree — skipping cleanup)" ;;
+esac
 ```
 
-Both curls must be `200`. If you changed a public asset, also `curl -s https://wordul.com/<file>.js | grep -c <new-token>` to confirm the new bundle is live (not a stale cache).
+Both curls must be `200` (run cleanup only after they pass). If you changed a public asset, also `curl -s https://wordul.com/<file>.js | grep -c <new-token>` to confirm the new bundle is live (not a stale cache).
 
 ## Then: the summary
 
@@ -61,3 +79,4 @@ Test (60s):
 - Never force-push. `main` is the only remote branch.
 - If the gauntlet fails, fix or report — never `--no-verify`.
 - CI deploys `origin/main`, so prod always matches main. Manual `npm run deploy` is an emergency-only fallback (it ships LOCAL files — the stale-deploy hazard).
+- **Cleanup (step 7) only runs after a confirmed prod ship** (smoke 200s). It removes the spent worktree + branch so the `git worktree list` doesn't accrue dead entries. It refuses on any uncommitted/untracked work — so if you have a plan doc or notes you want kept, commit them before pushing (or they'll block cleanup and you'll see the manual hint).
