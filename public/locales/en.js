@@ -8,6 +8,7 @@ export const en = {
   // End-of-game stats / word card
   "endscreen.theWord": "THE WORD",
   "endscreen.lookup": "Look it up ↗",
+  "endscreen.lookupAi": "Look it up with AI ✦",
   "endscreen.looking": "Looking it up…",
   "endscreen.noEntry": "No dictionary entry — tap “Look it up” to explore.",
   "endscreen.offline": "Definition unavailable offline — tap “Look it up”.",

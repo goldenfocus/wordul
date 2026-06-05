@@ -1,7 +1,7 @@
 // Wordul — client
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { getSessionToken, openSecureSheet } from "/account.js";
-import { wireCardArt } from "/endcard.js";
+import { wireCardArt, aiLookupHref } from "/endcard.js";
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
 import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
@@ -3814,6 +3814,15 @@ function renderWordCard(parent, word) {
       } else {
         def.textContent = t("endscreen.noEntry");
         def.classList.add("muted");
+        // No dictionary entry → the /word/<w> wiki page may not exist either (e.g. a
+        // 4-letter answer). Retarget "Look it up" to the same Google AI Mode hand-off
+        // the wiki's "Continue with AI ✦" uses, so the tap never dead-ends.
+        look.href = aiLookupHref(w);
+        look.target = "_blank";
+        look.rel = "noopener";
+        look.textContent = t("endscreen.lookupAi");
+        look.title = `Ask AI about ${word.toUpperCase()}`;
+        look.setAttribute("aria-label", `Ask AI about ${word.toUpperCase()}`);
       }
     })
     .catch(() => {
