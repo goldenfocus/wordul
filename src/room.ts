@@ -557,14 +557,16 @@ export class Room extends DurableObject<Env> {
       console.error("user register failed", username, (e as Error).message);
     }
 
-    // Register the room under its owner (directory + owner profile) — best effort.
-    if (username === this.state.owner) {
-      void this.registerRoom();
-    }
     await this.seedDailyIfNeeded();
     // A published wordul at <owner>/<slug> seeds the same one-shot engine (cheap no-op for
     // daily rooms — they already set isDaily+word above — and for non-wordul custom rooms).
     await this.seedWordulIfNeeded();
+    // Register the room under its owner (directory + owner profile) — best effort. MUST run
+    // AFTER seeding: a wordul/daily room sets isDaily, and registerRoom skips isDaily rooms,
+    // so a published wordul is not double-listed (it owns its wordul: DIRECTORY key already).
+    if (username === this.state.owner) {
+      void this.registerRoom();
+    }
     // Daily gold is mint-confirmed: if a player finished but a prior mint failed (scored
     // still false), retry now that they're back. Idempotent — scorePlayer only marks
     // scored on a confirmed ledger write.
