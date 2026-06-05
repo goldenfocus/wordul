@@ -498,8 +498,8 @@ async function sitemap(env: Env, origin: string): Promise<Response> {
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
 
-  urls.push(origin + "/worlds");
   for (const w of listWorlds()) urls.push(`${origin}/w/${w.slug}`);
+  urls.push(origin + "/worlds");
   urls.push(origin + "/words");
   // Word-wiki pages. Emit ALPHABETICALLY — iterating ANSWER_WORDS in pool order would
   // leak the secret answer-pool ordering (the daily answer is answers[fnv1a(date)%len]
