@@ -1,6 +1,7 @@
 // Wordul — client
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { getSessionToken, openSecureSheet } from "/account.js";
+import { wireCardArt } from "/endcard.js";
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
 import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
@@ -3461,6 +3462,8 @@ function renderWordCard(parent, word) {
   big.textContent = word.toUpperCase();
   card.appendChild(big);
 
+  const intel = wordIntel(word);
+
   // The reward: an inline preview of the word's OG card. Every answer word has a
   // pre-rendered card at /word/og/<slug>.png; this only runs when the word is
   // revealed (renderWordCard is only called with snap.word present). Lazy + async
@@ -3481,12 +3484,19 @@ function renderWordCard(parent, word) {
   preview.style.borderRadius = "10px";
   preview.style.display = "block";
   preview.style.margin = "10px auto 0";
-  preview.onerror = () => { preview.remove(); };
   card.appendChild(preview);
 
   const def = document.createElement("div");
   def.className = "ewc-def";
   card.appendChild(def);
+
+  if (intel) {
+    // Dedup: the art already shows the word (tiles) and definition (tagline), so the
+    // big-word + def text start hidden; if the art fails to load they return (endcard.js).
+    wireCardArt(preview, [big, def]);
+  } else {
+    preview.onerror = () => { preview.remove(); };
+  }
 
   // Inward link to the word's wiki page — "see the full story of <WORD>". Plain link,
   // no auto-redirect and nothing gating the next game; the player taps it if they want.
@@ -3497,7 +3507,6 @@ function renderWordCard(parent, word) {
   look.title = `See the full story of ${word.toUpperCase()}`;
   look.setAttribute("aria-label", `See the full story of ${word.toUpperCase()}`);
 
-  const intel = wordIntel(word);
   if (intel) {
     // Rich path: pre-generated definition + fact + quote. No network needed.
     def.textContent = intel.def;

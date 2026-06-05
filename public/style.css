@@ -1773,6 +1773,9 @@ body.reduced-motion .gold-floater { display: none !important; }
   color: var(--fg); font-style: italic;
 }
 .ewc-def.muted { color: var(--muted); font-style: normal; }
+/* Dedup: the OG tile art already carries the word + definition; the text versions
+   stay in the DOM as a parachute and only show if the art fails (endcard.js). */
+.ewc-text-fallback { display: none; }
 .ewc-fact {
   margin-top: 10px;
   font-size: 12.5px; line-height: 1.5;
