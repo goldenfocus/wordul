@@ -57,6 +57,10 @@
       {
         "name": "ARENA",
         "class_name": "Arena"
+      },
+      {
+        "name": "WORDULS",
+        "class_name": "Worduls"
       }
     ]
   },
@@ -133,6 +137,12 @@
       // v6 (Arena) is the prior max; WordStats takes v7.
       "tag": "v7",
       "new_sqlite_classes": ["WordStats"]
+    },
+    {
+      // Per-owner store of user-authored worduls. New DO → SQLite-backed.
+      // v7 (WordStats) is the prior max; Worduls takes v8.
+      "tag": "v8",
+      "new_sqlite_classes": ["Worduls"]
     }
   ],
 

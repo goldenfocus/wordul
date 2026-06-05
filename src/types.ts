@@ -34,6 +34,7 @@ export interface Env {
   DAILY: DurableObjectNamespace;
   SCIENCE: DurableObjectNamespace;
   ARENA: DurableObjectNamespace;
+  WORDULS: DurableObjectNamespace;
   DIRECTORY: KVNamespace;
   DESIGNS: R2Bucket;
   OG: R2Bucket;

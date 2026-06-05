@@ -6,6 +6,7 @@ import { Science } from "./science-object.ts";
 import { Arena } from "./arena.ts";
 import { makeChallengeId, wordChallengeIdFromBytes } from "./challenge-core.ts";
 import { tapeFromSolveGrid } from "./ghost-core.ts";
+import { Worduls } from "./worduls.ts";
 import type { Env } from "./types.ts";
 import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts";
 import { isWordPage, slugFor, wordOfTheDay, ANSWER_WORDS } from "./words.ts";
@@ -18,7 +19,7 @@ import { buildWeeklyScienceSummary, type SciencePublicDailySummary } from "./sci
 import { buildDailyPost, buildWeeklyPost, type FeedPost } from "./feed.ts";
 import { BRAIN_NOTES } from "./brain-notes.ts";
 import { buildTuneMessages, cleanTuneOutput, TUNE_MODEL, MAX_STORY_CHARS, MAX_PROMPT_CHARS } from "./vibe-tune.ts";
-export { Room, User, WordStats, Challenge, Daily, Science, Arena };
+export { Room, User, WordStats, Challenge, Daily, Science, Arena, Worduls };
 
 const PROFILE_RE = /^\/@([a-z0-9_-]{3,20})$/;
 const ROOM_RE = /^\/@([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/;

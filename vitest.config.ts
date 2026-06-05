@@ -14,6 +14,9 @@ export default defineConfig({
   },
   resolve: {
     alias: [
+      // `cloudflare:workers` is a workerd-only virtual module; stub its DurableObject
+      // base so DO classes (e.g. Worduls) are unit-testable in the node environment.
+      { find: /^cloudflare:workers$/, replacement: new URL("./test/stubs/cloudflare-workers.ts", import.meta.url).pathname },
       { find: /^\/editions\//, replacement: new URL("./public/editions/", import.meta.url).pathname },
       { find: /^\/edition\.js$/, replacement: new URL("./public/edition.js", import.meta.url).pathname },
       { find: /^\/voice-key\.js$/, replacement: new URL("./public/voice-key.js", import.meta.url).pathname },
