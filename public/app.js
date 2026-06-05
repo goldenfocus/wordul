@@ -2226,6 +2226,10 @@ function setChromeVisibility(phase) {
 // new-round snapshot hook.
 function resetRound(round) {
   resetPowerHints(game, round); // ezRound, revealed, vowels, pending*, stuck, errorCount
+  // A new round reopens input: the end-stats lock (set on game over / give-up) must clear here,
+  // or a duel REPLAY (ready→KOTH next round) leaves the keyboard dead — that path never hits the
+  // rematch_accepted handler that otherwise resets it. Covers fresh start, rematch, and reconnect.
+  game.hasShownEndStats = false;
   game.finishReason = null; // C4: how this round ended, from my view — fresh each round
   game.goldThisRound = 0; // per-round earnings, shown as your score on the end screen
   // Clearer-wins: a fresh round starts an empty replay + a cleared hacker-log.
