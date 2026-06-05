@@ -380,6 +380,29 @@ export default {
       });
     }
 
+    // TEMP — Phase 2 image-gen prototype. Generates one flux-1-schnell image via the AI
+    // runtime binding (no offline API token needed) and returns raw PNG bytes. Gated by the
+    // IMG_GEN_KEY secret (x-img-gen-key header) — 404s without it so the route is invisible.
+    // Shipped ONLY as a preview version, never to prod main. REMOVE after the image batch.
+    if (url.pathname === "/admin/genimg") {
+      const want = (env as unknown as { IMG_GEN_KEY?: string }).IMG_GEN_KEY;
+      if (!want || req.headers.get("x-img-gen-key") !== want) return new Response("not found", { status: 404 });
+      if (!env.AI) return new Response("ai_unavailable", { status: 503 });
+      let prompt = "";
+      try { prompt = ((await req.json()) as { prompt?: string }).prompt || ""; } catch { prompt = ""; }
+      if (!prompt) return new Response("missing prompt", { status: 400 });
+      try {
+        const out = (await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
+          prompt, steps: 4,
+        })) as { image?: string };
+        if (!out?.image) return new Response("no_image", { status: 502 });
+        const bytes = Uint8Array.from(atob(out.image), (c) => c.charCodeAt(0));
+        return new Response(bytes, { headers: { "content-type": "image/png" } });
+      } catch (e) {
+        return new Response("gen_failed: " + (e as Error).message, { status: 502 });
+      }
+    }
+
     // Word wiki. Note: wrangler serves matching static assets BEFORE the worker, so a
     // word page like /word/ocean is served straight from public/word/ocean.html; the
     // /word/ branch below only runs on asset misses (uppercase → lowercase redirect,
