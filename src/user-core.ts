@@ -15,6 +15,8 @@ export function freshProfile(username: string): UserProfile {
     ledger: [],
     balances: {},
     h2h: {},
+    follows: [],
+    followers: [],
   };
 }
 
@@ -31,6 +33,8 @@ export function healProfile(saved: UserProfile, username: string): UserProfile {
     }
   }
   if (!saved.h2h) saved.h2h = {};
+  if (!Array.isArray(saved.follows)) saved.follows = [];
+  if (!Array.isArray(saved.followers)) saved.followers = [];
   return saved;
 }
 

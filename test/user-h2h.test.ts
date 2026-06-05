@@ -81,3 +81,19 @@ describe("route ordering guard (E3 — /h2h never shadows /ledger/append)", () =
     expect(ledgerMatch(p)).toBe(true);
   });
 });
+
+describe("reserved follows/followers seams", () => {
+  it("seeds empty follows/followers arrays", () => {
+    const p = freshProfile("zang");
+    expect(p.follows).toEqual([]);
+    expect(p.followers).toEqual([]);
+  });
+  it("backfills follows/followers on heal of an older profile", () => {
+    const old = freshProfile("zang");
+    delete old.follows;
+    delete old.followers;
+    const healed = healProfile(old, "zang");
+    expect(healed.follows).toEqual([]);
+    expect(healed.followers).toEqual([]);
+  });
+});

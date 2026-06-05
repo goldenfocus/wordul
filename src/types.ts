@@ -19,6 +19,8 @@ export type UserProfile = {
   ledger: LedgerTx[];   // append-only token transactions; capped audit log (last 500)
   balances: Record<string, number>;  // running per-token balance; authoritative (ledger is a capped audit log)
   h2h?: Record<string, { w: number; l: number }>; // per-(human, persona) record, keyed by persona id
+  follows?: string[];   // RESERVED (P-later): usernames this user follows
+  followers?: string[]; // RESERVED (P-later): usernames following this user
   // --- Accounts P0 (all optional; absent = open "kindness model" name) ---
   claimed?: boolean;            // true once secured with a wordul-passphrase
   auth?: AuthRecord;            // secret material — NEVER leaves the DO (publicProfile strips it)
