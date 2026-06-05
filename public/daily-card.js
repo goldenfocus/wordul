@@ -54,9 +54,10 @@ export function goldValue(n) { return `${Number(n).toLocaleString()}${COIN}`; }
 
 // A crystallized stamp of a solved board: one tiny glass tile per cell, mirroring the
 // real board's precious-gold / champagne / obsidian treatment. grid is an array of row
-// strings ("g"=correct, "y"=present, "x"=absent). words (optional) are the actual
-// guessed words — shown ONLY when present (they come from this browser's own play, never
-// the public profile, so today's answer can't leak). Empty → nothing.
+// strings ("g"=correct, "y"=present, "x"=absent). words (optional) are the actual guessed
+// words — shown ONLY when present. Words reach here from your own local solve, or from the
+// /leaderboard board AFTER it's been unlocked by a finisher token; either way a still-playing
+// viewer never receives them, so today's answer can't leak. Empty → nothing.
 const STAMP_CLS = { g: "is-correct", y: "is-present", x: "is-absent" };
 function escLetter(c) { return String(c || "").replace(/[^a-zA-Z]/g, ""); }
 export function renderStamp(grid, words) {
@@ -77,11 +78,15 @@ export function renderStamp(grid, words) {
 // another player (the public leaderboard never ships today's words — see Privacy in the spec).
 function renderFeaturedCard(entry, { isYou, yourGrid, yourWords, rank }) {
   const won = !!entry.won;
-  // YOU: prefer your own local board (real letters); fall back to the server color grid only
-  // if this browser never captured the solve (e.g. you played on another device).
-  const grid = isYou
-    ? renderStamp((yourGrid && yourGrid.length ? yourGrid : entry.grid), yourWords)
-    : renderStamp(entry.grid, undefined);
+  // Render real letters whenever we legitimately have them, keeping grid+words parallel:
+  //   • YOU: your own local solve first (always available same-browser); else the server's
+  //     gated words for your row (covers a fresh browser that holds today's finisher token).
+  //   • OTHERS: entry.words is present ONLY when the server unlocked it for a finisher — so
+  //     letters appear once you've solved, and the public payload stays color-only.
+  const hasLocal = isYou && Array.isArray(yourWords) && yourWords.length > 0;
+  const gridRows = hasLocal && yourGrid && yourGrid.length ? yourGrid : entry.grid;
+  const wordRows = hasLocal ? yourWords : entry.words;
+  const grid = renderStamp(gridRows, wordRows);
   const dur = fmtDuration(entry.durationMs);
   if (isYou) {
     const verb = won ? `Solved in ${entry.guesses}` : "Missed today";

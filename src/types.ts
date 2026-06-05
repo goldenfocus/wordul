@@ -103,6 +103,14 @@ export type RoomSnapshot = {
   isDaily?: boolean;       // async one-shot, locked word, no resets, per-player scoring
   story?: { title: string; body: string; tip?: string } | null; // World story for the unlock
   voice?: string;          // World companion voice id (forward-compat; client still defaults)
+  // Daily "see everyone's board once you've solved" gate. finisherSecret is a per-day
+  // random key minted on the first finish and held server-side; it NEVER reaches a client
+  // raw (snapshotFor strips it like `seed`). It's handed to a player ONLY via dailyToken,
+  // computed into the snapshot for a viewer who has finished today — their proof-of-finish
+  // for the /leaderboard letter-board unlock. A non-finisher gets no token and the public
+  // leaderboard stays letterless, so today's answer can't be scraped.
+  finisherSecret?: string; // INTERNAL ONLY — stripped outbound (see snapshotFor)
+  dailyToken?: string;     // computed outbound — present only on a finished daily viewer's snapshot
   // --- Vibe Studio v1: curated day-page theming (additive; absent on legacy days) ---
   colorScheme?: { a1: string; a2: string; a3: string } | null; // palette → CSS-var re-theme
   vibeTitle?: string;      // curated title; becomes the daily board title when present

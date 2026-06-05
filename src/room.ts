@@ -215,7 +215,17 @@ export class Room extends DurableObject<Env> {
         return Response.json(fullDaily(this.state.players.map(toRankable), username));
       }
       const n = Number(url.searchParams.get("n") ?? "3");
-      const players = this.state.players.map((p) => ({ ...toRankable(p), grid: encodeSolveGrid(p.guesses) }));
+      // Proof-of-finish gate: a caller who presents today's finisher token (handed only to
+      // a player who completed the daily) unlocks the REAL letter rows for every board — at
+      // that point the answer isn't a secret to them anyway. Anyone else gets color-only
+      // grids, so the public endpoint can never leak today's word.
+      const t = url.searchParams.get("t") ?? "";
+      const unlock = !!this.state.finisherSecret && t === this.state.finisherSecret;
+      const players = this.state.players.map((p) => ({
+        ...toRankable(p),
+        grid: encodeSolveGrid(p.guesses),
+        words: unlock ? encodeSolveWords(p.guesses) : undefined,
+      }));
       return Response.json(topDaily(players, username, n));
     }
     return new Response("not found", { status: 404 });
@@ -1543,6 +1553,11 @@ export class Room extends DurableObject<Env> {
   // Daily: record ONE player's result — scoreboard bump + game record + gold (score
   // mint + flat daily goody). Best-effort; never blocks the player's board flipping.
   private async scorePlayer(player: PlayerState): Promise<void> {
+    // Mint the per-day "see everyone's board" secret on the very first finish, BEFORE the
+    // reveal broadcast below — so snapshotFor can hand this finisher their dailyToken. Once
+    // set it never changes (every later finisher gets the same key). Random + server-held;
+    // a non-finisher never receives it, so the public leaderboard can't unlock letters.
+    if (this.state.isDaily && !this.state.finisherSecret) this.state.finisherSecret = crypto.randomUUID();
     this.state.scoreboard = bumpScoreboard(this.state.scoreboard, {
       winner: player.status === "won" ? player.username : null,
       participants: [player.username],
@@ -1812,6 +1827,14 @@ export class Room extends DurableObject<Env> {
       botRematchAt: undefined,
       rematchTimeoutAt: undefined,
       abandonAt: undefined, // internal-only; not part of the client contract
+      // The per-day secret NEVER ships raw (strip it exactly like `seed`). It reaches a
+      // client only as `dailyToken`, and only on a viewer who's finished today — their key
+      // to unlock everyone's letter-boards in /leaderboard. Reuses `reveal` (which already
+      // means "this viewer is done / the game is over") so it can't precede the answer.
+      finisherSecret: undefined,
+      dailyToken: this.state.isDaily && reveal && !!me && me.status !== "playing"
+        ? this.state.finisherSecret
+        : undefined,
       players: this.state.isDaily
         ? (me ? [projectPlayerForClient({ ...me, guesses: [...me.guesses] })] : [])
         : this.state.players.map((p) => projectPlayerForClient({ ...p, guesses: [...p.guesses] })),

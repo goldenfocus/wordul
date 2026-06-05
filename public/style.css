@@ -2812,8 +2812,10 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
    makes the solved gold tiles read as struck metal on desktop AND mobile. */
 .daily-featured .daily-stamp { gap: clamp(4px, 1.2vw, 6px); filter: drop-shadow(0 6px 20px rgba(233,178,61,.12)); }
 .daily-featured .daily-stamp .stamp-row { gap: clamp(4px, 1.2vw, 6px); }
-.daily-featured .daily-stamp .stamp-cell { width: clamp(22px, 6vw, 28px); height: clamp(22px, 6vw, 28px); border-radius: 5px; }
-.daily-featured .daily-stamp.has-letters .stamp-cell { width: clamp(28px, 8vw, 36px); height: clamp(28px, 8vw, 36px); border-radius: 6px; }
+/* Same frame size whether it's your letter-board or another player's color preview, so
+   tapping between players never shrinks the hero. */
+.daily-featured .daily-stamp .stamp-cell { width: clamp(28px, 8vw, 36px); height: clamp(28px, 8vw, 36px); border-radius: 6px; }
+.daily-featured .daily-stamp.has-letters .stamp-cell { border-radius: 6px; }
 .daily-featured .daily-stamp.has-letters .stamp-ch { font-size: clamp(15px, 4.2vw, 19px); }
 .daily-featured-cap { color: var(--muted); font-size: clamp(.85rem, 2.4vw, 1rem); text-align: center; letter-spacing: .01em; }
 .daily-featured-cap.is-other { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .5rem; }

@@ -13,12 +13,14 @@ export type RankablePlayer = {
   isBot?: boolean;
   goldAwarded?: number | null;
   grid?: string[];      // letterless color rows ("g"/"y"/"x") — home card's swappable card
+  words?: string[];     // real guessed words, parallel to grid — supplied ONLY for a confirmed
+                        // finisher (token-gated upstream); never present on the public payload
   durationMs?: number;  // first guess → finish; omitted when unknown
 };
 
 export type LeaderEntry = {
   username: string; gold: number; guesses: number; won: boolean;
-  resigned?: boolean; grid?: string[]; durationMs?: number;
+  resigned?: boolean; grid?: string[]; words?: string[]; durationMs?: number;
 };
 export type LeaderboardView = {
   top: LeaderEntry[];                            // top N by gold desc, then fewer guesses
@@ -39,7 +41,7 @@ function rankedEntries(players: RankablePlayer[]): LeaderEntry[] {
     .filter((pl) => pl && !pl.isBot && typeof pl.goldAwarded === "number")
     .map((pl) => ({
       username: pl.username, gold: pl.goldAwarded as number, guesses: pl.guessCount,
-      won: pl.won, resigned: pl.resigned, grid: pl.grid, durationMs: pl.durationMs,
+      won: pl.won, resigned: pl.resigned, grid: pl.grid, words: pl.words, durationMs: pl.durationMs,
     }))
     .sort((a, b) =>
       b.gold - a.gold ||

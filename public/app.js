@@ -41,6 +41,9 @@ const LS = {
   dailySolve: "wr.dailySolve", // your own daily solve (letters + colors), per date — CLIENT-ONLY
                                // so the home stamp shows real letters without the public
                                // profile ever leaking today's answer.
+  dailyToken: "wr.dailyToken", // per-date proof-of-finish token (handed to you over the WS the
+                               // moment you finish); sent to /leaderboard to unlock EVERYONE's
+                               // letter-boards. Worthless to a non-finisher, so no answer leak.
 };
 
 const SOLVE_CELL = { hot: "g", warm: "y", cold: "x" };
@@ -272,10 +275,16 @@ function renderHomeIdentity() {
       onProfile: (name) => navigate("/@" + name),
       onWorld: (slug) => navigate("/w/" + slug),
       onBrowseWorlds: () => navigate("/worlds"),
-      fetchLeaderboard: (username) =>
-        fetch(`/api/daily/${todayUTC()}/leaderboard?username=${encodeURIComponent(username)}`)
+      fetchLeaderboard: (username) => {
+        // Attach today's proof-of-finish token (if we have one) so the board comes back with
+        // everyone's REAL letters. No token → the public letterless board (still renders fine).
+        const date = todayUTC();
+        const tok = (() => { try { return localStorage.getItem(`${LS.dailyToken}:${date}`) || ""; } catch { return ""; } })();
+        const q = tok ? `&t=${encodeURIComponent(tok)}` : "";
+        return fetch(`/api/daily/${date}/leaderboard?username=${encodeURIComponent(username)}${q}`)
           .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null),
+          .catch(() => null);
+      },
       // dailyResult is filled from the profile below: null until you've played today,
       // then { won, guesses } — flips the home card to its post-play recap.
       dailyResult: null,
@@ -1732,6 +1741,12 @@ function onServerMessage(msg) {
   if (msg.type === "snapshot") {
     const prev = game.snapshot;
     game.snapshot = msg.room;
+    // Daily finisher token: the server hands it ONLY to a viewer who's completed today.
+    // Stash it per-date so the home recap can unlock everyone's letter-boards. Never sent
+    // to a still-playing client, so it can't leak today's answer.
+    if (msg.room.dailyToken && msg.room.isDaily && game.dailyDate) {
+      try { localStorage.setItem(`${LS.dailyToken}:${game.dailyDate}`, msg.room.dailyToken); } catch { /* storage off */ }
+    }
     // Live-typing ghosts are transient: drop a player's ghost the moment they commit a guess
     // (their row advanced) or leave the race (won / out / away), so no phantom fill lingers on
     // the new empty row. Done here, before render(), so the board never flashes a stale ghost.

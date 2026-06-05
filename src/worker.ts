@@ -162,9 +162,13 @@ export default {
       const date = dailyLb[1];
       const u = normalizeUsername(url.searchParams.get("username") ?? "");
       const full = url.searchParams.get("full") === "1";
+      // A finisher's proof-of-finish token (opaque; the room validates it) unlocks letter
+      // rows. Forwarded verbatim; an absent/wrong token just yields the public letterless board.
+      const t = url.searchParams.get("t") ?? "";
+      const tq = t ? `&t=${encodeURIComponent(t)}` : "";
       const stub = env.ROOM.get(env.ROOM.idFromName(`daily/${date}`));
       return stub.fetch(new Request(
-        `https://do/leaderboard?username=${encodeURIComponent(u)}&${full ? "full=1" : "n=3"}`,
+        `https://do/leaderboard?username=${encodeURIComponent(u)}&${full ? "full=1" : "n=3"}${tq}`,
         { method: "GET" },
       ));
     }
