@@ -10,6 +10,7 @@ import {
   giveUp,
   checkBankruptcy,
   STUCK_ERROR_THRESHOLD,
+  resetPowerHints,
 } from "../public/powerups.js";
 
 // A fresh round's power-up state: nothing revealed, vowel count unknown.
@@ -199,5 +200,19 @@ describe("checkBankruptcy (Hard Mode only → forfeit 'bankrupt')", () => {
       getSettings: () => ({ hardMode: true }),
     }));
     expect(forfeit).not.toHaveBeenCalled();
+  });
+});
+
+describe("resetPowerHints", () => {
+  it("clears the per-round rejection memory along with stuck/error state", () => {
+    const game = {
+      stuck: true, errorCount: 4,
+      lastRejected: { word: "THESS", reason: "not in word list" },
+    };
+    resetPowerHints(game, 2);
+    expect(game.stuck).toBe(false);
+    expect(game.errorCount).toBe(0);
+    expect(game.lastRejected).toBe(null);
+    expect(game.ezRound).toBe(2);
   });
 });

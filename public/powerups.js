@@ -77,6 +77,7 @@ export function resetPowerHints(game, round) {
   // C4: a fresh round resets the 💀 stuck affordance (idle flag + per-round error count).
   game.stuck = false;
   game.errorCount = 0;
+  game.lastRejected = null; // the remembered dud word is per-round too
 }
 
 // Persist the accumulated hints (revealed positions + known vowel count) so learned

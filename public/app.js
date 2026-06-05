@@ -606,6 +606,7 @@ const game = {
   name: null,
   snapshot: null,
   pending: "",       // current guess being typed
+  lastRejected: null, // { word, reason } of the last server-rejected guess — resubmitting it is handled locally (no second −50)
   toastTimer: null,
   hasShownEndStats: false,
   lastGuessCounts: new Map(),
@@ -2065,8 +2066,8 @@ function onServerMessage(msg) {
     if (game.isDaily && game.pendingCashOut && dailyCashOutReady(me, game.cashedOut)) cashOutDaily(me);
     render();
   } else if (msg.type === "invalid_guess") {
-    // Letters are still in game.pending — we never cleared them. Shake the row and
-    // toast prominently, but DON'T burn a guess slot. The gold is the cost (C2).
+    // Shake the row and toast prominently, but DON'T burn a guess slot. The gold is
+    // the cost (C2). The letters auto-clear once the shake lands (below).
     flashShake();
     const reason = msg.reason || "not a word";
     toast(`${reason} — doesn't count, try again`, { error: true, duration: 2500 });
@@ -2099,6 +2100,16 @@ function onServerMessage(msg) {
     // tip Hard Mode into bankruptcy).
     bumpErrorCount(powerupsCtx);
     checkBankruptcy(powerupsCtx);
+    // Remember the dud: re-submitting the identical word is handled locally by
+    // submitGuess — instant shake + toast, no round trip, and NO second −50 drain.
+    // (The THESS incident, Jun 5: Enter mashed on one unseen typo cost −50 a press.)
+    game.lastRejected = { word: rejected, reason };
+    // …and sweep the row once the shake lands. On a phone the rejected letters can
+    // sit behind the keyboard, invisible — leaving them in is what invited the Enter
+    // mashing. Skip if the player already started editing the row.
+    setTimeout(() => {
+      if ((game.pending || "").toUpperCase() === rejected && !game.hasShownEndStats) clearRow({ silent: true });
+    }, 550);
   } else if (msg.type === "typing") {
     // An opponent's live row length (anonymous — count only). Patch just their ghost row
     // in place; a full render() per keystroke would nuke in-flight board animations.
@@ -3195,7 +3206,9 @@ function typeLetter(l) {
   resetIdle();
 }
 let lastWipeReactAt = 0;
-function clearRow() {
+// silent: skip the companion aside — used by the auto-clear after a rejected guess,
+// where the "invalid" companion already spoke.
+function clearRow({ silent = false } = {}) {
   if (!game.pending.length) return;
   const cleared = game.pending.length;
   resetIdle();
@@ -3204,7 +3217,7 @@ function clearRow() {
   // A meaningful wipe (most of a word, not one stray letter) earns a dry companion
   // aside — throttled so rapid retries don't turn it into a chatterbox. Text-only:
   // the wipe is frequent enough that voicing it would wear thin fast.
-  if (cleared >= 3 && Date.now() - lastWipeReactAt > 8000) {
+  if (!silent && cleared >= 3 && Date.now() - lastWipeReactAt > 8000) {
     lastWipeReactAt = Date.now();
     showCompanion("wipe", { cleared });
   }
@@ -3253,6 +3266,14 @@ function submitGuess() {
     flashShake();
     toast("Not enough letters", { error: true, duration: 1400 });
     bumpErrorCount(powerupsCtx); // C4: fumbling the length counts toward the 💀 give-up offer
+    return;
+  }
+  // The same dud again (Enter mashed on a just-rejected word): handle it locally —
+  // instant feedback, no server round trip, and crucially no second −50 drain.
+  if (game.lastRejected && game.pending.toUpperCase() === game.lastRejected.word) {
+    flashShake();
+    toast(`${game.lastRejected.reason} — doesn't count, try again`, { error: true, duration: 2500 });
+    bumpErrorCount(powerupsCtx); // still counts toward the 💀 offer — they're stuck
     return;
   }
   const s = getSettings();
@@ -3315,6 +3336,15 @@ function toast(text, opts = {}) {
   const bubble = document.createElement("div");
   bubble.className = "toast-bubble" + (opts.error ? " error" : "");
   bubble.textContent = text;
+  // On touch the eyes live at the BOTTOM (thumbs on the on-screen keyboard) — anchor
+  // the bubble just above the keys, not the top of the page. The THESS incident
+  // (Jun 5): five rejections went unseen because the toast sat at top:80px while the
+  // player stared at the keyboard. Desktop (and no-keyboard surfaces) keep the top slot.
+  const kb = document.getElementById("keyboard");
+  if (isTouch() && kb && kb.offsetHeight > 0) {
+    bubble.style.top = "auto";
+    bubble.style.bottom = `${Math.max(8, Math.round(window.innerHeight - kb.getBoundingClientRect().top) + 8)}px`;
+  }
   document.body.appendChild(bubble);
 
   const stay = opts.duration ?? 2200;
