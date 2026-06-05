@@ -139,6 +139,9 @@ function mount(tplId) {
 // into today's board as a seed. Held here between the home keypress and the daily
 // board becoming interactive; applied once by seedDailyOnce, then cleared.
 let pendingDailySeed = null;
+// One-shot: the edition a room should be created with (e.g. launching Solo from a World),
+// without persisting it as the player's saved default. Consumed by the hello message.
+let pendingRoomEdition = null;
 // Arena-origin handoff: set just before navigating INTO a room reached through the Arena
 // (open-games row tap or public host). showRoom consumes it into game.fromArena and mirrors
 // it to sessionStorage so a mid-game refresh still resolves the Arena end screen.
@@ -359,9 +362,10 @@ function commitUsername() {
 
 // Shared create flow for the hub CTAs. autoStart=true → solo game begins on the
 // first lobby snapshot (see onServerMessage); false → land in the lobby to invite.
-function enterNewRoom({ autoStart, publicArena = false }) {
+function enterNewRoom({ autoStart, publicArena = false, editionId = null }) {
   const username = commitUsername();
   if (!username) return;
+  pendingRoomEdition = editionId; // null for normal creates; a World's edition from showWorld
   const slug = generateRoomCode();
   history.pushState(null, "", `/@${username}/${slug}`);
   // Hosting a public Arena room IS an Arena-origin entry — flag it before showRoom consumes it.
@@ -1482,12 +1486,13 @@ function openSocket(url) {
       type: "hello",
       username: getUsername(),
       wordLength: getPreferredLength(),
-      edition: getActiveEditionId(), // seeds a fresh room with the creator's theme
+      edition: pendingRoomEdition ?? getActiveEditionId(), // World skin if launched from one, else the saved default
       mode: "race", // only valid selectable mode today
       scienceOptOut: !getSettings().communityScience,
       public: game.publicArena === true, // host opted into the public Arena open-games list
       sessionToken: getSessionToken() || undefined, // P0 auth seam; absent for unsecured names
     });
+    pendingRoomEdition = null; // consumed — never leak into the next room
     refreshGold(); // sync server-authoritative balance into HUD cache on join
     // Kick off heartbeat so the path stays warm.
     startHeartbeat();
@@ -4084,7 +4089,7 @@ function showWorld(slug) {
   play.type = "button"; play.className = "btn block"; play.textContent = "Play solo →";
   play.addEventListener("click", () => {
     if (!getUsername()) { toast("Pick a username to play", { duration: 1800 }); navigate("/"); return; } // no identity yet — register on Home first
-    enterNewRoom({ autoStart: true });
+    enterNewRoom({ autoStart: true, editionId: world.editionId });
   });
 
   const makeDefault = document.createElement("button");
