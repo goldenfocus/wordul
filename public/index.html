@@ -190,6 +190,12 @@
       <div id="roundScore" class="round-score" hidden aria-live="polite"></div>
       <div id="boards" class="boards"></div>
       <div id="messageRow" class="message-row" aria-live="polite"></div>
+      <!-- Civ-3 lobby: while you wait, watch other open games fill up and defect into a
+           hotter one. Mounted only during the lobby phase (app.js); polls /api/arena/open. -->
+      <aside id="lobbyRail" class="lobby-rail" hidden>
+        <h3 class="lobby-rail-title">Other tables filling up</h3>
+        <div id="lobbyRailList" class="lobby-rail-list"></div>
+      </aside>
       <section id="dailyUnlock" class="daily-unlock" hidden>
         <p class="daily-goody" id="dailyGoody"></p>
         <!-- §B cash-out: an honest line-by-line breakdown of the minted gold (score → +N,

@@ -1842,6 +1842,30 @@ body.reduced-motion .gold-floater { display: none !important; }
 .arena-blurb { font-size: 14px; margin: 0 0 4px; }
 .arena-mount { min-height: 56px; }
 
+/* Civ-3 lobby rail: other open tables shown inside your own room while you wait. Reuses
+   the .arena-row markup; var-driven so all 7 themes (incl. the light Tin-Bot) survive. */
+.lobby-rail {
+  margin: 18px auto 0; max-width: 460px; width: 100%;
+  border-top: 1px solid var(--border, rgba(255,255,255,0.1)); padding-top: 14px;
+}
+.lobby-rail-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--muted, #888); margin: 0 0 10px;
+}
+.lobby-rail-list { display: flex; flex-direction: column; gap: 8px; }
+/* FOMO: a bigger table one seat from full glows in the accent + a soft pulse. */
+.arena-row.is-hot {
+  border-color: var(--accent, #6cf);
+  box-shadow: 0 0 0 1px var(--accent, #6cf) inset, 0 0 14px -4px var(--accent, #6cf);
+  animation: lobby-hot-pulse 2.2s ease-in-out infinite;
+}
+.arena-row.is-hot .arena-row-seats { color: var(--accent, #6cf); opacity: 1; }
+@keyframes lobby-hot-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px var(--accent, #6cf) inset, 0 0 10px -5px var(--accent, #6cf); }
+  50%      { box-shadow: 0 0 0 1px var(--accent, #6cf) inset, 0 0 18px -2px var(--accent, #6cf); }
+}
+@media (prefers-reduced-motion: reduce) { .arena-row.is-hot { animation: none; } }
+
 /* --- Per-room scoreboard --- */
 .scoreboard {
   width: 100%; max-width: 420px;

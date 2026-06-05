@@ -1280,6 +1280,30 @@ function stopArenaPoll() {
   if (arenaPollStop) { arenaPollStop(); arenaPollStop = null; }
 }
 
+// The in-room lobby rail (Civ-3 lobby): while waiting in a room's lobby phase, poll the
+// open-games index and show OTHER tables filling up, tap-to-defect. Reuses mountArenaList
+// with excludePath set to my own room so I never see myself in the list.
+let lobbyRailStop = null;
+function teardownLobbyRail() {
+  if (lobbyRailStop) { lobbyRailStop(); lobbyRailStop = null; }
+  const el = $("#lobbyRail");
+  if (el) el.hidden = true;
+}
+function mountLobbyRailIfNeeded() {
+  const el = $("#lobbyRail");
+  const list = $("#lobbyRailList");
+  if (!el || !list) return;
+  el.hidden = false;
+  if (lobbyRailStop) return; // already polling — don't restart on every render()
+  const mine = `/@${game.owner}/${game.slug}`;
+  lobbyRailStop = mountArenaList(list, {
+    excludePath: mine,
+    // Defect: leave this room and jump into the tapped one. showRoom()→leaveRoom() closes
+    // the current socket; the 45s abandon-grace then delists the table I bailed from.
+    onJoin: (routePath) => { pendingArenaOrigin = true; navigate(routePath); },
+  });
+}
+
 // The Arena: open games anyone can jump into — bots now, public human rooms too (a host
 // opts in via "Host a public game"). Rendered into #hubContent (home stays mounted); Back
 // restores the launcher. Distinct from Head-to-head, which makes a private invite-link room.
@@ -2296,6 +2320,11 @@ function render() {
   }
 
   syncModeChip(snap);
+
+  // Lobby rail: only while genuinely waiting in a multiplayer lobby (not the daily, which
+  // auto-starts). Any other phase or the daily tears it down so its poll can't leak.
+  if (snap.phase === "lobby" && !game.isDaily) mountLobbyRailIfNeeded();
+  else teardownLobbyRail();
 
   // Chat is social — keep it out of sight while you're playing solo, and only
   // surface it (inline on desktop, 💬 button on mobile) once someone else is in
@@ -3990,6 +4019,7 @@ function toggleMute() {
 function leaveRoom() {
   if (game.rematchSettleTimer) { clearTimeout(game.rematchSettleTimer); game.rematchSettleTimer = null; }
   stopCountdownOverlay(); // tear down a duel 3-2-1 overlay if we navigate away mid-countdown
+  teardownLobbyRail(); // stop the open-games poll when leaving the room (incl. defection)
   stopHeartbeat();
   game.challengeId = null;
   game.challengeMeta = null;
