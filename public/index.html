@@ -195,7 +195,30 @@
            sacred ◆ gold wallet (which never moves from daily play; the mint is cashed out once
            at the end). Hidden in race rooms, where #goldHud takes the live ticks. -->
       <div id="roundScore" class="round-score" hidden aria-live="polite"></div>
-      <div id="boards" class="boards"></div>
+      <!-- Lobby two-zone scaffold. Hidden until app.js reveals it in the lobby phase (later task). -->
+      <div id="lobbyGrid" class="lobby-grid" hidden>
+        <div class="lobby-left">
+          <!-- #boards (the player board grid) is relocated here so the single-row lobby board
+               sits in the left zone; the tries badge + your-table sit beneath it. -->
+          <div id="boards" class="boards"></div>
+          <div class="tries-badge" id="triesBadge" hidden>
+            <button class="tb-pm tb-minus" id="tbMinus" tabindex="-1" aria-label="Fewer letters">−</button>
+            <span class="tb-x" id="tbX">×6</span><small>tries</small>
+            <span class="tb-lethint" id="tbLetters">5 letters</span>
+            <button class="tb-pm tb-plus" id="tbPlus" tabindex="-1" aria-label="More letters">+</button>
+          </div>
+          <div class="mytable" id="myTable" hidden>
+            <span class="mytable-lab">Your table</span>
+            <div class="mytable-seats" id="myTableSeats"></div>
+            <span class="mytable-cnt" id="myTableCount">1/2</span>
+          </div>
+        </div>
+        <div class="lobby-right" id="lobbyRight">
+          <!-- The compact "other tables" floor + chat will be placed here visually via CSS in a
+               later task; #lobbyRail and #chatPanel keep their own ids and current DOM positions
+               for now. This is an empty right-zone anchor. -->
+        </div>
+      </div>
       <div id="messageRow" class="message-row" aria-live="polite"></div>
       <!-- Civ-3 lobby: while you wait, watch other open games fill up and defect into a
            hotter one. Mounted only during the lobby phase (app.js); polls /api/arena/open. -->
@@ -248,6 +271,10 @@
         <button id="chatCloseBtn" class="chat-close-btn" type="button" aria-label="Close chat">✕</button>
       </button>
       <div id="chatBody" class="chat-body">
+        <div class="chat-tabs" id="chatTabs" hidden role="tablist">
+          <button class="chat-tab is-active" id="chatTabGlobal" data-chan="global" role="tab" type="button">Global</button>
+          <button class="chat-tab" id="chatTabTable" data-chan="table" role="tab" type="button">Table<span class="chat-tab-ping" id="chatTabPing" hidden></span></button>
+        </div>
         <div id="chatLog" class="chat-log" role="log" aria-live="polite"></div>
         <form id="chatForm" class="chat-form" autocomplete="off">
           <input id="chatInput" class="chat-input" maxlength="200" placeholder="Say something…" />
