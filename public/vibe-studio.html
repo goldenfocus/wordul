@@ -67,7 +67,7 @@
   /* Why-this-word: the story seed (becomes the published story + feeds AI). */
   .story-box { position: relative; }
   .story-box textarea { width: 100%; box-sizing: border-box; min-height: 132px; resize: vertical;
-    font-size: 15px; line-height: 1.5; padding: 14px 14px 38px; background: #181715;
+    font-size: 16px; line-height: 1.5; padding: 14px 14px 38px; background: #181715; /* >=16px: no iOS focus-zoom */
     border: 1px solid #2c2b28; border-radius: 10px; color: #f1e9d9; font-family: inherit; }
   .story-box textarea::placeholder { color: #6a675f; }
   .ai-sparkle { position: absolute; right: 10px; bottom: 10px; background: transparent; border: 0;
@@ -84,7 +84,7 @@
   .ai-tune.open { display: block; }
   .ai-tune-head { display: flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: .12em;
     text-transform: uppercase; color: color-mix(in srgb, var(--accent) 70%, #8a877f); margin-bottom: 6px; }
-  .ai-tune input { width: 100%; box-sizing: border-box; font-size: 13px; padding: 9px 11px;
+  .ai-tune input { width: 100%; box-sizing: border-box; font-size: 16px; padding: 9px 11px; /* >=16px: no iOS focus-zoom */
     background: #14130f; border: 1px solid #2c2b28; border-radius: 8px; color: #cfc7b6; }
   .ai-tune-actions { display: flex; align-items: center; gap: 16px; margin-top: 9px; }
   .ai-tune-actions button { background: transparent; border: 0; cursor: pointer; font-size: 13px;

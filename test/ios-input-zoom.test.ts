@@ -34,14 +34,12 @@ const TEXT_INPUT_TYPES = new Set([
   "", "text", "search", "email", "url", "tel", "password", "number",
 ]);
 
-// Frozen legacy debt as of 2026-06-04 — real iOS-zoom offenders awaiting a
-// one-line font bump to 16px. Keyed by `<page>#<elementId>`.
-const KNOWN_IOS_ZOOM_DEBT = new Set([
-  "index.html#shareUrl",            // .share-url      -> 13px (readonly share link)
-  "index.html#chatInput",           // .chat-input     -> 14px (in-room chat)
-  "vibe-studio.html#storyInput",    // .story-box textarea -> 15px
-  "vibe-studio.html#aiPromptInput", // .ai-tune input  -> 13px
-]);
+// Frozen legacy debt — real iOS-zoom offenders awaiting a one-line font bump to
+// 16px, keyed by `<page>#<elementId>`. EMPTY as of 2026-06-04: every served text
+// field is >= 16px. If you must add an entry to silence a failure, you're doing it
+// wrong — fix the CSS instead. (The original 4 offenders — .share-url, .chat-input,
+// .story-box textarea, .ai-tune input — were all bumped to 16px.)
+const KNOWN_IOS_ZOOM_DEBT = new Set<string>([]);
 
 type Rule = { sel: string; px: number; spec: [number, number, number]; order: number };
 
@@ -156,6 +154,7 @@ function textFields(doc: Document): Element[] {
 
 describe("iOS input-zoom guard (text fields must render >= 16px)", () => {
   const offenders: string[] = [];
+  let auditedCount = 0;
 
   for (const page of PAGES) {
     const path = join(PUBLIC, page);
@@ -167,6 +166,7 @@ describe("iOS input-zoom guard (text fields must render >= 16px)", () => {
       const id = el.getAttribute("id") || el.getAttribute("name") || el.outerHTML.slice(0, 40);
       const key = `${page}#${id}`;
       const px = effectiveFontPx(el, rules);
+      auditedCount++;
 
       it(`${key} renders >= ${MIN_FONT_PX}px`, () => {
         if (KNOWN_IOS_ZOOM_DEBT.has(key)) {
@@ -192,10 +192,11 @@ describe("iOS input-zoom guard (text fields must render >= 16px)", () => {
     }
   }
 
-  it("audited at least the known text fields", () => {
+  it("audited the served text fields and found no offenders", () => {
     // sanity: ensure the audit actually walked inputs (guards against a selector
-    // regression silently auditing nothing and going green).
-    expect(KNOWN_IOS_ZOOM_DEBT.size).toBeGreaterThan(0);
+    // or <template>-traversal regression silently auditing nothing and going
+    // green). We ship 7 text fields across these pages today.
+    expect(auditedCount).toBeGreaterThanOrEqual(6);
     expect(offenders).toEqual([]); // any NEW offender surfaces here too
   });
 });
