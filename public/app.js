@@ -805,8 +805,25 @@ function showRoom(owner, slug) {
   wireChat();
   wireRoomTabs();
   wireTriesBadge();
+  wireRoomIconButtons();
   buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
   connect();
+}
+
+// The header's room-only icon buttons (invite ↑ / gear ⚙). Wired once per page —
+// the topbar persists across mounts, so a dataset flag stops listeners from stacking
+// each time a room is shown. Invite reuses shareRoomInvite, gear opens room settings.
+function wireRoomIconButtons() {
+  const share = $("#roomShareBtn");
+  if (share && !share.dataset.wired) {
+    share.dataset.wired = "1";
+    share.addEventListener("click", () => shareRoomInvite());
+  }
+  const gear = $("#roomGearBtn");
+  if (gear && !gear.dataset.wired) {
+    gear.dataset.wired = "1";
+    gear.addEventListener("click", () => showSettings());
+  }
 }
 
 // A challenge link (/c/<id>): solo board on the owner's exact word, racing their
@@ -2689,7 +2706,21 @@ function render() {
   // you're guessing (all reachable via the avatar hub) and return in lobby/finished.
   setChromeVisibility(snap.phase);
 
+  // Neon Floor lobby (Task 7): in the lobby phase the screen splits into two zones —
+  // your game on the left, the floor + chat on the right. body.lobby drives the CSS
+  // (hides the .room-info title card + #roomTabs, activates the grid); the header's
+  // invite/gear icons stand in for the dropped title-card controls. We're inside a room
+  // render here, so reveal those icons now — leaveRoom() hides them again on home.
+  const isLobby = snap.phase === "lobby";
+  document.body.classList.toggle("lobby", isLobby);
+  const shareBtn = $("#roomShareBtn"); if (shareBtn) shareBtn.hidden = false;
+  const gearBtn = $("#roomGearBtn"); if (gearBtn) gearBtn.hidden = false;
+
   renderBoards(snap, me);
+  // Two-zone reparenting: move controls/floor/chat into the lobby zones while in lobby,
+  // and restore them to their exact original DOM homes on leaving — so playing/finished
+  // chrome is byte-for-byte unchanged. Idempotent (re-running with the same phase is a no-op).
+  arrangeLobbyLayout(isLobby);
   // Bloom-on-start: the lobby board is a single collapsed row; the first snapshot that
   // leaves lobby has just re-rendered the full grid above — tag #boards once so its rows
   // can animate in (keyframes land in a later task). One-shot: the class is cleared on
@@ -2709,6 +2740,11 @@ function render() {
   renderQueue(snap);
   renderGames(snap);
   applyTabVisibility(snap.phase === "playing");
+  // In the lobby the Play/Games/Players tabs collapse away (the two-zone layout owns the
+  // screen; the room name lives in the header). They return in playing/finished. The daily
+  // already gates #roomTabs on dailyLocked above — don't override that, only hide for lobby.
+  const tabsNav = $("#roomTabs");
+  if (tabsNav && !game.isDaily) tabsNav.hidden = isLobby;
   renderPowerups(powerupsCtx, snap, me);
 
   // Show the keyboard only when a guess is actually possible — keeps the lobby
@@ -2728,6 +2764,37 @@ function setChromeVisibility(phase) {
   // A hub "peek" at the scoreboard adds .hub-reveal to force it visible mid-play;
   // drop that the moment we leave the playing phase so normal gating resumes.
   if (!playing) $("#scoreboard")?.classList.remove("hub-reveal");
+}
+
+// Two-zone lobby reparenting (Task 7, Neon Floor). In the lobby phase the Start control,
+// the "other tables" floor, and chat all move into the left/right zones; on leaving lobby
+// each node is restored to its EXACT original DOM home so the playing/finished UI is
+// unchanged. The original parent + nextSibling are captured the first time we touch each
+// node (markers live on the element, survive reparenting), so restore is precise. Idempotent:
+// appendChild of an already-placed node is a no-op move, and so is restoring an in-place node.
+function arrangeLobbyLayout(isLobby) {
+  const left = $(".lobby-left");
+  const right = $("#lobbyRight");
+  const controls = $("#lobbyControls"); // the Start / mode / setup cluster
+  const rail = $("#lobbyRail");          // the "other tables" floor
+  const chat = $("#chatPanel");
+  if (!left || !right) return;
+  for (const el of [controls, rail, chat]) {
+    if (el && !el.dataset.homeParent) {
+      el._origParent = el.parentNode;
+      el._origNext = el.nextSibling;
+      el.dataset.homeParent = "1";
+    }
+  }
+  if (isLobby) {
+    if (controls) left.appendChild(controls);   // Start under the board / badge / your-table
+    if (rail) right.appendChild(rail);          // floor on the right
+    if (chat) right.appendChild(chat);          // chat on the right, under the floor
+  } else {
+    for (const el of [controls, rail, chat]) {
+      if (el && el._origParent) el._origParent.insertBefore(el, el._origNext);
+    }
+  }
 }
 
 // --- Per-round reset ---
@@ -4643,6 +4710,10 @@ function leaveRoom() {
   clearHeaderIdentity(); // drop the in-room username + gold from the topbar header
   document.body.classList.remove("playing"); // restore full chrome outside a room
   document.body.classList.remove("daily");
+  document.body.classList.remove("lobby"); // drop the two-zone lobby layout outside a room
+  // The room-only header icons (invite ↑ / gear ⚙) mirror #roomHeader — gone on home.
+  const shareBtn = $("#roomShareBtn"); if (shareBtn) shareBtn.hidden = true;
+  const gearBtn = $("#roomGearBtn"); if (gearBtn) gearBtn.hidden = true;
   game.isDaily = false; game.dailyDate = null;
   settlementShown = false; // discard stale latch so a different already-finished room can show
 }
