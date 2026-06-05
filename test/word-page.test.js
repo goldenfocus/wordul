@@ -35,6 +35,15 @@ describe("renderWordPage", () => {
     expect(html).toContain('"@type":"DefinedTerm"');
     expect(html).toContain('"@type":"FAQPage"');
   });
+  it("offers a Continue-with-AI hand-off to Google AI Mode", () => {
+    expect(html).toContain('class="wp-ai"');
+    // udm=50 = Google AI Mode; & is HTML-escaped inside the href attribute.
+    expect(html).toContain("https://www.google.com/search?udm=50&amp;q=");
+    // The prefilled prompt carries the quoted word, URL-encoded.
+    expect(html).toContain("%22OCEAN%22");
+    expect(html).toMatch(/<a class="wp-ai"[^>]*target="_blank"[^>]*rel="noopener"/);
+  });
+
   it("omits the quote block entirely when no quote", () => {
     const noQuote = renderWordPage("CANOE", { def: "A boat.", fact: "Old." }, graph, "https://wordul.com");
     expect(noQuote).not.toContain("<blockquote");

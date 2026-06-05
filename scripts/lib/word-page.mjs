@@ -130,6 +130,11 @@ export function renderWordPage(word, intel, graph, origin) {
   const relBlock = (label, words) =>
     words && words.length ? `<div class="wp-rel"><h3>${esc(label)}</h3><p>${links(words)}</p></div>` : "";
 
+  // "Continue with AI" — Google-style hand-off: opens Google AI Mode (udm=50) with a
+  // prompt about this word prefilled, for players who want to dig past the wiki.
+  const aiPrompt = `Tell me something surprising about the word "${W}" — where it comes from, how its meaning has shifted over the centuries, and a cool way it's used today.`;
+  const aiHref = `https://www.google.com/search?udm=50&q=${encodeURIComponent(aiPrompt)}`;
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -170,7 +175,7 @@ export function renderWordPage(word, intel, graph, origin) {
       ${relBlock("Same start", g.sharedStart)}
     </section>
     <section class="wp-stats" data-word="${esc(W)}"><h2>How players do</h2><p class="wp-stats-body">Be the first to solve it.</p></section>
-    <p class="wp-cta"><a class="wp-play" href="/">Play today's Wordul →</a></p>
+    <p class="wp-cta"><a class="wp-play" href="/">Play today's Wordul →</a><a class="wp-ai" href="${esc(aiHref)}" target="_blank" rel="noopener">Continue with AI ✦</a></p>
   </article>
 </main>
 <script src="/word-page.js" defer></script>
