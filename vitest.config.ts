@@ -41,6 +41,7 @@ export default defineConfig({
       { find: /^\/inspire\.js$/, replacement: new URL("./public/inspire.js", import.meta.url).pathname },
       { find: /^\/locales\/en\.js$/, replacement: new URL("./public/locales/en.js", import.meta.url).pathname },
       { find: /^\/drama\.js$/, replacement: new URL("./public/drama.js", import.meta.url).pathname },
+      { find: /^\/lobby-view\.js$/, replacement: new URL("./public/lobby-view.js", import.meta.url).pathname },
     ],
   },
 });

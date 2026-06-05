@@ -1,7 +1,8 @@
 // public/arena-panel.js — the Arena (liquidity-bot) open-games list. Mount-agnostic by
 // design: the home layout is being replaced by a 3-way launcher where "bots live in PvP",
 // so this module exposes pure helpers + a `mountArenaList(el, { onJoin })` that can be
-// dropped into whatever the PvP surface ends up being. No imports → module graph stays whole.
+// dropped into whatever the PvP surface ends up being.
+import { triesFor } from "/lobby-view.js";
 
 // Map a server OpenGame to the props a row needs. `avatar` aliases personaIcon so the row
 // renderer doesn't reach into wire-shape names.
@@ -89,6 +90,7 @@ export function mountArenaList(mountEl, { onJoin, excludePath } = {}) {
     list.className = "arena-list";
     for (const g of visible) {
       const p = arenaRowProps(g);
+      const tries = triesFor(p.wordLength);
       const row = document.createElement("button");
       row.type = "button";
       row.className = "arena-row" + (isHot(g) ? " is-hot" : "");
@@ -96,12 +98,16 @@ export function mountArenaList(mountEl, { onJoin, excludePath } = {}) {
       row.innerHTML =
         `<span class="arena-row-avatar" aria-hidden="true">${p.avatar}</span>` +
         `<span class="arena-row-body"><span class="arena-row-host">${p.host}</span>` +
-        `<span class="arena-row-meta muted">${p.wordLength} letters</span></span>` +
+        `<span class="arena-row-meta muted">${p.wordLength} letters · <span class="arena-row-tries">×${tries}</span></span></span>` +
         `<span class="arena-row-seats">${p.seats}</span>`;
       row.addEventListener("click", () => { if (onJoin) onJoin(p.routePath); });
       list.appendChild(row);
     }
     mountEl.innerHTML = "";
+    const count = document.createElement("div");
+    count.className = "arena-count muted";
+    count.textContent = `${visible.length} open`;
+    mountEl.appendChild(count);
     mountEl.appendChild(list);
   };
 
