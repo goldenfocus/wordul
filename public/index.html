@@ -84,7 +84,12 @@
       <span class="hub-stat-glyph" id="hubGold" title="Gold">◆ <span id="hubGoldVal">0</span></span>
       <span class="hub-stat-glyph" id="hubStreak" title="Streak" hidden>🔥 <span id="hubStreakVal">0</span></span>
     </div>
-    <button id="avatarBtn" class="avatar-btn" type="button" title="Menu" aria-label="Menu" aria-haspopup="true">◆</button>
+    <!-- In a room the username rides BELOW the avatar as a tiny caption (less header
+         clutter than the old inline @name next to the gold). Filled by renderHeaderIdentity. -->
+    <div class="avatar-stack">
+      <button id="avatarBtn" class="avatar-btn" type="button" title="Menu" aria-label="Menu" aria-haspopup="true">◆</button>
+      <span id="avatarName" class="avatar-name" hidden></span>
+    </div>
   </div>
 </header>
 

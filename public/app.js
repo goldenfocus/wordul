@@ -1191,19 +1191,12 @@ async function copyRoomLink() {
   }
 }
 
-// The immersive in-game header (C5) shows username + gold beside the avatar. The
-// username sits in #roomHeader; renderGoldHud appends #goldHud after it. Only shown
-// in a room (cleared on home/profile via clearHeaderIdentity).
+// The immersive in-game header (C5): gold beside the avatar, username as a tiny
+// caption UNDER the avatar (#avatarName, static in index.html) — one identity block,
+// less header clutter. Only shown in a room (cleared via clearHeaderIdentity).
 function renderHeaderIdentity() {
-  const header = $("#roomHeader");
-  if (!header) return;
-  let nameEl = $("#headerName");
-  if (!nameEl) {
-    nameEl = document.createElement("span");
-    nameEl.id = "headerName";
-    nameEl.className = "header-name";
-    header.prepend(nameEl);
-  }
+  const nameEl = $("#avatarName");
+  if (!nameEl) return;
   const u = getUsername();
   nameEl.textContent = "";
   if (u) nameEl.appendChild(userLink(u, { at: true }));
@@ -1215,6 +1208,8 @@ function renderHeaderIdentity() {
 function clearHeaderIdentity() {
   const header = $("#roomHeader");
   if (header) header.textContent = "";
+  const nameEl = $("#avatarName");
+  if (nameEl) { nameEl.textContent = ""; nameEl.hidden = true; }
 }
 
 // Rename the current room. Shared (anyone present can rename) and reachable from
@@ -2586,10 +2581,11 @@ function renderChat(snap) {
   for (let i = game.lastChatLen; i < chat.length; i++) {
     const e = chat[i];
     log.appendChild(renderChatRow(e));
-    // Only notify for meaningful entries: system join/quit lines, or a non-empty
-    // message from someone else. Blank entries and your own messages don't ping.
+    // Only notify for real messages from someone else. System lines (presence,
+    // solve announcements, notices) render in the log but never ping the badge —
+    // an unread count of "31" that's all noise trains people to ignore it.
     const hasText = (e.text || "").trim().length > 0;
-    if (e.kind === "system" ? hasText : (hasText && e.from !== getUsername())) notifyCount++;
+    if (e.kind !== "system" && hasText && e.from !== getUsername()) notifyCount++;
   }
   game.lastChatLen = chat.length;
   if (appended > 0) {
@@ -2853,9 +2849,13 @@ function renderBoards(snap, me) {
     board.dataset.player = p.username;
     const name = document.createElement("div");
     name.className = "player-name";
-    const nameSpan = userLink(p.username, { suffix: p.username === getUsername() ? " (you)" : "" });
-    if (p.username === getUsername()) nameSpan.classList.add("me");
-    name.appendChild(nameSpan);
+    // Daily is always YOUR solo board — labeling it "will (you)" is noise (identity
+    // already rides under the avatar). Races keep the label: it says whose board is whose.
+    if (!game.isDaily) {
+      const nameSpan = userLink(p.username, { suffix: p.username === getUsername() ? " (you)" : "" });
+      if (p.username === getUsername()) nameSpan.classList.add("me");
+      name.appendChild(nameSpan);
+    }
 
     if (p.status === "won") {
       const b = document.createElement("span"); b.className = "badge won"; b.textContent = "WON"; name.appendChild(b);
@@ -2876,7 +2876,7 @@ function renderBoards(snap, me) {
       b.textContent = p.ghostHost ? "👑 ghost" : "👻";
       name.appendChild(b);
     }
-    board.appendChild(name);
+    if (name.childNodes.length) board.appendChild(name); // daily + no badge ⇒ no empty row
 
     const grid = document.createElement("div");
     grid.className = "grid";
@@ -3412,32 +3412,53 @@ function spawnConfetti(pieces) {
 let audioCtx = null;
 // iOS/Safari start an AudioContext "suspended" until a user gesture resumes it. Our
 // first chime is fired by a network message (a guess result), not a tap — so without
-// this the context stays suspended and mobile hears nothing. Unlock on the first touch.
+// this the context stays suspended and mobile hears nothing. Unlock on every touch
+// (NOT {once}: iOS re-suspends the context after backgrounding, and the win reveal
+// fires off a WS message + timers with no gesture on the stack to rescue it).
+let speechPrimed = false;
 function unlockAudio() {
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === "suspended") audioCtx.resume();
   } catch { /* audio is a nice-to-have */ }
+  // iOS Safari also gates speechSynthesis behind a gesture: unless the FIRST speak()
+  // happens on a user-gesture stack, every later utterance is silently dropped — the
+  // spoken win reveal comes from a WS message, so it never qualified. Prime the engine
+  // once with a silent utterance while we ARE in a gesture; later speaks then work.
+  if (!speechPrimed && window.speechSynthesis) {
+    speechPrimed = true;
+    try {
+      const u = new SpeechSynthesisUtterance(" ");
+      u.volume = 0;
+      window.speechSynthesis.speak(u);
+    } catch { /* speech is a nice-to-have */ }
+  }
 }
-window.addEventListener("pointerdown", unlockAudio, { once: true });
-window.addEventListener("touchend", unlockAudio, { once: true });
+window.addEventListener("pointerdown", unlockAudio);
+window.addEventListener("touchend", unlockAudio);
 function playChime(notes) {
   if (localStorage.getItem("wordul.muted") === "1") return;
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === "suspended") audioCtx.resume();
-    const t0 = audioCtx.currentTime;
-    notes.forEach(([freq, at], i) => {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = "triangle";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, t0 + at);
-      gain.gain.exponentialRampToValueAtTime(0.18, t0 + at + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.22);
-      osc.connect(gain).connect(audioCtx.destination);
-      osc.start(t0 + at); osc.stop(t0 + at + 0.24);
-    });
+    // Don't schedule against a suspended clock: currentTime is frozen while suspended,
+    // so notes scheduled "now" land in the past once resume() lands and never sound.
+    // Wait for the resume, then read t0 fresh.
+    const schedule = () => {
+      const t0 = audioCtx.currentTime;
+      notes.forEach(([freq, at], i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "triangle";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, t0 + at);
+        gain.gain.exponentialRampToValueAtTime(0.18, t0 + at + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.22);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(t0 + at); osc.stop(t0 + at + 0.24);
+      });
+    };
+    if (audioCtx.state === "suspended") audioCtx.resume().then(schedule).catch(() => {});
+    else schedule();
   } catch { /* ignore — audio is a nice-to-have */ }
 }
 
