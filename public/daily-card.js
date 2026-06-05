@@ -70,13 +70,18 @@ export function renderStamp(grid, words) {
   return `<div class="daily-stamp${hasLetters ? " has-letters" : ""}">${rows}</div>`;
 }
 
-// The featured card at the top of the post-play recap. For YOU, render your stamp WITH
-// letters (from this browser's own solve) + a "Solved in N · 2m 14s" caption. For anyone
-// else, render their color grid with NO letters + an "@name · #rank · gold · in N · time"
-// stat line. Letters are never passed for another player.
-function renderFeaturedCard(entry, { isYou, yourWords, rank }) {
+// The featured card at the top of the post-play recap. For YOU, render your OWN board WITH
+// letters (yourGrid + yourWords, from this browser's own solve) — the "precious" hero — +
+// a "Solved in N · 2m 14s" caption. For anyone else, render their server color grid with NO
+// letters + an "@name · #rank · gold · in N · time" stat line. Letters are never shown for
+// another player (the public leaderboard never ships today's words — see Privacy in the spec).
+function renderFeaturedCard(entry, { isYou, yourGrid, yourWords, rank }) {
   const won = !!entry.won;
-  const grid = renderStamp(entry.grid, isYou ? yourWords : undefined);
+  // YOU: prefer your own local board (real letters); fall back to the server color grid only
+  // if this browser never captured the solve (e.g. you played on another device).
+  const grid = isYou
+    ? renderStamp((yourGrid && yourGrid.length ? yourGrid : entry.grid), yourWords)
+    : renderStamp(entry.grid, undefined);
   const dur = fmtDuration(entry.durationMs);
   if (isYou) {
     const verb = won ? `Solved in ${entry.guesses}` : "Missed today";
@@ -244,11 +249,12 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
           const featured = document.getElementById("dailyFeatured");
           const rows = Array.from(board.querySelectorAll(".daily-top-row"));
           const myWords = (result && result.solveWords) || undefined;
+          const myGrid = (result && result.solveGrid) || undefined;
           const setFeatured = (name) => {
             const hit = entries.get(name);
             if (!hit || !featured) return;
             const isYou = name === escAttr(username);
-            featured.innerHTML = renderFeaturedCard(hit.entry, { isYou, yourWords: myWords, rank: hit.rank });
+            featured.innerHTML = renderFeaturedCard(hit.entry, { isYou, yourGrid: myGrid, yourWords: myWords, rank: hit.rank });
             rows.forEach((r) => r.classList.toggle("is-selected", r.getAttribute("data-user") === name));
             // A featured "other" card's @name still navigates to their profile.
             if (!isYou && onProfile) {

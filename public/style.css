@@ -2804,10 +2804,18 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .lab-entry { display: inline-block; margin-top: 8px; color: var(--accent); font-weight: 600; }
 
 /* Featured card region — swappable hero for the post-play recap. */
-.daily-featured { display: flex; flex-direction: column; align-items: center; gap: .35rem; padding: .35rem 0 .25rem; }
+.daily-featured { display: flex; flex-direction: column; align-items: center; gap: .5rem; padding: clamp(.5rem, 2vw, 1rem) 0 .4rem; }
 .daily-stamp-hero { display: flex; justify-content: center; }
 .daily-stamp-hero.is-lost { opacity: .92; }
-.daily-featured-cap { color: var(--muted); font-size: .9em; text-align: center; }
+/* The "precious" hero board — generous, luxe, and responsive. Scoped to the featured card
+   so the shared .daily-stamp (profile letter-cards) keeps its compact size. A soft gold lift
+   makes the solved gold tiles read as struck metal on desktop AND mobile. */
+.daily-featured .daily-stamp { gap: clamp(4px, 1.2vw, 6px); filter: drop-shadow(0 6px 20px rgba(233,178,61,.12)); }
+.daily-featured .daily-stamp .stamp-row { gap: clamp(4px, 1.2vw, 6px); }
+.daily-featured .daily-stamp .stamp-cell { width: clamp(22px, 6vw, 28px); height: clamp(22px, 6vw, 28px); border-radius: 5px; }
+.daily-featured .daily-stamp.has-letters .stamp-cell { width: clamp(28px, 8vw, 36px); height: clamp(28px, 8vw, 36px); border-radius: 6px; }
+.daily-featured .daily-stamp.has-letters .stamp-ch { font-size: clamp(15px, 4.2vw, 19px); }
+.daily-featured-cap { color: var(--muted); font-size: clamp(.85rem, 2.4vw, 1rem); text-align: center; letter-spacing: .01em; }
 .daily-featured-cap.is-other { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .5rem; }
 .daily-featured-name { color: var(--fg); text-decoration: none; font-weight: 600; }
 .daily-featured-name:hover { text-decoration: underline; }
@@ -2944,8 +2952,14 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 /* Worlds strip (home) + theater (/worlds) — each .world-card self-paints its edition. */
 .hub-worlds { margin-top: 1.5rem; }
 .hub-worlds-head { margin-bottom: 0.5rem; }
-.worlds-strip { display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; scroll-snap-type: x mandatory; }
-.worlds-strip .world-card { scroll-snap-align: start; flex: 0 0 auto; }
+/* Desktop: a tidy wrapping grid — every World visible, NO horizontal scrollbar. */
+.worlds-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.75rem; }
+/* Mobile: a swipeable carousel (the strip earns its scroll only when space is tight). */
+@media (max-width: 520px) {
+  .worlds-strip { display: flex; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 0.5rem;
+    scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+  .worlds-strip .world-card { scroll-snap-align: start; flex: 0 0 72%; }
+}
 
 .world-card {
   display: flex; flex-direction: column; gap: 0.25rem; justify-content: flex-end;
