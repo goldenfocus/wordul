@@ -2840,6 +2840,36 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .world-head { margin-bottom: 2rem; }
 .world-title { font-family: var(--font-display); font-size: 2.5rem; line-height: 1.05; margin: 0.25rem 0 0.5rem; }
 .world-blurb { font-size: 1.05rem; margin: 0; }
+
+/* Worlds strip (home) + theater (/worlds) — each .world-card self-paints its edition. */
+.hub-worlds { margin-top: 1.5rem; }
+.hub-worlds-head { margin-bottom: 0.5rem; }
+.worlds-strip { display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; scroll-snap-type: x mandatory; }
+.worlds-strip .world-card { scroll-snap-align: start; flex: 0 0 auto; }
+
+.world-card {
+  display: flex; flex-direction: column; gap: 0.25rem; justify-content: flex-end;
+  min-width: 9rem; min-height: 6rem; padding: 0.85rem 1rem; border-radius: 0.9rem;
+  text-decoration: none; cursor: pointer;
+  background: var(--bg-card); color: var(--fg);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent),
+              0 6px 20px -12px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.world-card-name { font-family: var(--font-display); font-size: 1.25rem; line-height: 1.05; color: var(--accent); }
+.world-card-blurb { font-size: 0.8rem; opacity: 0.8; }
+.world-card-more { align-items: center; justify-content: center; font-weight: 600; color: var(--accent); }
+
+.worlds-screen { max-width: 48rem; margin: 0 auto; padding: 2rem 1.25rem; }
+.worlds-back { display: inline-block; margin-bottom: 1.25rem; }
+.worlds-head { margin-bottom: 1.25rem; }
+.worlds-title { font-family: var(--font-display); font-size: 2.25rem; margin: 0.25rem 0 0; }
+.worlds-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
+.worlds-tab { background: transparent; border: 1px solid var(--border); border-radius: 999px;
+  padding: 0.35rem 0.9rem; font: inherit; color: var(--muted); cursor: pointer; }
+.worlds-tab.is-active { color: var(--fg); border-color: var(--accent); }
+.worlds-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 0.85rem; }
+.worlds-empty { grid-column: 1 / -1; }
 .world-actions { display: flex; flex-direction: column; gap: 0.75rem; }
 /* --- Accounts P0: secure-account sheet + claimed badge --- */
 .acct-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 1000; padding: 1rem; }
