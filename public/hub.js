@@ -118,6 +118,7 @@ function wireDaily() {
     strip.textContent = "";
     for (const w of featuredWorlds()) {
       const card = renderWorldCard(w);
+      if (!card) continue;
       card.addEventListener("click", (e) => {
         if (hubCallbacks.onWorld) { e.preventDefault(); hubCallbacks.onWorld(w.slug); }
       });

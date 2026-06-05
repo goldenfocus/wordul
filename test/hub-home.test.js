@@ -23,6 +23,8 @@ function makeCallbacks(over = {}) {
     onArena: vi.fn(),
     onStats: vi.fn(),
     onShareDaily: vi.fn(),
+    onWorld: vi.fn(),
+    onBrowseWorlds: vi.fn(),
     fetchPlayed: () => Promise.resolve(null),
     renderRecentRooms: () => {},
     ...over,
@@ -174,7 +176,8 @@ describe("hub home (redesign)", () => {
     expect(yanRow.classList.contains("is-selected")).toBe(false);
   });
   it("renders a Worlds strip with a card per featured World + a Browse-all card", () => {
-    renderHub({ gold: 0, stats: { currentStreak: 0 } }, makeCallbacks());
+    const cb = makeCallbacks();
+    renderHub({ gold: 0, stats: { currentStreak: 0 } }, cb);
     const strip = document.getElementById("worldsStrip");
     expect(strip).toBeTruthy();
     // `.world-card:not(.world-card-more)` counts only the per-World themed cards,
@@ -182,6 +185,15 @@ describe("hub home (redesign)", () => {
     const cards = strip.querySelectorAll(".world-card:not(.world-card-more)");
     expect(cards.length).toBe(featuredWorlds().length);
     expect(document.getElementById("worldsBrowseAll")).toBeTruthy();
+
+    // Clicking the first themed World card routes through onWorld with its slug.
+    cards[0].click();
+    expect(cb.onWorld).toHaveBeenCalledTimes(1);
+    expect(cb.onWorld).toHaveBeenCalledWith(featuredWorlds()[0].slug);
+
+    // Clicking "Browse all →" routes through onBrowseWorlds.
+    document.getElementById("worldsBrowseAll").click();
+    expect(cb.onBrowseWorlds).toHaveBeenCalledTimes(1);
   });
 });
 
