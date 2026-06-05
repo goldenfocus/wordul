@@ -8,7 +8,7 @@ import { projectPlayerForClient } from "./bots.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { everyoneReady, COUNTDOWN_MS } from "./duel.ts";
 import { nextSeatRole, applyKothRotation } from "./rotation.ts";
-import { buildGameRecords, summarizeRoomGame, encodeSolveGrid } from "./records.ts";
+import { buildGameRecords, summarizeRoomGame, encodeSolveGrid, encodeSolveWords } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
 import { pointsEarned, goldFromPoints, speedBonusPoints, POINTS } from "./economy.ts";
 import { topDaily, fullDaily } from "./leaderboard-core.ts";
@@ -1368,6 +1368,16 @@ export class Room extends DurableObject<Env> {
         guesses: p.guesses.length,
       })),
     });
+    // Stamp each player's record with their own board (colors + letters) so room games show
+    // a full letter-card on profiles too. Room words aren't the shared daily answer, so they
+    // ship freely; the live daily is the only thing publicProfile withholds.
+    for (const p of this.finishParticipants()) {
+      const rec = records[p.username];
+      if (rec) {
+        rec.solveGrid = encodeSolveGrid(p.guesses);
+        rec.words = encodeSolveWords(p.guesses);
+      }
+    }
     // Report to every player's User DO in parallel — caps the wait at one round-trip
     // instead of N. Best-effort AND off the critical path: scheduled via waitUntil so a
     // cold/slow USER DO can't gate the finish. onGuess broadcasts the win snapshot the
@@ -1530,9 +1540,13 @@ export class Room extends DurableObject<Env> {
       players: [{ username: player.username, status: player.status, guesses: player.guesses.length }],
     });
     const record = records[player.username];
-    // Stamp the daily record with the player's color grid (the home's crystallized
-    // solve stamp reads this back; letters stay server-side).
-    if (record) record.solveGrid = encodeSolveGrid(player.guesses);
+    // Stamp the daily record with the player's color grid AND letters. The home stamp reads
+    // the colors; profiles render the full letter-card from words — but publicProfile strips
+    // words for the LIVE daily, so today's answer never leaves the server.
+    if (record) {
+      record.solveGrid = encodeSolveGrid(player.guesses);
+      record.words = encodeSolveWords(player.guesses);
+    }
     // Resigners forfeited to 0 (points were zeroed in onResign); everyone else gets the
     // score mint + flat daily goody + a wall-clock time bonus (faster solve → more gold).
     // elapsedMs spans the player's first accepted guess (firstGuessAt) → finish (finishedAt,

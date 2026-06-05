@@ -143,22 +143,35 @@ describe("publicProfile (secret stripper — load-bearing security guarantee)", 
     expect(pub.createdAt).toBe(1000);
   });
 
-  it("strips the answer `word` from every game (no daily/room spoiler leak) but keeps the letterless grid", () => {
+  it("withholds the LIVE daily's letters but reveals every PAST game's full letter-card", () => {
     const p = baseProfile({
       games: [
-        { roomPath: "daily/2026-06-04", finishedAt: 7, wordLength: 5, word: "CRANK", result: "won", guesses: 3, opponents: [], solveGrid: ["yxxxx", "gyxyx", "ggggg"] },
-        { roomPath: "crane/snappy-moose", finishedAt: 8, wordLength: 5, word: "BRAVE", result: "lost", guesses: 6, opponents: [{ username: "yan", result: "won", guesses: 4 }] },
+        // TODAY's daily (live) — letters must NOT leave the server.
+        { roomPath: "daily/2026-06-05", finishedAt: 9, wordLength: 5, word: "CRANK", result: "won", guesses: 3, opponents: [], solveGrid: ["yxxxx", "gyxyx", "ggggg"], words: ["AUDIO", "STERN", "CRANK"] },
+        // A PAST daily — answer is historical, so the letters are fair game.
+        { roomPath: "daily/2026-06-01", finishedAt: 7, wordLength: 5, word: "BRAVE", result: "won", guesses: 2, opponents: [], solveGrid: ["xxxxx", "ggggg"], words: ["AROSE", "BRAVE"] },
+        // A room game — not the shared daily answer, ships freely.
+        { roomPath: "crane/snappy-moose", finishedAt: 8, wordLength: 5, word: "NIECE", result: "lost", guesses: 6, opponents: [{ username: "yan", result: "won", guesses: 4 }], solveGrid: ["xyxxx"], words: ["AUDIO"] },
       ],
     });
-    const pub = publicProfile(p);
-    expect(JSON.stringify(pub)).not.toContain("CRANK");
-    expect(JSON.stringify(pub)).not.toContain("BRAVE");
+    const pub = publicProfile(p, "daily/2026-06-05");
+    const json = JSON.stringify(pub);
+    // Live answer never leaves — neither the top-level word nor the words array.
+    expect(json).not.toContain("CRANK");
+    expect(pub.games[0].words).toBeUndefined();
+    expect(pub.games[0].solveGrid).toEqual(["yxxxx", "gyxyx", "ggggg"]); // colors stay (home recap)
+    // Past + room games carry their letters so a full card can render.
+    expect(pub.games[1].words).toEqual(["AROSE", "BRAVE"]);
+    expect(pub.games[2].words).toEqual(["AUDIO"]);
+    // The redundant top-level word is always dropped, on every record.
     for (const g of pub.games) expect((g as Record<string, unknown>).word).toBeUndefined();
-    // Everything non-leaking survives — colors carry the board without revealing letters.
-    expect(pub.games[0].solveGrid).toEqual(["yxxxx", "gyxyx", "ggggg"]);
-    expect(pub.games[0].result).toBe("won");
-    expect(pub.games[0].guesses).toBe(3);
-    expect(pub.games[0].roomPath).toBe("daily/2026-06-04");
-    expect(pub.games[1].opponents[0].username).toBe("yan");
+    expect(pub.games[2].opponents[0].username).toBe("yan");
+  });
+
+  it("reveals all letters when nothing is live (empty liveDailyPath)", () => {
+    const p = baseProfile({
+      games: [{ roomPath: "daily/2026-06-05", finishedAt: 9, wordLength: 5, word: "CRANK", result: "won", guesses: 1, opponents: [], words: ["CRANK"] }],
+    });
+    expect(publicProfile(p, "").games[0].words).toEqual(["CRANK"]);
   });
 });

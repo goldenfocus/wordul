@@ -5,6 +5,7 @@ import { applyGame, appendCapped } from "./stats.ts";
 import { healProfile, freshProfile, applyH2H } from "./user-core.ts";
 import { publicProfile, makePassphrase, canClaim, addSession, revokeSession, touchSession, projectDirectory, validatePassphraseShape } from "./account-core.ts";
 import { hashPassphrase, verifyPassphrase, mintToken, hashToken, secureIndex } from "./account-crypto.ts";
+import { activeDate } from "./daily-core.ts";
 import type { GameRecord } from "./records.ts";
 
 const HISTORY_CAP = 100;
@@ -38,8 +39,10 @@ export class User extends DurableObject<Env> {
     if (req.method === "GET" && !url.pathname.endsWith("/account/me")) {
       const profile = await this.load(username);
       // SECURITY: never spread the raw profile — publicProfile() drops auth + pendingClaim
-      // (salt/phraseHash/session hashes) and surfaces only the claimed/verified flags.
-      return Response.json({ ...publicProfile(profile), gold: profile.balances.gold ?? 0 });
+      // (salt/phraseHash/session hashes) and surfaces only the claimed/verified flags. It
+      // also strips the LIVE daily's letters so today's answer can't be scraped from here.
+      const liveDailyPath = `daily/${activeDate(Date.now())}`;
+      return Response.json({ ...publicProfile(profile, liveDailyPath), gold: profile.balances.gold ?? 0 });
     }
 
     // NOTE: must exclude "/ledger/append" — it also endsWith("/append"), so without this

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildGameRecords, encodeSolveGrid } from "../src/records.ts";
+import { buildGameRecords, encodeSolveGrid, encodeSolveWords, toPublicGame } from "../src/records.ts";
 
 describe("encodeSolveGrid", () => {
   it("encodes each guess mask as a g/y/x row string", () => {
@@ -12,6 +12,35 @@ describe("encodeSolveGrid", () => {
 
   it("returns an empty array for no rows", () => {
     expect(encodeSolveGrid([])).toEqual([]);
+  });
+});
+
+describe("encodeSolveWords", () => {
+  it("uppercases each guessed word, parallel to the grid rows", () => {
+    expect(encodeSolveWords([{ word: "arose" }, { word: "Brave" }])).toEqual(["AROSE", "BRAVE"]);
+  });
+  it("tolerates missing words and no rows", () => {
+    expect(encodeSolveWords([{}])).toEqual([""]);
+    expect(encodeSolveWords([])).toEqual([]);
+  });
+});
+
+describe("toPublicGame (live-daily letter guard)", () => {
+  const rec = {
+    roomPath: "daily/2026-06-05", finishedAt: 1, wordLength: 5, word: "CRANK",
+    result: "won" as const, guesses: 2, opponents: [], solveGrid: ["yxxxx", "ggggg"], words: ["AUDIO", "CRANK"],
+  };
+  it("drops the top-level word always, keeps colors + letters for a NON-live game", () => {
+    const pub = toPublicGame(rec, "daily/2026-06-04");
+    expect((pub as Record<string, unknown>).word).toBeUndefined();
+    expect(pub.solveGrid).toEqual(["yxxxx", "ggggg"]);
+    expect(pub.words).toEqual(["AUDIO", "CRANK"]);
+  });
+  it("strips the letters (word + words) for the LIVE daily, keeps colors", () => {
+    const pub = toPublicGame(rec, "daily/2026-06-05");
+    expect(JSON.stringify(pub)).not.toContain("CRANK");
+    expect(pub.words).toBeUndefined();
+    expect(pub.solveGrid).toEqual(["yxxxx", "ggggg"]);
   });
 });
 

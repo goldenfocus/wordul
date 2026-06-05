@@ -80,22 +80,20 @@ export async function renderProfile(username, mountEl) {
 }
 
 // One "Recent games" row, built from a recentGameView() view-model.
-//   • daily + grid  → tap to reveal that player's letterless board inline
-//   • daily + locked → tap to reveal a "play today first" prompt (no colors leaked)
-//   • daily, no grid (legacy back-compat) → static line, nothing to expand
-//   • room → a link into the room (no stored board to show)
+//   • locked (today's daily, not yet played) → tap reveals a "play today first" prompt
+//   • has grid → tap reveals that player's board — with LETTERS when words shipped, else
+//     letterless (today's daily ships no letters by design; past games + rooms do)
+//   • legacy room with no stored board → a link into the room
+//   • legacy daily with no board → static line, nothing to expand
 function renderRecentGame(v) {
   const head = `${v.icon} ${escapeHtml(v.label)} · ${escapeHtml(v.result)}`;
-  if (v.kind === "room") {
-    const href = v.roomHref ? `href="${escapeHtml(v.roomHref)}"` : "";
-    return `<li class="profile-game"><a class="link profile-game-link" ${href}>${head}</a></li>`;
-  }
-  // daily
   let body = "";
   if (v.locked) {
     body = `<a class="link" href="/">Play today's Wordul</a> to compare boards`;
   } else if (Array.isArray(v.grid) && v.grid.length) {
-    body = renderStamp(v.grid); // letterless — no words passed
+    body = renderStamp(v.grid, Array.isArray(v.words) ? v.words : undefined);
+  } else if (v.roomHref) {
+    return `<li class="profile-game"><a class="link profile-game-link" href="${escapeHtml(v.roomHref)}">${head}</a></li>`;
   } else {
     return `<li class="profile-game"><span class="profile-game-static">${head}</span></li>`;
   }

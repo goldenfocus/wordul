@@ -12,27 +12,39 @@ export type GameRecord = {
   result: GameOutcome;
   guesses: number;
   opponents: Opponent[];
-  solveGrid?: string[];   // daily: the player's color pattern, one row string per guess
-                          // ("g"=correct, "y"=present, "x"=absent) — powers the home stamp
+  solveGrid?: string[];   // the player's color pattern, one row string per guess
+                          // ("g"=correct, "y"=present, "x"=absent) — powers the solve stamp
+  words?: string[];       // the player's guessed words (uppercase), parallel to solveGrid —
+                          // the LETTERS for a full card. STRIPPED for the live daily in
+                          // toPublicGame() so today's answer can never be scraped.
 };
 
-// The public projection of a finished game: identical to GameRecord EXCEPT the answer
-// `word` is removed. /api/user must never ship a solution — that would spoil today's daily
-// (or any room word a viewer hasn't solved yet). solveGrid (letterless colors) is kept on
-// purpose: it draws the board without revealing a single letter. See account-core's
-// publicProfile() and public/profile.js.
+// The public projection of a finished game. Two things change vs the stored record:
+//   • the redundant top-level `word` is always dropped (the answer also lives in the
+//     winning row of `words`, and the client never reads `word`);
+//   • for the CURRENT daily, `words` is dropped too — today's letters must never leave the
+//     server, or anyone could fetch the answer without playing. Every PAST game keeps its
+//     `words` so a full letter-card can render. `solveGrid` (colors) is always kept.
+// Pass liveDailyPath = "daily/<activeDate>"; "" means "nothing is live" (reveal all letters).
 export type PublicGameRecord = Omit<GameRecord, "word">;
-export function toPublicGame(g: GameRecord): PublicGameRecord {
-  const { word, ...rest } = g;
+export function toPublicGame(g: GameRecord, liveDailyPath = ""): PublicGameRecord {
+  const { word, words, ...rest } = g;
   void word;
-  return rest;
+  if (liveDailyPath && g.roomPath === liveDailyPath) return rest; // live daily: no letters
+  return { ...rest, words };
 }
 
-// Pure: encode a player's guess masks into compact row strings for the home's solve
-// stamp. green→"g", yellow→"y", gray→"x". (The letters never leave the server.)
+// Pure: encode a player's guess masks into compact row strings for the solve stamp.
+// green→"g", yellow→"y", gray→"x".
 const CELL: Record<Color, string> = { green: "g", yellow: "y", gray: "x" };
 export function encodeSolveGrid(rows: { mask: Color[] }[]): string[] {
   return (rows ?? []).map((r) => (r?.mask ?? []).map((c) => CELL[c] ?? "x").join(""));
+}
+
+// Pure: the player's actual guessed words, uppercased, parallel to encodeSolveGrid's rows.
+// Stored server-side so a finished game's full letter-card can render on profiles.
+export function encodeSolveWords(rows: { word?: string }[]): string[] {
+  return (rows ?? []).map((r) => String(r?.word ?? "").toUpperCase());
 }
 
 type FinishedPlayer = { username: string; status: "won" | "lost" | "playing"; guesses: number };

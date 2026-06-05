@@ -110,9 +110,10 @@ export function projectDirectory(profile: UserProfile): DirectoryProjection {
 
 /** Strip ALL secret material and surface the public auth flags. The DO's GET handler MUST
  *  pass profiles through this before serializing — otherwise the salt/hash/session map leak. */
-export function publicProfile(profile: UserProfile): PublicProfile {
+export function publicProfile(profile: UserProfile, liveDailyPath = ""): PublicProfile {
   const { auth, pendingClaim, games, ...rest } = profile;
   void auth; void pendingClaim;
-  // Strip the answer word from every game record so /api/user can never leak a solution.
-  return { ...rest, games: games.map(toPublicGame), claimed: !!profile.claimed, verified: false };
+  // Project each game: drops the redundant top-level word, and strips the LIVE daily's
+  // letters so /api/user can never hand out today's answer. Past games keep their letters.
+  return { ...rest, games: games.map((g) => toPublicGame(g, liveDailyPath)), claimed: !!profile.claimed, verified: false };
 }
