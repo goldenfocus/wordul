@@ -96,8 +96,13 @@ export function buildKeyboard(root, layoutId, handlers) {
     // tap registers nothing. We handle touch ourselves and swallow the synthesized
     // click so it can't double-fire; mouse + synthetic .click() still use the click
     // path below (keeps desktop + tests working).
+    // One tap = one letter (the double-letter bug, Jun 5): only the pointer that
+    // PRESSED a key may commit on its lift — a palm graze, a resting thumb, or a
+    // finger that went down on the board and lifted over the keys types nothing.
     let activeKey = null;
+    let activePointer = null; // pointerId that owns the current press
     let suppressClick = false;
+    let suppressTimer = null;
     // Long-press ⌫ to wipe the whole row (the mobile twin of desktop's Esc). The
     // timer arms on press of the back key and disarms the moment you slide off it.
     let longPressTimer = null;
@@ -127,21 +132,38 @@ export function buildKeyboard(root, layoutId, handlers) {
       const k = e.target.closest && e.target.closest("button.key");
       if (!k) return;
       e.preventDefault();
+      // A second finger landing while a key is held commits the held key NOW (how the
+      // iOS keyboard handles two-thumb typing) — and hands the press to the new finger,
+      // so the first finger's later lift-off can't fire anything.
+      if (activeKey && activePointer !== null && e.pointerId !== activePointer) {
+        clearHold();
+        const held = activeKey;
+        held.classList.remove("pressed");
+        activeKey = null;
+        fire(held);
+      }
       didLongPress = false;
+      activePointer = e.pointerId;
       press(k);
     });
     root.addEventListener("pointermove", (e) => {
+      if (e.pointerId !== activePointer) return; // an extra/resting finger can't steal the press
       if (!activeKey && !longPressTimer) return;
       const k = keyAt(e.clientX, e.clientY);
       press(k); // null when slid into a gap → release there cancels
     });
     function endTouch(e) {
       if (e.pointerType === "mouse") return;
+      if (e.pointerId !== activePointer) return; // this pointer never pressed a key — nothing to commit
+      activePointer = null;
       clearHold();
       const target = activeKey;
       if (activeKey) { activeKey.classList.remove("pressed"); activeKey = null; }
       suppressClick = true;
-      setTimeout(() => { suppressClick = false; }, 400);
+      // Rapid taps: cancel the previous tap's backstop or it'd unsuppress THIS tap's
+      // still-pending synthesized click mid-window — the timer race behind doubles.
+      if (suppressTimer) clearTimeout(suppressTimer);
+      suppressTimer = setTimeout(() => { suppressClick = false; suppressTimer = null; }, 400);
       // A long-press already cleared the row on its own — don't also fire a backspace.
       if (didLongPress) { didLongPress = false; return; }
       // Commit the key under the lift-off point (slide-to-correct); none → cancel.
@@ -152,7 +174,13 @@ export function buildKeyboard(root, layoutId, handlers) {
     root.addEventListener("pointercancel", endTouch);
 
     root.addEventListener("click", (e) => {
-      if (suppressClick) return; // touch already handled this
+      // A tap's synthesized click must never re-type the letter. Three layers, because
+      // main-thread jank (tile flips, payout tweens) can deliver the click later than
+      // any fixed timer: a one-shot flag eats the expected click, the timed backstop
+      // clears a flag no click ever claimed, and pointerType — on browsers that ship
+      // click as a PointerEvent — catches a click that outlived both.
+      if (suppressClick) { suppressClick = false; return; }
+      if (e.pointerType === "touch" || e.pointerType === "pen") return;
       fire(e.target.closest("button.key"));
     });
   }

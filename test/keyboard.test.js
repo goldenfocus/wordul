@@ -137,3 +137,93 @@ describe("renderLayoutPicker", () => {
     expect(qwertyChip.classList.contains("is-active")).toBe(true);
   });
 });
+
+// One tap = one letter. The touch path commits on pointerup and must defuse the
+// browser's synthesized click — which main-thread jank (tile flips, payout tweens)
+// can deliver later than any fixed timer. And only the pointer that actually pressed
+// a key may commit: palm grazes and board-origin lift-offs type nothing.
+// (The double-letter bug, Jun 5 2026.)
+describe("buildKeyboard touch path — one tap, one letter", () => {
+  const ptr = (type, target, { id = 1, x = 0, y = 0, ptype = "touch" } = {}) => {
+    const e = new Event(type, { bubbles: true, cancelable: true });
+    e.pointerId = id;
+    e.pointerType = ptype;
+    e.clientX = x;
+    e.clientY = y;
+    target.dispatchEvent(e);
+    return e;
+  };
+  const setup = () => {
+    const root = document.createElement("div");
+    const h = noopHandlers();
+    document.body.appendChild(root);
+    buildKeyboard(root, "qwerty", h);
+    // jsdom has no layout: slide-to-correct's elementFromPoint resolves to nothing,
+    // so commits fall back to the pressed key (the `|| target` branch).
+    document.elementFromPoint = vi.fn(() => null);
+    return { root, h, key: (l) => root.querySelector(`.key[data-key="${l}"]`) };
+  };
+
+  it("a touch tap commits exactly once, on release", () => {
+    const { root, h, key } = setup();
+    ptr("pointerdown", key("Q"));
+    ptr("pointerup", key("Q"));
+    expect(h.onLetter).toHaveBeenCalledTimes(1);
+    expect(h.onLetter).toHaveBeenCalledWith("Q");
+    root.remove();
+  });
+
+  it("the tap's synthesized click can't double-fire even when jank delays it past the timed backstop", () => {
+    vi.useFakeTimers();
+    const { root, h, key } = setup();
+    ptr("pointerdown", key("Q"));
+    ptr("pointerup", key("Q"));
+    vi.advanceTimersByTime(500); // jank: click arrives after the 400ms backstop expired
+    ptr("click", key("Q")); // modern browsers: click carries pointerType "touch"
+    expect(h.onLetter).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+    root.remove();
+  });
+
+  it("rapid taps: an earlier tap's backstop can't unsuppress the next tap's late click", () => {
+    vi.useFakeTimers();
+    const { root, h, key } = setup();
+    ptr("pointerdown", key("S")); ptr("pointerup", key("S")); // tap 1 — its click never arrives
+    vi.advanceTimersByTime(350);
+    ptr("pointerdown", key("S")); ptr("pointerup", key("S")); // tap 2 (intended double letter)
+    vi.advanceTimersByTime(70); // t=420: tap 1's 400ms backstop would have fired here
+    const legacyClick = new Event("click", { bubbles: true }); // old Safari: no pointerType on click
+    key("S").dispatchEvent(legacyClick);
+    expect(h.onLetter).toHaveBeenCalledTimes(2); // two taps, never three
+    vi.useRealTimers();
+    root.remove();
+  });
+
+  it("a pointer that never pressed a key types nothing on lift-off (palm graze / board lift)", () => {
+    const { root, h, key } = setup();
+    document.elementFromPoint = vi.fn(() => key("Q")); // lift-off lands over a key…
+    ptr("pointerup", root, { id: 9 }); // …but this pointer never went down on one
+    expect(h.onLetter).not.toHaveBeenCalled();
+    root.remove();
+  });
+
+  it("two-thumb overlap: the second finger's press commits the held key; each letter lands once", () => {
+    const { root, h, key } = setup();
+    ptr("pointerdown", key("Q"), { id: 1 });
+    ptr("pointerdown", key("W"), { id: 2 }); // finger 2 lands while finger 1 still holds Q
+    expect(h.onLetter).toHaveBeenCalledWith("Q"); // Q commits NOW (iOS behavior)
+    ptr("pointerup", key("Q"), { id: 1 }); // finger 1 lifts — must not re-fire
+    ptr("pointerup", key("W"), { id: 2 });
+    expect(h.onLetter).toHaveBeenCalledTimes(2);
+    expect(h.onLetter).toHaveBeenLastCalledWith("W");
+    root.remove();
+  });
+
+  it("an intended double letter (two clean taps on the same key) still types twice", () => {
+    const { root, h, key } = setup();
+    ptr("pointerdown", key("S")); ptr("pointerup", key("S"));
+    ptr("pointerdown", key("S")); ptr("pointerup", key("S"));
+    expect(h.onLetter).toHaveBeenCalledTimes(2);
+    root.remove();
+  });
+});
