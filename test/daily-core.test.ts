@@ -343,3 +343,41 @@ describe("saltForDate (cutoff gate — closes the daily-answer leak without rewr
     expect(diverged).toBe(true);
   });
 });
+
+describe("normalizeWorld (regression after bundle extraction)", () => {
+  it("defaults edition/voice/rows + accepts a valid dated world", () => {
+    const w = normalizeWorld({ date: "2026-06-10", word: "ember", story: { title: "Why", body: "B" } });
+    expect(w).not.toBeNull();
+    expect(w!.word).toBe("EMBER");
+    expect(w!.edition).toBe("default");
+    expect(w!.voice).toBe("yang");
+    expect(w!.rows).toBe(6);
+  });
+  it("preserves the FULL playable + dated payload (anti-drop guard)", () => {
+    const w = normalizeWorld({
+      date: "2026-06-10", word: "ember", invented: false, voice: "luna", rows: 8,
+      vibeTitle: "Embers", bonusWord: "glow",
+      story: { title: "Why", body: "B", tip: "warm" },
+      colorScheme: { a1: "#012", a2: "#345", a3: "#678" },
+      glow: { atmosphere: 0.5, header: 0.2 },
+      curator: { username: "zang", message: "hi" },
+    })!;
+    expect(w.voice).toBe("luna");
+    expect(w.rows).toBe(8);
+    expect(w.vibeTitle).toBe("Embers");
+    expect(w.bonusWord).toBe("GLOW");
+    expect(w.story.tip).toBe("warm");
+    expect(w.colorScheme).toEqual({ a1: "#012", a2: "#345", a3: "#678" });
+    expect(w.glow).toEqual({ atmosphere: 0.5, header: 0.2 });
+    expect(w.curator).toEqual({ username: "zang", message: "hi" });
+  });
+  it("rejects a bad date", () => {
+    expect(normalizeWorld({ date: "nope", word: "ember", story: { title: "t", body: "b" } })).toBeNull();
+  });
+  it("rejects a non-pool word that is not invented", () => {
+    expect(normalizeWorld({ date: "2026-06-10", word: "zzzzz", story: { title: "t", body: "b" } })).toBeNull();
+  });
+  it("accepts an invented non-pool word", () => {
+    expect(normalizeWorld({ date: "2026-06-10", word: "zzzzz", invented: true, story: { title: "t", body: "b" } })).not.toBeNull();
+  });
+});

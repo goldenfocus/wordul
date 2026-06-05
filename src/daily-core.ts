@@ -107,12 +107,21 @@ export function resolveWorld(schedule: DailySchedule, date: string, nowMs: numbe
   return schedule[date] ?? houseWorld(date, nowMs, salt);
 }
 
-/** Validate + normalize an admin-supplied World payload. Returns null if invalid. */
-export function normalizeWorld(input: unknown): World | null {
+/** The fields a playable bundle shares between a daily World and a user Wordul. */
+export type WorldBundle = {
+  word: string; invented: boolean; rows: number; voice: string;
+  story: { title: string; body: string; tip?: string };
+  vibeTitle?: string;
+  colorScheme?: { a1: string; a2: string; a3: string };
+  glow?: World["glow"]; images?: World["images"]; playlist?: World["playlist"];
+};
+
+/** Validate + normalize the shared playable fields. Returns null if word/story invalid.
+ *  Handles word/invented/rows/voice/story/vibeTitle/colorScheme/glow — NOT date-bundle
+ *  fields (date/edition/curator/feedEditorial/bonusWord/images/playlist). */
+export function normalizeWorldBundle(input: unknown): WorldBundle | null {
   if (!input || typeof input !== "object") return null;
   const o = input as Record<string, unknown>;
-  const date = typeof o.date === "string" ? o.date : "";
-  if (!DATE_RE.test(date)) return null;
   const word = typeof o.word === "string" ? o.word.toUpperCase().trim() : "";
   if (!/^[A-Z]+$/.test(word)) return null;
   if (word.length < 4 || word.length > 12) return null; // hard length gate
@@ -124,19 +133,59 @@ export function normalizeWorld(input: unknown): World | null {
   if (!inPool && !invented) return null;
   const story = (o.story && typeof o.story === "object" ? o.story : {}) as Record<string, unknown>;
   if (typeof story.title !== "string" || typeof story.body !== "string") return null;
-  const world: World = {
-    date,
-    word,
-    edition: typeof o.edition === "string" && o.edition ? o.edition : "default",
+  const bundle: WorldBundle = {
+    word, invented,
+    rows: clampNum(o.rows, 3, 10, 6),
     voice: typeof o.voice === "string" && o.voice ? o.voice : "yang",
-    invented,
     story: {
       title: story.title,
       body: story.body,
       ...(typeof story.tip === "string" ? { tip: story.tip } : {}),
     },
-    createdAt: typeof o.createdAt === "number" ? o.createdAt : Date.now(),
   };
+  if (typeof o.vibeTitle === "string" && o.vibeTitle) bundle.vibeTitle = o.vibeTitle;
+  if (o.colorScheme && typeof o.colorScheme === "object") {
+    const c = o.colorScheme as Record<string, unknown>;
+    if (isColor(c.a1) && isColor(c.a2) && isColor(c.a3)) {
+      bundle.colorScheme = { a1: c.a1, a2: c.a2, a3: c.a3 };
+    }
+  }
+  if (o.glow && typeof o.glow === "object") {
+    const g = o.glow as Record<string, unknown>;
+    const glow: NonNullable<World["glow"]> = {};
+    for (const band of ["atmosphere", "header", "middle", "footer"] as const) {
+      if (typeof g[band] === "number" && Number.isFinite(g[band])) {
+        glow[band] = clampNum(g[band], 0, 1, 0);
+      }
+    }
+    if (Object.keys(glow).length > 0) bundle.glow = glow;
+  }
+  return bundle;
+}
+
+/** Validate + normalize an admin-supplied World payload. Returns null if invalid.
+ *  Delegates the shared playable fields to normalizeWorldBundle, then layers the
+ *  date-bundle-specific fields (date/edition/bonusWord/curator/feedEditorial/images/playlist). */
+export function normalizeWorld(input: unknown): World | null {
+  if (!input || typeof input !== "object") return null;
+  const o = input as Record<string, unknown>;
+  const date = typeof o.date === "string" ? o.date : "";
+  if (!DATE_RE.test(date)) return null;
+  const bundle = normalizeWorldBundle(input);
+  if (!bundle) return null;
+  const world: World = {
+    date,
+    word: bundle.word,
+    edition: typeof o.edition === "string" && o.edition ? o.edition : "default",
+    voice: bundle.voice,
+    invented: bundle.invented,
+    story: bundle.story,
+    rows: bundle.rows,
+    createdAt: typeof o.createdAt === "number" ? o.createdAt : Date.now(),
+    ...(bundle.colorScheme ? { colorScheme: bundle.colorScheme } : {}),
+    ...(bundle.glow ? { glow: bundle.glow } : {}),
+  };
+  if (bundle.vibeTitle) world.vibeTitle = bundle.vibeTitle;
   if (typeof o.bonusWord === "string" && /^[A-Za-z]+$/.test(o.bonusWord)) world.bonusWord = o.bonusWord.toUpperCase();
   if (o.curator && typeof o.curator === "object") {
     const c = o.curator as Record<string, unknown>;
@@ -158,25 +207,7 @@ export function normalizeWorld(input: unknown): World | null {
     if (Object.keys(ed).length > 0) world.feedEditorial = ed;
   }
 
-  // --- Vibe Studio v1 themed fields (all optional; malformed → dropped, never reject) ---
-  world.rows = clampNum(o.rows, 3, 10, 6);
-  if (typeof o.vibeTitle === "string" && o.vibeTitle) world.vibeTitle = o.vibeTitle;
-  if (o.colorScheme && typeof o.colorScheme === "object") {
-    const c = o.colorScheme as Record<string, unknown>;
-    if (isColor(c.a1) && isColor(c.a2) && isColor(c.a3)) {
-      world.colorScheme = { a1: c.a1, a2: c.a2, a3: c.a3 };
-    }
-  }
-  if (o.glow && typeof o.glow === "object") {
-    const g = o.glow as Record<string, unknown>;
-    const glow: NonNullable<World["glow"]> = {};
-    for (const band of ["atmosphere", "header", "middle", "footer"] as const) {
-      if (typeof g[band] === "number" && Number.isFinite(g[band])) {
-        glow[band] = clampNum(g[band], 0, 1, 0);
-      }
-    }
-    if (Object.keys(glow).length > 0) world.glow = glow;
-  }
+  // --- Vibe Studio v1 themed fields not in the shared bundle (images/playlist) ---
   if (o.images && typeof o.images === "object") {
     const im = o.images as Record<string, unknown>;
     const images: NonNullable<World["images"]> = {};
