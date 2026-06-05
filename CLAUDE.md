@@ -90,3 +90,22 @@ git tag --list 'prod-backup-*'   # find the backup from before the bad ship
 bash dev/revert.sh prod-backup-<N>
 ```
 (Or instant CDN-level rollback without git: `npx wrangler rollback`.)
+
+## Browser verification on prod — leave no identity behind
+
+The Playwright MCP's headed Chrome shares **one persistent profile** across sessions and
+pops up on Yan's screen looking exactly like his real Chrome. **Incident (Jun 5 2026):** a
+perf check set `localStorage["wr.username"] = "perfverify"` on wordul.com and left the
+window open; Yan later played a race in it and thought his account had been switched.
+
+When driving a browser against `wordul.com` (prod):
+
+1. **Name yourself `verify-bot-<task>`** — never an ambiguous human-looking name, and never
+   touch the identity keys without restoring them.
+2. **Before finishing, reset what you changed:** save the prior `wr.username` (and session
+   token) up front, restore them when done — or simply `localStorage.removeItem(...)` if
+   none existed.
+3. **Close the browser when your check ends** (`browser_close`). An orphaned robot window is
+   how Yan ends up playing as your test account.
+4. Test data you create on prod (games, gold, rooms) stays — so keep runs minimal and
+   clearly bot-named.
