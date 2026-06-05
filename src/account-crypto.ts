@@ -68,6 +68,22 @@ export function mintToken(): string {
   return bytesToHex(crypto.getRandomValues(new Uint8Array(TOKEN_BYTES)));
 }
 
+/** Cryptographically-strong, UNBIASED index in [0, mod) — for picking list items like
+ *  passphrase words. Rejection-samples a 32-bit CSPRNG draw so there's no modulo bias.
+ *  Never use Math.random for credential material: its xorshift128+ state is recoverable
+ *  from a few outputs, making generated phrases predictable. */
+export function secureIndex(mod: number): number {
+  if (!Number.isInteger(mod) || mod <= 0) throw new Error(`secureIndex: bad modulus ${mod}`);
+  const limit = Math.floor(0x1_0000_0000 / mod) * mod; // largest multiple of mod ≤ 2^32
+  const buf = new Uint32Array(1);
+  let n: number;
+  do {
+    crypto.getRandomValues(buf);
+    n = buf[0];
+  } while (n >= limit); // reject the unfair tail so every residue is equally likely
+  return n % mod;
+}
+
 /** SHA-256 of a token → hex. Only this hash is stored server-side (the key into sessions). */
 export async function hashToken(token: string): Promise<string> {
   const dig = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));

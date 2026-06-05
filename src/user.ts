@@ -4,7 +4,7 @@ import type { Env, UserProfile, OwnedRoom } from "./types.ts";
 import { applyGame, appendCapped } from "./stats.ts";
 import { healProfile, freshProfile, applyH2H } from "./user-core.ts";
 import { publicProfile, makePassphrase, canClaim, addSession, revokeSession, touchSession, projectDirectory, validatePassphraseShape } from "./account-core.ts";
-import { hashPassphrase, verifyPassphrase, mintToken, hashToken } from "./account-crypto.ts";
+import { hashPassphrase, verifyPassphrase, mintToken, hashToken, secureIndex } from "./account-crypto.ts";
 import type { GameRecord } from "./records.ts";
 
 const HISTORY_CAP = 100;
@@ -91,7 +91,7 @@ export class User extends DurableObject<Env> {
       const profile = await this.load(username);
       const decision = canClaim(profile, username);
       if (!decision.ok) return Response.json({ error: decision.reason }, { status: decision.reason === "already_claimed" ? 409 : 400 });
-      const words = makePassphrase();
+      const words = makePassphrase(secureIndex);
       const phrase = words.join(" ");
       const { salt, hash } = await hashPassphrase(phrase);
       const nonce = mintToken();

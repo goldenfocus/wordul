@@ -48,13 +48,15 @@ export const PHRASE_WORDS: readonly string[] = [
 const PHRASE_WORD_SET: ReadonlySet<string> = new Set(PHRASE_WORDS);
 
 /** Generate a passphrase: [anchor, w1..wN] with N random distinct words from PHRASE_WORDS.
- *  Takes ONLY an rng — there is intentionally no username parameter, so the phrase can
- *  never be derived from the public handle. */
-export function makePassphrase(rng: () => number = Math.random): string[] {
+ *  `pickIndex(mod)` must return a uniform integer in [0, mod). Production injects the CSPRNG
+ *  `secureIndex` from account-crypto (the phrase is an account credential — never Math.random);
+ *  tests inject a deterministic source. There is intentionally no username parameter, so the
+ *  phrase can never be derived from the public handle. */
+export function makePassphrase(pickIndex: (mod: number) => number): string[] {
   const pick: string[] = [];
   const used = new Set<number>();
   while (pick.length < PHRASE_WORD_COUNT) {
-    const i = Math.floor(rng() * PHRASE_WORDS.length);
+    const i = pickIndex(PHRASE_WORDS.length);
     if (used.has(i)) continue;        // distinct words read better and add entropy
     used.add(i);
     pick.push(PHRASE_WORDS[i]);

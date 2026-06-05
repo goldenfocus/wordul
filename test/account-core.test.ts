@@ -12,14 +12,17 @@ import {
   projectDirectory,
   publicProfile,
 } from "../src/account-core.ts";
+import { secureIndex } from "../src/account-crypto.ts";
 import type { UserProfile } from "../src/types.ts";
 
-// Deterministic RNG for reproducible passphrase tests.
-function seededRng(seed: number): () => number {
+// Deterministic index source for reproducible passphrase tests — mirrors makePassphrase's
+// injected `pickIndex` contract: (mod) => uniform-ish integer in [0, mod). (Production
+// injects the CSPRNG secureIndex; this LCG is for deterministic assertions only.)
+function seededIndex(seed: number): (mod: number) => number {
   let s = seed >>> 0;
-  return () => {
+  return (mod) => {
     s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 0x100000000;
+    return s % mod;
   };
 }
 
@@ -40,36 +43,39 @@ describe("PHRASE_WORDS", () => {
 
 describe("makePassphrase", () => {
   it("always starts with the anchor + N words, all from the list", () => {
-    const words = makePassphrase(seededRng(7));
+    const words = makePassphrase(seededIndex(7));
     expect(words[0]).toBe(PHRASE_ANCHOR);
     expect(words.length).toBe(PHRASE_WORD_COUNT + 1);
     for (const w of words.slice(1)) expect(PHRASE_WORDS).toContain(w);
   });
 
-  it("can be called with no arguments (defaults to Math.random — server uses makePassphrase())", () => {
-    const words = makePassphrase();
+  it("works with the production CSPRNG source (secureIndex) — the server path", () => {
+    // Server calls makePassphrase(secureIndex); exercise that exact path (no injected
+    // determinism) so a regression in the crypto index surfaces here.
+    const words = makePassphrase(secureIndex);
     expect(words[0]).toBe(PHRASE_ANCHOR);
     expect(words.length).toBe(PHRASE_WORD_COUNT + 1);
+    expect(new Set(words.slice(1)).size).toBe(PHRASE_WORD_COUNT); // distinct
     for (const w of words.slice(1)) expect(PHRASE_WORDS).toContain(w);
   });
 
   it("is not derived from any username — output words come only from PHRASE_WORDS", () => {
     // The function takes no username parameter at all, so a handle cannot leak into the
     // phrase; assert every generated word is from the curated list (never a handle).
-    const words = makePassphrase(seededRng(99));
+    const words = makePassphrase(seededIndex(99));
     for (const w of words.slice(1)) expect(PHRASE_WORDS).toContain(w);
   });
 
   it("re-rolls to a different phrase", () => {
-    const a = makePassphrase(seededRng(1)).join(" ");
-    const b = makePassphrase(seededRng(2)).join(" ");
+    const a = makePassphrase(seededIndex(1)).join(" ");
+    const b = makePassphrase(seededIndex(2)).join(" ");
     expect(a).not.toBe(b);
   });
 });
 
 describe("validatePassphraseShape", () => {
   it("accepts anchor + N valid words", () => {
-    const words = makePassphrase(seededRng(3));
+    const words = makePassphrase(seededIndex(3));
     expect(validatePassphraseShape(words.join(" "))).toBe(true);
   });
   it("rejects wrong anchor, wrong count, or off-list words", () => {
