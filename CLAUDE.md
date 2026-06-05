@@ -27,6 +27,16 @@ deployments-cicd, etc.) — they do not apply here.
   `npm run deploy` is an emergency fallback only. (One-time setup: `.github/workflows/README.md`.)
 - Tests: `npm test` (vitest) · Typecheck: `npm run typecheck`
 - Dev server: `npm run dev`
+- **Worker = `wordul`** (renamed from the legacy `wordle-race` on 2026-06-05). It hosts every
+  Durable Object (`wordul_Room`, `_User`, `_WordStats`, `_Challenge`, `_Daily`, `_Science`,
+  `_Arena`). The public domain is **`wordul.com`** (custom domain; `workers_dev:false`).
+- **Worker secrets live ONLY on the worker, never in `wrangler.jsonc`** — so `wrangler deploy`
+  does **not** carry them, and renaming/recreating the worker drops them. Required runtime
+  secrets: `DAILY_SALT` (anti-cheat seed for the daily word) and `DAILY_ADMIN_TOKEN` (gates
+  `POST /daily/schedule`). Both are optional in code (graceful no-op when unset). Re-set after
+  any worker recreate via `wrangler secret put <NAME>`. The encrypted vault
+  `~/golden-cloud/secrets/wordul-prod.env` holds **only** the `CLOUDFLARE_*` deploy creds — NOT
+  these two — so they have no canonical backup; rotate, don't expect to recover an old value.
 
 ---
 

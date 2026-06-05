@@ -16,7 +16,7 @@ deploying locally, so there's no gap.
 
 1. **Create a scoped Cloudflare API token** — Cloudflare dashboard → My Profile →
    API Tokens → Create Token → *Edit Cloudflare Workers* template. Scope it to the
-   account that owns the `wordle-race` Worker. Copy the token (shown once).
+   account that owns the `wordul` Worker. Copy the token (shown once).
 
 2. **Find the account ID** — Cloudflare dashboard → Workers & Pages → right sidebar
    *Account ID* (or `npx wrangler whoami`).

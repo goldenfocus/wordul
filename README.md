@@ -95,10 +95,10 @@ npm test           # vitest run
 ## Deploy
 
 ```bash
-npm run deploy     # wrangler deploy
+bash dev/ship.sh   # tests → rebase → merge to main → CI deploys origin/main
 ```
 
-Ships the Worker, static assets, and the Durable Object migration to Cloudflare. Production lives at **[wordul.com](https://wordul.com)** (the legacy alias `wordle.goldenfoc.us` still resolves but canonicalizes to wordul.com).
+CI (`.github/workflows/deploy.yml`) deploys `origin/main` to the Cloudflare Worker **`wordul`** on every merge — Worker code, static assets, and the Durable Object migration. `npm run deploy` (`wrangler deploy`) is an emergency-only manual fallback; don't run it by hand. Production lives at **[wordul.com](https://wordul.com)**.
 
 ## Notes
 

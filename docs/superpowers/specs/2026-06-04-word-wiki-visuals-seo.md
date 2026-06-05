@@ -22,7 +22,9 @@ per-word OG cards at `/word/og/<slug>.png`, live stats, sitemap. The 2026-06-04 
   order, so `fnv1a(date) % 2315` → today's answer). Fixed with a server secret `DAILY_SALT`
   folded into the seed (`src/daily-core.ts` `fallbackWord`/`saltForDate`, `src/daily.ts`),
   gated behind `SALT_FROM = "2026-06-05"` so enabling it didn't rewrite past/today's
-  already-played house words. **The secret is SET on the `wordle-race` worker.**
+  already-played house words. **The `DAILY_SALT` secret is SET on the `wordul` worker**
+  (re-set fresh on 2026-06-05 after the `wordle-race`→`wordul` rename, which created a
+  brand-new worker with no secrets — worker secrets are NOT carried by `wrangler deploy`).
   ⚠️ **Do NOT remove the salt or the SALT_FROM cutoff — they are the anti-cheat.**
 - **Brand color (LIVE everywhere ✅):** `scripts/lib/og-card.mjs` + `public/share-card.js`
   recolored from NYT green `#6aaa64`/`#538d4e` → ultraviolet `#9d8bff` / gold `#f0c14b` /
@@ -42,14 +44,14 @@ per-word OG cards at `/word/og/<slug>.png`, live stats, sitemap. The 2026-06-04 
 
 ## Key facts a fresh session needs
 
-- **Platform:** Cloudflare Workers. **Worker name = `wordle-race`** (not "wordul").
+- **Platform:** Cloudflare Workers. **Worker name = `wordul`** (renamed from the legacy `wordle-race` on 2026-06-05).
 - **Deploy:** `bash dev/ship.sh` from a worktree → CI deploys `origin/main`. NEVER `wrangler deploy` by hand.
 - **Isolate first:** `bash dev/start.sh <task>` → work in `.claude/worktrees/<task>`. Root edits are hook-blocked.
 - **R2 buckets:** `OG` = `wordul-og` (OG cards + future hero art), `DESIGNS` = `wordul-designs`.
 - **Workers AI:** the `AI` binding exists in `wrangler.jsonc` (model `@cf/black-forest-labs/flux-1-schnell`).
 - **Creds:** `~/golden-cloud/secrets/wordul-prod.env` is **SOPS/age-ENCRYPTED — never `source` it**
   (it loads `ENC[...]` ciphertext and breaks calls). Decrypt with `sops -d`. `wrangler` already has
-  **ambient auth** to `wordle-race` (`wrangler secret list/put`, `deployments list` work without sourcing).
+  **ambient auth** to `wordul` (`wrangler secret list/put`, `deployments list` work without sourcing).
 - **R2 uploads — use wrangler, NOT the S3 script (corrected):** the vault only holds
   `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` — it does **NOT** contain the
   `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` S3 keys that `scripts/upload-og.mjs`
@@ -164,7 +166,7 @@ Don't pre-generate 8–12 (tens of thousands, obscure) — generate lazily on fi
   `@resvg/resvg-js`), run `npm install` once in the worktree.
 - Page regen MUST preserve rich content — verify a single-page render before committing 2,315 files.
   (Quick gate: `git diff --numstat public/word/` should be `1 1` per file = only the `ld+json` line.)
-- Worker = **`wordle-race`**. Don't touch the salt / `SALT_FROM` (anti-cheat).
+- Worker = **`wordul`**. Don't touch the salt / `SALT_FROM` (anti-cheat).
 - **OG card route is NOT edge-cached** (`cf-cache=none`) — overwriting the R2 object flips the live
   card instantly. The `cache-control: max-age=86400` only affects individual browsers + social-side
   caches (which self-heal as platforms re-scrape). No CF purge required.
