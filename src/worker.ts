@@ -445,6 +445,11 @@ export default {
       return env.ASSETS.fetch(new Request(url.origin + "/index.html"));
     }
 
+    // The Worlds theater (/worlds): serve the SPA shell; client renders the tabbed wall.
+    if (url.pathname === "/worlds") {
+      return env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+    }
+
     // Profile + room + challenge pages: serve SPA shell with per-route meta injected.
     const profileMatch = url.pathname.match(PROFILE_RE);
     const roomMatch = url.pathname.match(ROOM_RE);

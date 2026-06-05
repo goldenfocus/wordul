@@ -20,7 +20,8 @@ import { fmtDuration, goldValue } from "/daily-card.js";
 import { computeFeedStreamView, computeFeedPostView } from "/feed.js";
 import { EDITIONS, getEdition } from "/editions/index.js";
 import { MODES, isAvailableMode } from "/modes.js";
-import { getWorld, worldSlugFromPath } from "/worlds.js";
+import { getWorld, worldSlugFromPath, listWorlds, featuredWorlds } from "/worlds.js";
+import { renderWorldCard, pushRecentWorld, getRecentWorldSlugs } from "/world-card.js";
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
 import { pickInspire } from "/inspire.js";
@@ -112,6 +113,7 @@ function parseRoute() {
   if (location.pathname === "/feed") return { kind: "feed" };
   const feedPost = location.pathname.match(/^\/feed\/(\d{4}-\d{2}-\d{2})$/);
   if (feedPost) return { kind: "feed-post", date: feedPost[1] };
+  if (location.pathname === "/worlds") return { kind: "worlds" };
   const worldSlug = worldSlugFromPath(location.pathname);
   if (worldSlug) return { kind: "world", slug: worldSlug };
   const room = location.pathname.match(ROOM_RE);
@@ -3943,6 +3945,7 @@ function renderCrumbs(r) {
     : r.kind === "arena" ? "Arena"
     : r.kind === "feed" ? "Lab"
     : r.kind === "feed-post" ? "Lab · " + r.date
+    : r.kind === "worlds" ? "Worlds"
     : r.kind === "world" ? (getWorld(r.slug)?.name ?? "World")
     : `@${r.username}`;
   nav.hidden = false;
@@ -3963,14 +3966,86 @@ function renderCrumbs(r) {
   nav.append(home, sep, cur);
 }
 
+// The Worlds theater (/worlds): a tabbed wall of themed cards. Tabs: Featured · All ·
+// Mine (recently visited). Live counts / an "Active" tab arrive in Plan 2b. Each card
+// self-paints (paintEditionVars); the page chrome stays on the saved default.
+function showWorlds() {
+  document.title = "Worlds — Wordul";
+  applyEdition(getActiveEditionId()); // neutral page chrome; cards paint themselves
+  const app = $("#app");
+  app.innerHTML = "";
+  document.body.classList.remove("hub-home");
+
+  const screen = document.createElement("section");
+  screen.className = "screen worlds-screen";
+
+  const back = document.createElement("a");
+  back.href = "/"; back.className = "link worlds-back"; back.textContent = "← Home";
+  back.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); });
+
+  const head = document.createElement("header");
+  head.className = "worlds-head";
+  const kicker = document.createElement("span");
+  kicker.className = "daily-kicker"; kicker.textContent = "Worlds";
+  const h1 = document.createElement("h1");
+  h1.className = "worlds-title"; h1.textContent = "Browse Worlds";
+  head.append(kicker, h1);
+
+  const tabsBar = document.createElement("div");
+  tabsBar.className = "worlds-tabs";
+  const wall = document.createElement("div");
+  wall.className = "worlds-wall"; wall.id = "worldsWall";
+
+  const TABS = [
+    { key: "featured", label: "Featured", worlds: () => featuredWorlds() },
+    { key: "all",      label: "All",      worlds: () => listWorlds() },
+    { key: "mine",     label: "Mine",     worlds: () => getRecentWorldSlugs().map(getWorld).filter(Boolean) },
+  ];
+
+  const paintWall = (worlds) => {
+    wall.textContent = "";
+    if (worlds.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted worlds-empty";
+      empty.textContent = "No Worlds here yet — visit a few and they'll show up.";
+      wall.appendChild(empty);
+      return;
+    }
+    for (const w of worlds) {
+      const card = renderWorldCard(w);
+      if (!card) continue;
+      card.addEventListener("click", (e) => { e.preventDefault(); navigate("/w/" + w.slug); });
+      wall.appendChild(card);
+    }
+  };
+
+  TABS.forEach((tab, i) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "worlds-tab" + (i === 0 ? " is-active" : "");
+    btn.textContent = tab.label;
+    btn.addEventListener("click", () => {
+      tabsBar.querySelectorAll(".worlds-tab").forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      paintWall(tab.worlds());
+    });
+    tabsBar.appendChild(btn);
+  });
+
+  screen.append(back, head, tabsBar, wall);
+  app.appendChild(screen);
+  paintWall(TABS[0].worlds()); // default to Featured
+}
+
 // A World page (/w/<slug>): a themed place you can visit, share, and play in. Landing
 // here is a TRY-ON — the skin is applied for this visit only (persist:false), never
 // silently saved as the default. "Make this my default" is the only thing that commits.
 // Live counts + "Join the live race" + SEO meta arrive in Plan 2; an unknown slug here
-// goes Home (Plan 2 redirects to /worlds instead).
+// redirects to /worlds.
 function showWorld(slug) {
   const world = getWorld(slug);
-  if (!world) { navigate("/"); return; }
+  if (!world) { navigate("/worlds"); return; }
+  pushRecentWorld(slug); // feeds the theater's "Mine" tab
   document.title = `${world.name} — Wordul`;
   // Try-on: preview the skin without changing the saved default.
   applyEdition(world.editionId, { persist: false });
@@ -4033,6 +4108,7 @@ function route() {
   if (r.kind === "arena") { showArenaRoute(); return; }
   if (r.kind === "feed") { showFeed(); return; }
   if (r.kind === "feed-post") { showFeedPost(r.date); return; }
+  if (r.kind === "worlds") { showWorlds(); return; }
   if (r.kind === "world") { showWorld(r.slug); return; }
   if (r.kind === "room") {
     if (getUsername()) {
