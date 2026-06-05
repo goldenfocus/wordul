@@ -4023,7 +4023,7 @@ function settleRematchHome(reason, who) {
   clearTimeout(game.rematchSettleTimer);
   game.rematchSettleTimer = setTimeout(() => {
     game.rematchSettleTimer = null;
-    closeStats(); leaveRoom(); showHub();
+    closeStats(); leaveRoom(); showHome();
   }, 2000);
 }
 
