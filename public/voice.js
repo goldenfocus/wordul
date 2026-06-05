@@ -90,15 +90,44 @@ export function speakRobotic(word) {
   try { window.speechSynthesis.speak(roboticUtterance(word)); } catch { /* ignore */ }
 }
 
-// A templated line like "The word was {answer}." spoken in two voices: the static
-// frame in Yan's cloned voice (pre-rendered clip, else fallback TTS), the answer in
-// the robotic voice. Segments play strictly in order via the audio's `ended` event.
-export async function speakTemplated(editionId, rawLine, ctx = {}) {
+// One robotic segment, resolving on utterance end (or immediately when empty,
+// punctuation-only, or speech is unavailable/throws).
+const REVEAL_BEAT_MS = 500; // the dramatic pause between "the word was" and the word
+function sayRobotic(text) {
+  return new Promise((resolve) => {
+    if (!text || !/[a-z0-9]/i.test(text) || !window.speechSynthesis) return resolve();
+    try {
+      const u = roboticUtterance(text);
+      u.addEventListener("end", resolve, { once: true });
+      window.speechSynthesis.speak(u);
+    } catch { resolve(); }
+  });
+}
+
+// A templated line like "The word was {answer}." — the loss reveal.
+// Default mode "robot": the WHOLE line in the robotic voice — frame, a half-second
+// beat, then the answer in the same voice. No clips, no manifest, one dependency.
+// Mode "split" (per world/room via the edition's sound.voice.reveal, see edition.js):
+// the static frame in Yan's cloned voice (pre-rendered clip, else fallback TTS), the
+// answer in the robotic voice. Segments play strictly in order via `ended` events.
+export async function speakTemplated(editionId, rawLine, ctx = {}, mode = "robot") {
   if (!rawLine || isMuted()) return;
   if (!rawLine.includes("{answer}")) { // not actually templated — fall back to the normal path
     return speakLine(editionId, rawLine, rawLine);
   }
   const { prefix, suffix } = splitTemplate(rawLine);
+
+  if (mode !== "split") {
+    stopSpeaking(); // clear any clip/TTS from a prior reaction
+    await sayRobotic(prefix);
+    if (isMuted()) return;
+    await new Promise((r) => setTimeout(r, REVEAL_BEAT_MS));
+    await sayRobotic(ctx.answer);
+    if (isMuted()) return;
+    await sayRobotic(suffix);
+    return;
+  }
+
   const map = await loadManifest(editionId);
   if (isMuted()) return;
   // Clear any clip/TTS still playing from a prior reaction so segments don't stack.
@@ -126,18 +155,9 @@ export async function speakTemplated(editionId, rawLine, ctx = {}) {
     }
   });
 
-  const sayAnswer = () => new Promise((resolve) => {
-    if (!ctx.answer || !window.speechSynthesis) return resolve();
-    try {
-      const u = roboticUtterance(ctx.answer);
-      u.addEventListener("end", resolve, { once: true });
-      window.speechSynthesis.speak(u);
-    } catch { resolve(); }
-  });
-
   await playSegment(prefix);
   if (isMuted()) return;
-  await sayAnswer();
+  await sayRobotic(ctx.answer);
   if (isMuted()) return;
   await playSegment(suffix);
 }

@@ -98,7 +98,13 @@ export function companionReact(event, ctx = {}) {
   let text = raw.replace("{answer}", ctx.answer ?? "that one");
   const muted = localStorage.getItem(LS.muted) === "1";
   const voiceOn = !!ed.sound?.voice?.on && !muted;
-  return { text, raw, tier, speak: voiceOn && shouldSpeak(event, tier, react, ctx.rng) };
+  // How the {answer} reveal is voiced: "robot" (default — whole line in the robot
+  // voice with a beat before the word) or "split" (cloned frame + robot answer).
+  // Per-world via the ACTIVE edition's sound.voice.reveal (the world owns the vibe,
+  // even though lines/clips stay Yang's); per-room via the rung-2 snapshot override.
+  const revealVoice = snapshotVoiceConfig().reveal
+    ?? getEdition(activeId).sound?.voice?.reveal ?? "robot";
+  return { text, raw, tier, revealVoice, speak: voiceOn && shouldSpeak(event, tier, react, ctx.rng) };
 }
 
 // The palette is split into two surfaces with different morphing rules:

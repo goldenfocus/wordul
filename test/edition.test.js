@@ -84,6 +84,10 @@ describe("editions + companion", () => {
       expect(r.text).not.toContain("{answer}");
     }
   });
+  it("reveal voice defaults to full-robot (no edition opts into split out of the box)", () => {
+    const r = companionReact("loss", { answer: "CRANE" });
+    expect(r.revealVoice).toBe("robot");
+  });
 });
 
 import { applyEdition } from "/edition.js";

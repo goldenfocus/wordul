@@ -95,6 +95,76 @@ describe("speakLine", () => {
   });
 });
 
+describe("full-robot reveal (speakTemplated)", () => {
+  const zarvox = { name: "Zarvox" };
+  let spoken;
+
+  // Utterances whose `end` fires as soon as speak() is called, so the segment
+  // chain advances; the only real wait left is the deliberate beat before the word.
+  function mockRobotSpeech() {
+    spoken = [];
+    global.SpeechSynthesisUtterance = class {
+      constructor(t) { this.text = t; this.pitch = 1; this.rate = 1; this.voice = null; this.h = {}; }
+      addEventListener(ev, fn) { this.h[ev] = fn; }
+    };
+    window.speechSynthesis = {
+      getVoices: () => [zarvox],
+      addEventListener() {},
+      speak: (u) => { spoken.push(u); u.h.end?.(); },
+      cancel() {},
+    };
+  }
+
+  it("by default speaks frame → ½s beat → word, all in the same robot voice, no clip fetch", async () => {
+    vi.useFakeTimers();
+    mockRobotSpeech();
+    global.fetch = vi.fn(); // robot mode needs no manifest — must never fetch
+    vi.resetModules();
+    const { speakTemplated } = await import("/voice.js");
+    const p = speakTemplated("ed_fullrobot", "The word was {answer}.", { answer: "CRANE" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(spoken.map((u) => u.text)).toEqual(["The word was"]); // word held back during the beat
+    await vi.advanceTimersByTimeAsync(500);
+    await p;
+    expect(spoken.map((u) => u.text)).toEqual(["The word was", "CRANE"]);
+    expect(spoken.every((u) => u.voice === zarvox)).toBe(true); // same bot throughout
+    expect(global.fetch).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("speaks a real suffix after the word, but skips punctuation-only leftovers", async () => {
+    vi.useFakeTimers();
+    mockRobotSpeech();
+    vi.resetModules();
+    const { speakTemplated } = await import("/voice.js");
+    const p = speakTemplated("ed_suffix", "Bzzt... it was {answer}. No rust on you!", { answer: "CRANE" });
+    await vi.advanceTimersByTimeAsync(500);
+    await p;
+    expect(spoken.map((u) => u.text)).toEqual(["Bzzt... it was", "CRANE", ". No rust on you!"]);
+    vi.useRealTimers();
+  });
+
+  it('"split" mode preserves the cloned-frame + robot-word behavior', async () => {
+    mockRobotSpeech();
+    const plays = [];
+    global.Audio = class {
+      constructor(src) { this.src = src; plays.push(src); this.h = {}; }
+      addEventListener(ev, fn) { this.h[ev] = fn; }
+      play() { this.h.ended?.(); return Promise.resolve(); }
+      pause() {}
+    };
+    const file = `${lineKey("The word was")}.mp3`;
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ [lineKey("The word was")]: file }) });
+    vi.resetModules();
+    const { speakTemplated } = await import("/voice.js");
+    await speakTemplated("ed_split", "The word was {answer}.", { answer: "CRANE" }, "split");
+    expect(plays).toEqual([`/voice/ed_split/${file}`]);          // frame: cloned clip
+    // word: robot. (The trailing "." suffix still goes through TTS as before — silent.)
+    expect(spoken.map((u) => u.text)).toEqual(["CRANE", "."]);
+    expect(spoken[0].voice).toBe(zarvox);
+  });
+});
+
 describe("robotic answer voice (loss reveal)", () => {
   // Regression: the answer is the session's first speechSynthesis call (the line's
   // prefix/suffix are mp3 clips). Chrome's getVoices() returns [] on that cold first

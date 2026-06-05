@@ -1224,7 +1224,7 @@ function celebrateCombo(discoveries, mult) {
 
 // Surface the active edition's companion line for an event, reusing the toast.
 function showCompanion(event, ctx = {}) {
-  const { text, raw, tier, speak } = companionReact(event, ctx);
+  const { text, raw, tier, speak, revealVoice } = companionReact(event, ctx);
   if (!text) return;
   // The written toast is opt-out via Settings → Companion comments. Voice is governed
   // separately by the 🔊 sound mute (wordul.muted), so the two channels stay independent.
@@ -1235,8 +1235,9 @@ function showCompanion(event, ctx = {}) {
   }
   // The wipe aside is text-only — it fires often enough that voicing it would grate.
   if (!speak || event === "wipe") return;
-  // Templated lines (the loss reveal) split across Yan's voice + the robot.
-  if (raw.includes("{answer}")) speakTemplated(VOICE_EDITION, raw, ctx);
+  // Templated lines (the loss reveal): full robot voice by default; a world/room can
+  // opt into "split" (Yan's cloned frame + robot answer) via sound.voice.reveal.
+  if (raw.includes("{answer}")) speakTemplated(VOICE_EDITION, raw, ctx, revealVoice);
   else speakLine(VOICE_EDITION, raw, text);
 }
 
