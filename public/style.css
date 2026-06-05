@@ -2860,7 +2860,10 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .world-card-blurb { font-size: 0.8rem; opacity: 0.8; }
 .world-card-more { align-items: center; justify-content: center; font-weight: 600; color: var(--accent); }
 
-.worlds-screen { max-width: 48rem; margin: 0 auto; padding: 2rem 1.25rem; }
+/* .screen is a flex column with align-items:center that shrink-wraps to its content
+   (same trap as .screen.home above) — claim the width and let children fill it so the
+   .worlds-wall grid actually gets room for multiple columns. */
+.worlds-screen { width: 100%; max-width: 48rem; margin: 0 auto; padding: 2rem 1.25rem; align-items: stretch; }
 .worlds-back { display: inline-block; margin-bottom: 1.25rem; }
 .worlds-head { margin-bottom: 1.25rem; }
 .worlds-title { font-family: var(--font-display); font-size: 2.25rem; margin: 0.25rem 0 0; }
