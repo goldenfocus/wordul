@@ -26,6 +26,8 @@ import {
   REMATCH_TIMEOUT_MS,
   BOT_REMATCH_MIN_MS,
   BOT_REMATCH_MAX_MS,
+  ABANDON_GRACE_MS,
+  hasConnectedHuman,
   type RematchEffect,
 } from "./room-core.ts";
 import type { RoomMode } from "./modes.ts";
@@ -280,6 +282,14 @@ export class Room extends DurableObject<Env> {
         this.state.rematch = rematch;
         await this.applyRematchEffects(effects);
       }
+      // Public Arena room emptied of humans while still waiting in the lobby: don't strand
+      // it in the open-games index for hours. Arm a grace alarm; the alarm delists it only
+      // if STILL human-empty when it fires, so a plain refresh/hibernation WS blip doesn't
+      // yank a live host's listing. (Seeded bot rooms never reach here — bots have no WS.)
+      if (this.state.publicArena && this.state.phase === "lobby" && !hasConnectedHuman(this.state.players)) {
+        this.state.abandonAt = Date.now() + ABANDON_GRACE_MS;
+        void this.ctx.storage.setAlarm(this.state.abandonAt);
+      }
       await this.persistAndBroadcast();
     }
   }
@@ -477,7 +487,13 @@ export class Room extends DurableObject<Env> {
     }
     // Public human Arena room: list it in the open index while it waits in the lobby.
     // runStart/finishGame close it. Best-effort; a refresh just re-asserts the listing.
+    // A human is here, so cancel any pending abandon-delist (this hello may be the host
+    // returning within the grace window) and re-publish.
     if (this.state.publicArena && this.state.phase === "lobby") {
+      if (this.state.abandonAt != null) {
+        this.state.abandonAt = null;
+        void this.ctx.storage.deleteAlarm();
+      }
       this.publishArena();
     }
     await this.persistAndBroadcast();
@@ -1023,6 +1039,16 @@ export class Room extends DurableObject<Env> {
     }
     if (this.state.phase === "finished") {
       await this.handleRematchAlarm(Date.now());
+      return;
+    }
+    if (this.state.phase === "lobby") {
+      // Abandon-close: the grace window elapsed. If no human came back, delist the room
+      // from the open-games index (a returning host's hello re-publishes it later).
+      if (this.state.abandonAt && Date.now() >= this.state.abandonAt && !hasConnectedHuman(this.state.players)) {
+        this.state.abandonAt = null;
+        this.closeArena();
+        await this.persistAndBroadcast();
+      }
       return;
     }
     if (this.state.phase !== "playing" || !this.state.word) return;
@@ -1696,6 +1722,7 @@ export class Room extends DurableObject<Env> {
       rematch: undefined,
       botRematchAt: undefined,
       rematchTimeoutAt: undefined,
+      abandonAt: undefined, // internal-only; not part of the client contract
       players: this.state.isDaily
         ? (me ? [projectPlayerForClient({ ...me, guesses: [...me.guesses] })] : [])
         : this.state.players.map((p) => projectPlayerForClient({ ...p, guesses: [...p.guesses] })),

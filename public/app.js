@@ -105,6 +105,7 @@ function parseRoute() {
   const daily = location.pathname.match(/^\/daily\/(\d{4}-\d{2}-\d{2})$/);
   if (daily) return { kind: "daily", date: daily[1] };
   if (location.pathname === "/daily") return { kind: "daily", date: todayUTC() };
+  if (location.pathname === "/arena") return { kind: "arena" };
   if (location.pathname === "/feed") return { kind: "feed" };
   const feedPost = location.pathname.match(/^\/feed\/(\d{4}-\d{2}-\d{2})$/);
   if (feedPost) return { kind: "feed-post", date: feedPost[1] };
@@ -1235,9 +1236,21 @@ function stopArenaPoll() {
 // The Arena: open games anyone can jump into — bots now, public human rooms too (a host
 // opts in via "Host a public game"). Rendered into #hubContent (home stays mounted); Back
 // restores the launcher. Distinct from Head-to-head, which makes a private invite-link room.
+// Direct load / refresh of /arena: the Arena view lives inside the home hub (#hubContent),
+// so mount home first and let maybeOpenArena() open the Arena once the hub renders. The
+// pendingOpenArena one-shot is the same hook the "join next → none waiting" fallback uses.
+function showArenaRoute() {
+  pendingOpenArena = true;
+  leaveRoom();
+  showHome();
+}
+
 function showArena() {
   const content = document.getElementById("hubContent");
   if (!content) return;
+  // The Arena is a real, refresh-survivable route — reflect it in the URL (replace, not push,
+  // so it doesn't pile a history entry on top of the hub the user is already standing on).
+  history.replaceState(null, "", "/arena");
   stopArenaPoll();
   content.innerHTML =
     `<section class="hub-panel arena-view">
@@ -1248,7 +1261,7 @@ function showArena() {
       <button id="arenaHost" class="btn block">Host a public game →</button>
     </section>`;
   const back = document.getElementById("arenaBack");
-  if (back) back.addEventListener("click", () => { stopArenaPoll(); renderHomeIdentity(); });
+  if (back) back.addEventListener("click", () => { stopArenaPoll(); navigate("/"); });
   const host = document.getElementById("arenaHost");
   if (host) host.addEventListener("click", () => { stopArenaPoll(); enterNewRoom({ autoStart: false, publicArena: true }); });
   arenaPollStop = mountArenaList(document.getElementById("arenaList"), {
@@ -3878,6 +3891,7 @@ function renderCrumbs(r) {
     : r.kind === "daily" ? "Daily"
     : r.kind === "daily-stats" ? "Stats"
     : r.kind === "daily-archive" ? "Archive"
+    : r.kind === "arena" ? "Arena"
     : r.kind === "feed" ? "Lab"
     : r.kind === "feed-post" ? "Lab · " + r.date
     : r.kind === "world" ? (getWorld(r.slug)?.name ?? "World")
@@ -3967,6 +3981,7 @@ function route() {
   if (r.kind === "daily") { showDaily(r.date); return; }
   if (r.kind === "daily-stats") { showDailyStats(r.date); return; }
   if (r.kind === "daily-archive") { showDailyArchive(); return; }
+  if (r.kind === "arena") { showArenaRoute(); return; }
   if (r.kind === "feed") { showFeed(); return; }
   if (r.kind === "feed-post") { showFeedPost(r.date); return; }
   if (r.kind === "world") { showWorld(r.slug); return; }

@@ -106,6 +106,7 @@ export type RoomSnapshot = {
   rematch?: { proposer: string; deadline: number } | null;
   botRematchAt?: number | null;     // epoch ms the bot decides; null = none pending
   rematchTimeoutAt?: number | null; // epoch ms the proposal auto-cancels; null = none pending
+  abandonAt?: number | null;        // INTERNAL ONLY — public lobby grace deadline; delist if still human-empty when it fires
 };
 
 export type ClientMessage =

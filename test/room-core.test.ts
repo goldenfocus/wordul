@@ -2,11 +2,33 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { outpacedLosers } from "../src/room-core.ts";
 import type { PlayerState } from "../src/types.ts";
-import { rematchReduce, botAccepts, nextAlarmAt, REMATCH_TIMEOUT_MS, botDelay, dueBots, nextBotAlarmAt } from "../src/room-core.ts";
+import { rematchReduce, botAccepts, nextAlarmAt, REMATCH_TIMEOUT_MS, botDelay, dueBots, nextBotAlarmAt, hasConnectedHuman } from "../src/room-core.ts";
 
 function player(username: string, status: PlayerState["status"], isBot = false): PlayerState {
   return { username, connected: true, guesses: [], status, isBot, points: 0, pointsSpent: 0 };
 }
+
+describe("hasConnectedHuman (abandon-close gate)", () => {
+  it("true when a non-bot player is connected", () => {
+    expect(hasConnectedHuman([player("yan", "playing")])).toBe(true);
+  });
+  it("false when the only human disconnected (host left/refreshed)", () => {
+    expect(hasConnectedHuman([{ ...player("yan", "playing"), connected: false }])).toBe(false);
+  });
+  it("ignores connected bots — a bot-only room reads as human-empty", () => {
+    expect(hasConnectedHuman([player("maya", "playing", true)])).toBe(false);
+  });
+  it("true if any human is still connected alongside bots", () => {
+    expect(hasConnectedHuman([
+      player("maya", "playing", true),
+      { ...player("yan", "playing"), connected: false },
+      player("alex", "playing"),
+    ])).toBe(true);
+  });
+  it("false for an empty room", () => {
+    expect(hasConnectedHuman([])).toBe(false);
+  });
+});
 
 describe("outpacedLosers", () => {
   it("returns every still-playing non-winner (human + bot), excludes the winner and the already-out", () => {

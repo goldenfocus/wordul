@@ -9,6 +9,16 @@ export const REMATCH_TIMEOUT_MS = 15_000;   // a pending proposal auto-cancels a
 export const BOT_REMATCH_MIN_MS = 3_000;    // bot "thinking" window, low end
 export const BOT_REMATCH_MAX_MS = 9_000;    // bot "thinking" window, high end
 export const BOT_REMATCH_ACCEPT_P = 0.8;    // P(bot says yes)
+export const ABANDON_GRACE_MS = 45_000;     // public lobby emptied of humans → delist after this
+
+// --- Abandon-close: don't strand an emptied public room in the open-games index ----
+// True when at least one non-bot player is currently connected. Drives the grace-window
+// delist: a public Arena room with no connected human (host left/refreshed) arms a timer,
+// and only delists if STILL human-empty when it fires — so a refresh/hibernation WS blip
+// (which momentarily flips the host `connected: false`) doesn't yank the listing.
+export function hasConnectedHuman(players: Pick<PlayerState, "connected" | "isBot">[]): boolean {
+  return players.some((p) => p.connected && !p.isBot);
+}
 
 // --- Slice 1: first-solve ends the race --------------------------------------
 // Given the players and the username who just became the FIRST winner, return the

@@ -346,6 +346,14 @@ export default {
       return env.ASSETS.fetch(new Request(url.origin + "/index.html"));
     }
 
+    // Arena lobby (/arena): a real, refresh-survivable client route. Serve the SPA shell
+    // so a hard load / refresh / share resolves; the client router then renders the open-
+    // games view. Explicit (not left to asset fallback) to match every other client route
+    // here and to not depend on an out-of-band not_found_handling setting (see wrangler.jsonc).
+    if (url.pathname === "/arena") {
+      return env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+    }
+
     // Profile + room + challenge pages: serve SPA shell with per-route meta injected.
     const profileMatch = url.pathname.match(PROFILE_RE);
     const roomMatch = url.pathname.match(ROOM_RE);
