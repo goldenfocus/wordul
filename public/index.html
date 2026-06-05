@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<!-- No maximum-scale / user-scalable=no: they kill pinch-zoom (respected in standalone
+     mode). Input auto-zoom is prevented by the 16px font floor (test/ios-input-zoom.test.ts). -->
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title data-meta="title">Wordul — race your friends on the same word</title>
 <meta name="description" data-meta="description" content="Wordul — race your friends on the same word. Pick a username, get a profile, keep score across games." />
 <link rel="canonical" data-meta="canonical" href="https://wordul.com/" />

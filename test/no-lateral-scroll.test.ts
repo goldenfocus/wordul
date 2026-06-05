@@ -39,3 +39,46 @@ describe("no-lateral-scroll guard (overflow-x clip on root/body)", () => {
     });
   }
 });
+
+// `.screen.home` and `#hub` are flex items in centered columns, so by default they
+// shrink-wrap to their content's INTRINSIC width — and a horizontal rail of
+// `flex: 0 0 auto` cards (the worlds strip) inflates that past the phone viewport
+// (488px on a 393px iPhone, Jun 5 2026). With overflow-x:clip on body, the cut-off
+// content isn't even scrollable — it's unreachable. The fix is claiming the parent
+// width with `width: 100%` OUTSIDE any media query (the desktop block already had
+// it; mobile didn't). This guard fails if those base-level width claims are removed.
+describe("home shell claims the viewport width on mobile (no shrink-wrap overflow)", () => {
+  // Strip @media blocks (balanced-brace scan) so we only see base-level rules.
+  function stripMediaBlocks(css: string): string {
+    let out = "";
+    let i = 0;
+    while (i < css.length) {
+      const at = css.indexOf("@media", i);
+      if (at === -1) { out += css.slice(i); break; }
+      out += css.slice(i, at);
+      let j = css.indexOf("{", at);
+      let depth = 1;
+      while (depth > 0 && ++j < css.length) {
+        if (css[j] === "{") depth++;
+        else if (css[j] === "}") depth--;
+      }
+      i = j + 1;
+    }
+    return out;
+  }
+
+  const base = stripMediaBlocks(stripComments(readFileSync(join(PUBLIC, "style.css"), "utf8")));
+
+  for (const sel of [".screen.home", "#hub"]) {
+    it(`${sel} has a base-level (non-@media) width: 100% rule`, () => {
+      const re = new RegExp(
+        sel.replace(/[.#]/g, "\\$&") + String.raw`[^{},]*\{[^}]*width\s*:\s*100%`,
+      );
+      expect(
+        re.test(base),
+        `style.css: ${sel} must claim width:100% outside @media, or the home shell ` +
+          `shrink-wraps wider than phone viewports (worlds-rail intrinsic width).`,
+      ).toBe(true);
+    });
+  }
+});

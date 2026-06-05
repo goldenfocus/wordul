@@ -2361,6 +2361,15 @@ body.hub-home .topbar-stats { display: flex; }
 /* ═══ Home redesign: identity on top · one calm card · refined modes · Stats page ═══
    ADHD-calm: one focal point, generous breathing room, no instructional copy, no
    OS emoji (inline SVG glyphs), the card's glow IS the invitation to play. */
+
+/* .screen.home and #hub are flex items in centered columns, so by default they
+   shrink-wrap to their content's INTRINSIC width — and the worlds rail's
+   `flex: 0 0 auto` cards inflate that past phone viewports (488px on a 393px
+   iPhone; overflow-x:clip then made the cut-off content unreachable). Claim the
+   width at EVERY size, not just desktop. max-width still caps it. */
+.screen.home { width: 100%; }
+#hub { width: 100%; }
+
 .hub-panel.daily { max-width: 460px; margin: 0 auto; width: 100%; }
 
 .daily-head { padding: 10px 2px 2px; }
@@ -2376,10 +2385,8 @@ body.hub-home .topbar-stats { display: flex; }
    the left, "other ways to play" + recent on the right — so it fills the horizontal
    space instead of floating in a void. Mobile (< 860px) is byte-for-byte unchanged. ── */
 @media (min-width: 860px) {
-  /* .screen.home is a flex item that shrink-wraps to its content; max-width only caps it, so
-     it needs width:100% to actually claim the desktop width (and #hub to fill it). */
-  .screen.home { max-width: 940px; width: 100%; }
-  #hub { width: 100%; }
+  /* width:100% is claimed at base level above; here we only lift the cap. */
+  .screen.home { max-width: 940px; }
   .hub-content { padding-left: 24px; padding-right: 24px; }
   .hub-panel.daily {
     max-width: 940px;
