@@ -1910,6 +1910,23 @@ body.reduced-motion .gold-floater { display: none !important; }
 .profile-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .profile-list li { font-size: 15px; }
 .profile-loading { padding: 20px 0; }
+
+/* Recent games — daily rows expand to that player's letterless board; rooms stay links. */
+.profile-games .profile-game { font-size: 15px; }
+.profile-game-link, .profile-game-static { display: inline-block; }
+.profile-game-static { color: var(--fg); }
+.profile-game-row {
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  width: 100%; text-align: left; padding: .35rem .5rem; margin: 0;
+  background: var(--bg-card); border: none; border-radius: .5rem;
+  color: var(--fg); font: inherit; cursor: pointer;
+}
+.profile-game-row:hover { background: color-mix(in oklab, var(--accent) 10%, var(--bg-card)); }
+.profile-game-chev { color: var(--muted); transition: transform .15s ease; }
+.profile-game-row.is-open .profile-game-chev { transform: rotate(90deg); }
+.profile-game-board { padding: .5rem 0 .25rem; display: flex; justify-content: center; }
+.profile-game-board .muted, .profile-game-board p { margin: 0; }
+
 @media (max-width: 480px) {
   .profile-stats { grid-template-columns: repeat(2, 1fr); }
 }

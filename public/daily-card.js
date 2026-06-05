@@ -59,7 +59,7 @@ export function goldValue(n) { return `${Number(n).toLocaleString()}${COIN}`; }
 // the public profile, so today's answer can't leak). Empty → nothing.
 const STAMP_CLS = { g: "is-correct", y: "is-present", x: "is-absent" };
 function escLetter(c) { return String(c || "").replace(/[^a-zA-Z]/g, ""); }
-function renderStamp(grid, words) {
+export function renderStamp(grid, words) {
   if (!Array.isArray(grid) || grid.length === 0) return "";
   const hasLetters = Array.isArray(words) && words.length > 0;
   const rows = grid.map((r, ri) => {
