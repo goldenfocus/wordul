@@ -601,6 +601,13 @@ export default {
         .transform(shell);
     }
 
+    // A user's wordul gallery: /@<user>/worduls (must precede ROOM_RE — "worduls" is a
+    // reserved slug, never a real room). Serves the SPA shell with gallery meta.
+    const galleryMatch = url.pathname.match(/^\/@([a-z0-9_-]{3,20})\/worduls$/);
+    if (galleryMatch) {
+      return injectGalleryMeta(env, url, normalizeUsername(galleryMatch[1]));
+    }
+
     // Profile + room + challenge pages: serve SPA shell with per-route meta injected.
     const profileMatch = url.pathname.match(PROFILE_RE);
     const roomMatch = url.pathname.match(ROOM_RE);
@@ -638,6 +645,8 @@ async function sitemap(env: Env, origin: string): Promise<Response> {
     for (const k of page.keys) {
       if (k.name.startsWith("user:")) urls.push(`${origin}/@${k.name.slice(5)}`);
       else if (k.name.startsWith("room:")) urls.push(`${origin}/@${k.name.slice(5)}`);
+      // wordul:/@owner/slug — published worduls (spoiler-safe; the URL carries no word).
+      else if (k.name.startsWith("wordul:")) urls.push(`${origin}${k.name.slice("wordul:".length)}`);
     }
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
@@ -866,8 +875,26 @@ async function injectMeta(
     }
   } else if (roomMatch) {
     const [, owner, slug] = roomMatch;
-    title = `${slug.replace(/-/g, " ")} — a Wordul room by ${owner}`;
-    description = `Join ${owner}'s Wordul room and race on the same word.`;
+    // A published wordul gets its own spoiler-safe OG meta (vibeTitle + author, NEVER the
+    // word — the /list projection has no word). Falls back to generic room meta otherwise.
+    let isWordul = false;
+    try {
+      const o = normalizeUsername(owner);
+      const res = await env.WORDULS.get(env.WORDULS.idFromName(o)).fetch(`https://do/list?owner=${o}`);
+      if (res.ok) {
+        const { worlds } = (await res.json()) as { worlds: Array<{ slug: string; vibeTitle: string }> };
+        const card = worlds.find((w) => w.slug === slug);
+        if (card) {
+          isWordul = true;
+          title = `${card.vibeTitle} — a Wordul by @${owner}`;
+          description = `Play “${card.vibeTitle}”, an original wordul forged by @${owner}. One word, one shot.`;
+        }
+      }
+    } catch { /* fall through to room meta */ }
+    if (!isWordul) {
+      title = `${slug.replace(/-/g, " ")} — a Wordul room by ${owner}`;
+      description = `Join ${owner}'s Wordul room and race on the same word.`;
+    }
   } else if (profileMatch) {
     const [, name] = profileMatch;
     // Best-effort: a DO hiccup or odd payload must degrade to default meta, not 500 the page.
@@ -889,6 +916,23 @@ async function injectMeta(
     }
   }
 
+  const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
+  const canonical = url.origin + url.pathname;
+  return new HTMLRewriter()
+    .on('[data-meta="title"]', new TextSetter(title))
+    .on('[data-meta="og:title"]', new AttrSetter("content", title))
+    .on('[data-meta="description"]', new AttrSetter("content", description))
+    .on('[data-meta="og:description"]', new AttrSetter("content", description))
+    .on('[data-meta="canonical"]', new AttrSetter("href", canonical))
+    .on('[data-meta="og:url"]', new AttrSetter("content", canonical))
+    .transform(shell);
+}
+
+// Serve the SPA shell for a user's wordul gallery (/@<user>/worduls) with gallery meta.
+// The client (app.js → worduls-gallery.js) fetches + paints the cards.
+async function injectGalleryMeta(env: Env, url: URL, owner: string): Promise<Response> {
+  const title = `@${owner}'s worduls`;
+  const description = `Play the worduls @${owner} has forged — original word puzzles, each with its own vibe.`;
   const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
   const canonical = url.origin + url.pathname;
   return new HTMLRewriter()

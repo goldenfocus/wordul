@@ -124,6 +124,8 @@ function parseRoute() {
   if (location.pathname === "/worlds") return { kind: "worlds" };
   const worldSlug = worldSlugFromPath(location.pathname);
   if (worldSlug) return { kind: "world", slug: worldSlug };
+  const gallery = location.pathname.match(/^\/@([a-z0-9_-]{3,20})\/worduls$/);
+  if (gallery) return { kind: "worduls-gallery", username: gallery[1] };
   const room = location.pathname.match(ROOM_RE);
   if (room) return { kind: "room", owner: room[1], slug: room[2] };
   const prof = location.pathname.match(PROFILE_RE);
@@ -4984,6 +4986,34 @@ function showProfile(username) {
   renderProfile(username, $("#profileMount"));
 }
 
+// A user's published worduls gallery (/@<user>/worduls). Paints a back link + a mount
+// container into #app, then lazy-loads the gallery module to fetch + render the cards.
+function showWordulsGallery(username) {
+  leaveRoom();
+  const topBtn = $("#chatTopBtn");
+  if (topBtn) topBtn.hidden = true;
+  document.title = `@${username}'s worduls — Wordul`;
+  applyEdition(getActiveEditionId());
+  const app = $("#app");
+  app.innerHTML = "";
+  document.body.classList.remove("hub-home");
+
+  const screen = document.createElement("section");
+  screen.className = "screen worduls-gallery-screen";
+  const back = document.createElement("a");
+  back.href = "/"; back.className = "link worduls-back"; back.textContent = "← Home";
+  back.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); });
+  const root = document.createElement("div");
+  root.id = "worduls-root";
+  root.dataset.spaMounted = "1"; // suppress the module's standalone self-mount
+  screen.append(back, root);
+  app.append(screen);
+
+  import("/worduls-gallery.js")
+    .then((m) => m.renderWorduls(username, root))
+    .catch((e) => { root.innerHTML = `<p class="empty">Could not load worduls.</p>`; console.error("gallery load failed", e); });
+}
+
 // Breadcrumb trail under the brand — the one place that always knows "where am I".
 // Home shows nothing (the brand alone is enough); rooms/profiles show a clickable
 // "Home › <here>" so you can never get stranded deep in the app.
@@ -5181,6 +5211,8 @@ function route() {
     } else {
       showRoomEntry(r.owner, r.slug);
     }
+  } else if (r.kind === "worduls-gallery") {
+    showWordulsGallery(r.username);
   } else if (r.kind === "profile") {
     showProfile(r.username);
   } else {
