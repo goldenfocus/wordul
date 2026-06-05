@@ -33,6 +33,7 @@ import { pickInspire, pickForfeit } from "/inspire.js";
 import { renderSettlement } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
+import { triesFor } from "/lobby-view.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
 
@@ -802,6 +803,7 @@ function showRoom(owner, slug) {
   });
   wireChat();
   wireRoomTabs();
+  wireTriesBadge();
   buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
   connect();
 }
@@ -2607,7 +2609,15 @@ function render() {
   // Tries badge rides above the single-row lobby board (×N tries / word-length control,
   // wired in a later task) — it only makes sense while waiting in the lobby.
   const triesBadge = $("#triesBadge");
-  if (triesBadge) triesBadge.hidden = snap.phase !== "lobby";
+  if (triesBadge) {
+    triesBadge.hidden = snap.phase !== "lobby";
+    // Reflect the room's current word length every render so a remote change
+    // (another player resizing the words) updates this viewer's badge.
+    const len = snap.wordLength;
+    const tbX = $("#tbX"); if (tbX) tbX.textContent = `×${triesFor(len)}`;
+    const tbLetters = $("#tbLetters"); if (tbLetters) tbLetters.textContent = `${len} letters`;
+    triesBadge.classList.toggle("locked", !canEditLength(snap));
+  }
 
   // Lobby rail: only while genuinely waiting in a multiplayer lobby (not the daily, which
   // auto-starts). Any other phase or the daily tears it down so its poll can't leak.
@@ -2861,6 +2871,58 @@ function syncLengthSelect(snap) {
   }
   sel.disabled = snap.phase !== "lobby"; // can't resize the words under a live/finished board
   if (parseInt(sel.value, 10) !== snap.wordLength) sel.value = String(snap.wordLength);
+}
+
+// Length can only be changed while genuinely in a multiplayer lobby — same gate the
+// server enforces in onSetLength (phase must be "lobby", never the daily, whose word is
+// locked by the World). Mirrors syncLengthSelect's disabled rule (phase !== "lobby").
+function canEditLength(snap) {
+  return !!snap && snap.phase === "lobby" && !game.isDaily;
+}
+
+// Clamp n to the supported range, and if it changed from the room's current length,
+// tell the server (set_length) and optimistically repaint the badge for instant feedback.
+function setLen(n) {
+  const snap = game.snapshot;
+  if (!canEditLength(snap)) return;
+  const min = SUPPORTED_LENGTHS[0];
+  const max = SUPPORTED_LENGTHS[SUPPORTED_LENGTHS.length - 1];
+  const clamped = Math.max(min, Math.min(max, n));
+  if (clamped === snap.wordLength) return;
+  setPreferredLength(clamped);
+  send({ type: "set_length", wordLength: clamped });
+  const tbX = $("#tbX"); if (tbX) tbX.textContent = `×${triesFor(clamped)}`;
+  const tbLetters = $("#tbLetters"); if (tbLetters) tbLetters.textContent = `${clamped} letters`;
+}
+
+// The #triesBadge doubles as the word-length control: tap to reveal −/+, or press-drag ↕
+// (each ~24px = ±1 letter). The −/+ buttons step by one. Wired once per room mount.
+function wireTriesBadge() {
+  const badge = $("#triesBadge");
+  if (!badge || badge.dataset.wired) return;
+  badge.dataset.wired = "1";
+  const curLen = () => (game.snapshot ? game.snapshot.wordLength : DEFAULT_LENGTH);
+  let dragging = false, startY = 0, startLen = 0, moved = 0;
+  badge.addEventListener("pointerdown", (e) => {
+    if (!canEditLength(game.snapshot)) return;
+    if (e.target.closest(".tb-pm")) return; // −/+ buttons handle their own taps
+    dragging = true; startY = e.clientY; startLen = curLen(); moved = 0;
+    try { badge.setPointerCapture(e.pointerId); } catch {}
+    badge.classList.add("editing");
+  });
+  badge.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const dy = startY - e.clientY;
+    moved = Math.max(moved, Math.abs(dy));
+    setLen(startLen + Math.round(dy / 24));
+  });
+  badge.addEventListener("pointerup", () => {
+    if (!dragging) return;
+    dragging = false;
+    if (moved < 6) badge.classList.toggle("editing"); // a tap (no real drag) toggles edit mode
+  });
+  $("#tbMinus")?.addEventListener("click", (e) => { e.stopPropagation(); setLen(curLen() - 1); });
+  $("#tbPlus")?.addEventListener("click", (e) => { e.stopPropagation(); setLen(curLen() + 1); });
 }
 
 // The lobby gear — one bare ⚙ that opens Settings (where length + theme live). The
