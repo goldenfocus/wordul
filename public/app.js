@@ -1135,12 +1135,17 @@ function connectChallenge(id) {
 // first thing that happens — no hunting for a button. MUST be called inside a
 // user-gesture call stack (a click) for navigator.share to be allowed.
 async function shareRoomInvite() {
-  const inviteUrl = `${location.origin}/@${game.owner}/${game.slug}`;
+  // A seeded arena room publishes its word as a challenge — share THAT (it works for
+  // unlimited friends, with ghost replay), never the 1-human room link.
+  const cid = game.snapshot && game.snapshot.shareChallengeId;
+  const inviteUrl = cid
+    ? `${location.origin}/c/${cid}`
+    : `${location.origin}/@${game.owner}/${game.slug}`;
   if (typeof navigator.share === "function") {
     try {
       await navigator.share({
         title: `Wordul — ${game.name || game.slug}`,
-        text: `Race me on Wordul in ${game.owner}'s room!`,
+        text: cid ? "Race my word on Wordul — beat my ghost!" : `Race me on Wordul in ${game.owner}'s room!`,
         url: inviteUrl,
       });
       return;
@@ -1173,7 +1178,11 @@ function renderRoomHeader() {
 // Copy the room link with a subtle confirmation. The whole share/copy surface
 // collapsed into one gesture: tap the name.
 async function copyRoomLink() {
-  const url = `${location.origin}/@${game.owner}/${game.slug}`;
+  // Same rule as shareRoomInvite: a seeded arena room hands out its challenge link.
+  const cid = game.snapshot && game.snapshot.shareChallengeId;
+  const url = cid
+    ? `${location.origin}/c/${cid}`
+    : `${location.origin}/@${game.owner}/${game.slug}`;
   try {
     await navigator.clipboard.writeText(url);
     toast("Link copied ✓", { duration: 1200 });
@@ -4102,8 +4111,9 @@ async function prepareShareCard() {
   const score = won ? `${me.guesses.length}/${maxG}` : `X/${maxG}`;
 
   // Mint (or reuse) a challenge for THIS word so the card's CTA is a real replay link.
-  // If we arrived via a challenge link already, reuse that id (don't re-mint the same word).
-  let challengeId = game.challengeId;
+  // If we arrived via a challenge link already, reuse that id (don't re-mint the same
+  // word). A seeded arena room already published one WITH the ghost tape — prefer it.
+  let challengeId = game.challengeId || snap.shareChallengeId || null;
   if (!challengeId) {
     try {
       const res = await fetch("/api/challenge", {
