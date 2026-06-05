@@ -47,6 +47,23 @@ body {
   display: flex;
   flex-direction: column;
 }
+/* The game shell is a game, not a document. iOS long-press "smart selection" snaps to
+   the NEAREST selectable text even when the touched element is user-select:none — so
+   guarding .keyboard alone (Jun 2) still let a long-press select tiles/names/log lines
+   and float the native Copy/Look Up edit menu over the keyboard mid-race (Jun 5 bug).
+   Kill selection at the root; docs pages (.howto/.studio) keep normal text selection.
+   Safari needs the -webkit pair — bare user-select only works on iOS >= 18.4. */
+body:not(.howto):not(.studio) {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+/* Copyable surfaces opt back in. The input/textarea line is load-bearing: an inherited
+   -webkit-user-select:none can drop the caret in iOS text fields. */
+input, textarea, .chat-log {
+  user-select: text;
+  -webkit-user-select: text;
+}
 
 /* Topbar */
 .topbar {
