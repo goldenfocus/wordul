@@ -2,9 +2,11 @@
 import { describe, it, expect } from "vitest";
 import { wireCardArt, aiLookupHref } from "/endcard.js";
 
-// End-game word card dedup: the OG tile art already shows the word (tiles) and the
-// definition (tagline), so the duplicate text starts hidden and only returns when
-// the art can't load. These tests lock the "image is hero, text is parachute" contract.
+// End-game word card dedup: the OG tile art shows the word (tiles) and the definition
+// (tagline), so once the art has LOADED the duplicate text hides. Until then the text
+// stays visible — on a slow connection the old "hide immediately, restore on error"
+// contract left the panel blank for the whole load (the empty THE WORD bug, Jun 5).
+// New contract: text is the default, art replaces it only when it actually paints.
 function setup() {
   const preview = document.createElement("img");
   const big = document.createElement("div");
@@ -14,15 +16,32 @@ function setup() {
 }
 
 describe("wireCardArt", () => {
-  it("hides the duplicate text while the card art is the hero", () => {
+  it("keeps the text visible at wire time (art not loaded yet)", () => {
     const { preview, big, def } = setup();
     wireCardArt(preview, [big, def]);
-    expect(big.classList.contains("ewc-text-fallback")).toBe(true);
-    expect(def.classList.contains("ewc-text-fallback")).toBe(true);
+    expect(big.classList.contains("ewc-text-fallback")).toBe(false);
+    expect(def.classList.contains("ewc-text-fallback")).toBe(false);
     expect(document.body.contains(preview)).toBe(true);
   });
 
-  it("on image error: removes the art and brings the text back", () => {
+  it("hides the duplicate text once the art actually loads", () => {
+    const { preview, big, def } = setup();
+    wireCardArt(preview, [big, def]);
+    preview.dispatchEvent(new Event("load"));
+    expect(big.classList.contains("ewc-text-fallback")).toBe(true);
+    expect(def.classList.contains("ewc-text-fallback")).toBe(true);
+  });
+
+  it("hides the text immediately when the art is already cached (complete)", () => {
+    const { preview, big, def } = setup();
+    Object.defineProperty(preview, "complete", { value: true });
+    Object.defineProperty(preview, "naturalWidth", { value: 1200 });
+    wireCardArt(preview, [big, def]);
+    expect(big.classList.contains("ewc-text-fallback")).toBe(true);
+    expect(def.classList.contains("ewc-text-fallback")).toBe(true);
+  });
+
+  it("on image error: removes the art and the text stays", () => {
     const { preview, big, def } = setup();
     wireCardArt(preview, [big, def]);
     preview.dispatchEvent(new Event("error"));
@@ -31,10 +50,20 @@ describe("wireCardArt", () => {
     expect(def.classList.contains("ewc-text-fallback")).toBe(false);
   });
 
+  it("on error after a load already fired: text comes back", () => {
+    const { preview, big, def } = setup();
+    wireCardArt(preview, [big, def]);
+    preview.dispatchEvent(new Event("load"));
+    preview.dispatchEvent(new Event("error"));
+    expect(document.body.contains(preview)).toBe(false);
+    expect(big.classList.contains("ewc-text-fallback")).toBe(false);
+  });
+
   it("tolerates an empty element list (never throws)", () => {
     const { preview } = setup();
     expect(() => {
       wireCardArt(preview, []);
+      preview.dispatchEvent(new Event("load"));
       preview.dispatchEvent(new Event("error"));
     }).not.toThrow();
     expect(document.body.contains(preview)).toBe(false);
