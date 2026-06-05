@@ -66,6 +66,7 @@ describe("presets", () => {
     expect(SHARP_HAND.readPauseMs).toBeLessThan(NOOB_HAND.readPauseMs);
     expect(SHARP_HAND.keyMeanMs).toBeLessThan(NOOB_HAND.keyMeanMs);
     expect(SHARP_HAND.keyJitter).toBeLessThan(NOOB_HAND.keyJitter);
+    expect(SHARP_HAND.hesitateRate).toBeLessThan(NOOB_HAND.hesitateRate);
     expect(SHARP_HAND.backspaceRate).toBeLessThan(NOOB_HAND.backspaceRate);
     expect(SHARP_HAND.clearRate).toBeLessThanOrEqual(NOOB_HAND.clearRate);
   });
@@ -77,5 +78,24 @@ describe("presets", () => {
       noob += timelineMs(planKeystrokes("CRANE", NOOB_HAND, rngFrom(s)));
     }
     expect(sharp / 200).toBeLessThan(noob / 200);
+  });
+});
+
+describe("human variety (not a fixed cadence)", () => {
+  it("with hesitateRate=1 inserts a mid-word pause far longer than a normal keystroke", () => {
+    const profile: RhythmProfile = { ...SHARP_HAND, hesitateRate: 1, backspaceRate: 0, clearRate: 0 };
+    const steps = planKeystrokes("CRANE", profile, rngFrom(7));
+    let maxGap = 0;
+    for (let i = 1; i < steps.length; i++) maxGap = Math.max(maxGap, steps[i].atMs - steps[i - 1].atMs);
+    expect(maxGap).toBeGreaterThan(profile.keyMeanMs * 2); // a real "thinking" pause, not a uniform beat
+  });
+
+  it("produces a different timeline almost every game (no single fixed rhythm)", () => {
+    const sigs = new Set<string>();
+    for (let s = 0; s < 20; s++) {
+      const steps = planKeystrokes("CRANE", NOOB_HAND, rngFrom(s));
+      sigs.add(steps.map((x) => `${x.atMs}:${x.len}`).join(","));
+    }
+    expect(sigs.size).toBeGreaterThan(15); // overwhelmingly unique — the "always the same speed" tell is gone
   });
 });
