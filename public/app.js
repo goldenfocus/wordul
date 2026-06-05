@@ -3992,7 +3992,7 @@ function showWorlds() {
   head.append(kicker, h1);
 
   const tabsBar = document.createElement("div");
-  tabsBar.className = "worlds-tabs";
+  tabsBar.className = "worlds-tabs"; tabsBar.setAttribute("role", "tablist");
   const wall = document.createElement("div");
   wall.className = "worlds-wall"; wall.id = "worldsWall";
 
@@ -4022,11 +4022,17 @@ function showWorlds() {
   TABS.forEach((tab, i) => {
     const btn = document.createElement("button");
     btn.type = "button";
+    btn.setAttribute("role", "tab");
+    btn.setAttribute("aria-selected", i === 0 ? "true" : "false");
     btn.className = "worlds-tab" + (i === 0 ? " is-active" : "");
     btn.textContent = tab.label;
     btn.addEventListener("click", () => {
-      tabsBar.querySelectorAll(".worlds-tab").forEach((b) => b.classList.remove("is-active"));
+      tabsBar.querySelectorAll(".worlds-tab").forEach((b) => {
+        b.classList.remove("is-active");
+        b.setAttribute("aria-selected", "false");
+      });
       btn.classList.add("is-active");
+      btn.setAttribute("aria-selected", "true");
       paintWall(tab.worlds());
     });
     tabsBar.appendChild(btn);
@@ -4058,8 +4064,8 @@ function showWorld(slug) {
   screen.className = "screen world-screen";
 
   const back = document.createElement("a");
-  back.href = "/"; back.className = "link world-back"; back.textContent = "← Home";
-  back.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); });
+  back.href = "/worlds"; back.className = "link world-back"; back.textContent = "← Worlds";
+  back.addEventListener("click", (e) => { e.preventDefault(); navigate("/worlds"); });
 
   const head = document.createElement("header");
   head.className = "world-head";
