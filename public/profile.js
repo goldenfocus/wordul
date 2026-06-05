@@ -11,8 +11,17 @@
 // toPublicGame; recentGameView never reads it either). A player's board is only ever drawn
 // LETTERLESS from solveGrid, and today's daily stays locked until the viewer has played —
 // see profile-core.js for the rules.
-import { recentGameView } from "/profile-core.js";
+import { recentGameView, formatLedgerRow } from "/profile-core.js";
 import { renderStamp } from "/daily-card.js";
+import { t } from "/i18n.js";
+
+// Friendly i18n label for a gold-history part leg ("score"/"daily"/"speed"); unknown legs
+// fall back to their raw label (already a short word from the server).
+const PART_KEY = { score: "gold.history.part.score", daily: "gold.history.part.daily", speed: "gold.history.part.speed" };
+function partLabel(label) {
+  const key = PART_KEY[label];
+  return key ? t(key) : String(label);
+}
 
 const DAILY_SOLVE_LS = "wr.dailySolve"; // mirrors LS.dailySolve in app.js (client-only solve)
 
@@ -53,6 +62,10 @@ export async function renderProfile(username, mountEl) {
     .map((g) => renderRecentGame(recentGameView(g, { today, playedToday })))
     .join("");
 
+  const goldRows = (p.goldHistory || [])
+    .map((tx) => renderGoldRow(formatLedgerRow(tx)))
+    .join("");
+
   mountEl.innerHTML = `
     <h1 class="profile-name">@${escapeHtml(username)}${p.claimed ? ' <span class="claimed-badge" title="Secured account">🔒</span>' : ""}${p.verified ? ' <span class="verified-badge" title="Verified">✔</span>' : ""}</h1>
     <div class="profile-stats">
@@ -64,7 +77,11 @@ export async function renderProfile(username, mountEl) {
     <h2 class="profile-h2">Rooms</h2>
     <ul class="profile-list">${rooms || '<li class="muted">No rooms yet</li>'}</ul>
     <h2 class="profile-h2">Recent games</h2>
-    <ul class="profile-list profile-games">${recent || '<li class="muted">No games yet</li>'}</ul>`;
+    <ul class="profile-list profile-games">${recent || '<li class="muted">No games yet</li>'}</ul>
+    <section id="gold-history">
+      <h2 class="profile-h2">${escapeHtml(t("gold.history.title"))}</h2>
+      <ul class="profile-list gold-history">${goldRows || `<li class="muted">${escapeHtml(t("gold.history.empty"))}</li>`}</ul>
+    </section>`;
 
   // Tap a daily row to expand that player's letterless board (or the "play first" prompt).
   mountEl.querySelectorAll(".profile-game-row").forEach((btn) => {
@@ -77,6 +94,48 @@ export async function renderProfile(username, mountEl) {
       btn.classList.toggle("is-open", opening);
     });
   });
+
+  // Honor a #gold-history deep-link (e.g. from the tappable ◆ HUD): the section is rendered
+  // async after fetch, so the browser's native anchor jump has already missed — scroll now.
+  if (location.hash === "#gold-history") {
+    mountEl.querySelector("#gold-history")?.scrollIntoView({ block: "start" });
+  }
+
+  // Tap a gold-history row WITH parts to reveal its component legs (granular mode).
+  mountEl.querySelectorAll(".gold-row-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const legs = btn.nextElementSibling;
+      if (!legs) return;
+      const opening = legs.hidden;
+      legs.hidden = !opening;
+      btn.setAttribute("aria-expanded", String(opening));
+      btn.classList.toggle("is-open", opening);
+    });
+  });
+}
+
+// One "Gold history" row from a formatLedgerRow() view-model. A row WITH valid parts is a
+// tappable button (▸) that expands into component legs; a flat earning is a static line.
+//   date · 🎁/🏁 label · +N   [▸]
+//     └ score +28 · daily +100 · speed +5
+function renderGoldRow(v) {
+  const head =
+    `<span class="gold-date">${escapeHtml(v.date)}</span>` +
+    `<span class="gold-label">${v.icon} ${escapeHtml(v.label)}</span>` +
+    `<span class="gold-amount">${escapeHtml(v.amount)}</span>`;
+  if (!v.parts.length) {
+    return `<li class="gold-row"><span class="gold-row-static">${head}</span></li>`;
+  }
+  const legs = v.parts
+    .map((p) => `${escapeHtml(partLabel(p.label))} +${Number(p.delta) || 0}`)
+    .join(" · ");
+  return `<li class="gold-row">
+      <button class="gold-row-btn" type="button" aria-expanded="false">
+        ${head}
+        <span class="gold-chev" aria-hidden="true">›</span>
+      </button>
+      <div class="gold-row-legs" hidden>${legs}</div>
+    </li>`;
 }
 
 // One "Recent games" row, built from a recentGameView() view-model.

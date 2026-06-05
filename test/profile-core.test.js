@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { recentGameView, prettyRoomLabel } from "../public/profile-core.js";
+import { recentGameView, prettyRoomLabel, humanizeReason, formatLedgerRow } from "../public/profile-core.js";
 
 const daily = (date, over = {}) => ({
   roomPath: `daily/${date}`, finishedAt: 1, wordLength: 5, result: "won", guesses: 3,
@@ -63,6 +63,76 @@ describe("recentGameView", () => {
     const v = recentGameView(room("crane/snappy-moose"), { today, playedToday: true });
     expect(v.grid).toBeNull();
     expect(v.roomHref).toBe("/@crane/snappy-moose");
+  });
+});
+
+describe("humanizeReason", () => {
+  it("maps the two known mint reasons to friendly labels", () => {
+    expect(humanizeReason("mint:daily")).toBe("Daily solve");
+    expect(humanizeReason("mint:cashout")).toBe("Race win");
+  });
+  it("cleans an unknown reason into a title-case label", () => {
+    expect(humanizeReason("mint:weekly_streak")).toBe("Weekly Streak");
+    expect(humanizeReason("bonus")).toBe("Bonus");
+  });
+  it("never throws on junk", () => {
+    expect(humanizeReason("")).toBe("");
+    expect(humanizeReason(undefined)).toBe("");
+  });
+});
+
+describe("formatLedgerRow", () => {
+  const now = Date.UTC(2026, 5, 5, 12, 0, 0); // 2026-06-05 noon UTC
+
+  it("formats a daily earning with valid parts (icon, label, +amount, parts)", () => {
+    const tx = {
+      token: "gold", delta: 133, reason: "mint:daily", ts: now,
+      parts: [{ label: "score", delta: 28 }, { label: "daily", delta: 100 }, { label: "speed", delta: 5 }],
+    };
+    const row = formatLedgerRow(tx, now);
+    expect(row.icon).toBe("🎁");
+    expect(row.label).toBe("Daily solve");
+    expect(row.amount).toBe("+133");
+    expect(row.parts).toEqual([
+      { label: "score", delta: 28 },
+      { label: "daily", delta: 100 },
+      { label: "speed", delta: 5 },
+    ]);
+  });
+
+  it("formats a race win flat (🏁, no parts)", () => {
+    const tx = { token: "gold", delta: 40, reason: "mint:cashout", ts: now };
+    const row = formatLedgerRow(tx, now);
+    expect(row.icon).toBe("🏁");
+    expect(row.label).toBe("Race win");
+    expect(row.amount).toBe("+40");
+    expect(row.parts).toEqual([]);
+  });
+
+  it("DROPS malformed parts whose Σ ≠ delta (shows the total only)", () => {
+    const tx = {
+      token: "gold", delta: 133, reason: "mint:daily", ts: now,
+      parts: [{ label: "score", delta: 28 }, { label: "daily", delta: 100 }], // sums 128 ≠ 133
+    };
+    const row = formatLedgerRow(tx, now);
+    expect(row.parts).toEqual([]);
+    expect(row.amount).toBe("+133");
+  });
+
+  it("keeps parts when Σ exactly equals delta", () => {
+    const tx = {
+      token: "gold", delta: 128, reason: "mint:daily", ts: now,
+      parts: [{ label: "score", delta: 28 }, { label: "daily", delta: 100 }],
+    };
+    expect(formatLedgerRow(tx, now).parts).toHaveLength(2);
+  });
+
+  it("labels today's earning 'Today' and an older one by month/day", () => {
+    const today = { token: "gold", delta: 10, reason: "mint:cashout", ts: now };
+    const older = { token: "gold", delta: 10, reason: "mint:cashout", ts: Date.UTC(2026, 5, 1, 12, 0, 0) };
+    expect(formatLedgerRow(today, now).date).toBe("Today");
+    expect(formatLedgerRow(older, now).date).not.toBe("Today");
+    expect(formatLedgerRow(older, now).date).toBeTruthy();
   });
 });
 

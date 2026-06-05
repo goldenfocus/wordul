@@ -267,7 +267,9 @@ export function playPayoutSequence(opts = {}) {
   });
 }
 
-// The gold HUD lives in the room header.
+// The gold HUD lives in the room header. It's a tappable button that jumps to the player's
+// public gold history (/@<username>#gold-history) — the ◆ balance is the door to its story.
+// No-op tap when there's no known username (the count-up/animations are untouched either way).
 export function renderGoldHud() {
   const host =
     document.querySelector(".room-header") ||
@@ -279,6 +281,19 @@ export function renderGoldHud() {
     hud = document.createElement("div");
     hud.id = "goldHud";
     hud.className = "gold-hud";
+    hud.setAttribute("role", "button");
+    hud.setAttribute("tabindex", "0");
+    hud.style.cursor = "pointer";
+    hud.setAttribute("aria-label", "View your gold history");
+    const goToHistory = () => {
+      let u = "";
+      try { u = localStorage.getItem("wr.username") || ""; } catch { /* storage off */ }
+      if (u) location.href = `/@${encodeURIComponent(u)}#gold-history`;
+    };
+    hud.addEventListener("click", goToHistory);
+    hud.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goToHistory(); }
+    });
     host.appendChild(hud);
   }
   hud.textContent = `◆ ${getGold()}`;

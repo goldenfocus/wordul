@@ -57,6 +57,16 @@ export const en = {
   "daily.goodySolvedNoGold": "🎉 Solved it! The word was {word}.",
   "daily.goodyMissed": "The word was {word}. +{gold} gold for trying — come back tomorrow.",
   "daily.goodyMissedNoGold": "The word was {word}. Come back tomorrow.",
+  // Gold history (public profile § — read-only earnings, drill into the parts)
+  "gold.history.title": "Gold history",
+  "gold.history.empty": "No gold earned yet — solve a daily.",
+  "gold.history.dateToday": "Today",
+  "gold.history.reason.daily": "Daily solve",
+  "gold.history.reason.cashout": "Race win",
+  "gold.history.part.score": "score",
+  "gold.history.part.daily": "daily",
+  "gold.history.part.speed": "speed",
+
   "daily.storyFallbackTitle": "The story behind the word",
   "daily.storyKicker": "Why this word",
   "daily.keepPlaying": "Keep playing",

@@ -10,6 +10,51 @@
 //   • TODAY's daily stays LOCKED (no colors, no letters) until the viewer has played today,
 //     so a stranger's board can't hint at the live answer. Past dailies + rooms are open.
 
+import { t } from "/i18n.js";
+
+// Known mint reasons → friendly i18n labels; anything else is cleaned into Title Case
+// (split on : _ - , capitalize each word) so an unforeseen reason still reads as a label.
+const REASON_KEY = { "mint:daily": "gold.history.reason.daily", "mint:cashout": "gold.history.reason.cashout" };
+export function humanizeReason(reason) {
+  const key = REASON_KEY[reason];
+  if (key) return t(key);
+  const words = String(reason || "").split(/[:_\-\s]+/).filter(Boolean);
+  if (words[0] === "mint" && words.length > 1) words.shift(); // drop the internal "mint:" prefix
+  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+// A short, human date for a ledger row: "Today" for same-day earnings, else "Mon D"
+// (e.g. "Jun 4"). `now` is injectable for tests; defaults to wall-clock now.
+function ledgerDate(ts, now = Date.now()) {
+  const d = new Date(Number(ts) || 0);
+  const today = new Date(now);
+  const sameDay =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+  if (sameDay) return t("gold.history.dateToday");
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// View-model for one gold-history row. The server ships { delta, reason, ts, ref?, parts? }
+// with Σ parts === delta when present; we re-verify that invariant on the client and DROP a
+// malformed parts (show the flat total only) — defense-in-depth against a bad/old record.
+//   → { icon, label, date, amount, parts }
+export function formatLedgerRow(tx, now = Date.now()) {
+  const delta = Number(tx?.delta) || 0;
+  const icon = tx?.reason === "mint:cashout" ? "🏁" : "🎁";
+  const raw = Array.isArray(tx?.parts) ? tx.parts : [];
+  const sum = raw.reduce((s, p) => s + (Number(p?.delta) || 0), 0);
+  const parts = raw.length && sum === delta ? raw : [];
+  return {
+    icon,
+    label: humanizeReason(tx?.reason),
+    date: ledgerDate(tx?.ts, now),
+    amount: `+${delta}`,
+    parts,
+  };
+}
+
 // Turn a room slug ("snappy-moose") into a spaced Title Case label ("Snappy Moose").
 export function prettyRoomLabel(slug) {
   return String(slug || "")
