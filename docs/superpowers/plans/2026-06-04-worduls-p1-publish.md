@@ -24,7 +24,49 @@ The codebase already has two "world" types. **Do not reuse either** for this fea
 
 ---
 
+## Coexistence with the live "Worlds" editions system (Plan 2) — READ
+
+Plan 2 (the global **`WorldDef` editions browser**, `src/worlds.ts`) is **LIVE on prod** as of
+2026-06-05 (deployed via the sanctioned `npm run deploy` fallback while the CI Cloudflare secret is
+unset; re-verified on wordul.com):
+
+- `/worlds` → "Browse Worlds — Wordul" ✓ · `/w/jackpot`, `/w/arcade` → per-World SEO titles ✓
+- `public/world-card.js` served ✓ · `paintEditionVars` in `edition.js` ✓ · Worlds strip/theater CSS ✓
+- All **7 worlds in the sitemap** ✓
+
+This P1 plan must slot in **next to** that system, not on top of it. Verified route map (disjoint):
+
+| URL space | Owner | Status |
+|---|---|---|
+| `/worlds`, `/w/<slug>` | **editions** (`WorldDef`, `worlds.ts`, `WORLD_RE` worker.ts:25/462) | LIVE — do not touch |
+| `/@you/<slug>`, `/@you/worduls` | **worduls** (this plan) | new |
+| `/api/worduls`, `/api/worduls/<owner>[/<slug>]` | **worduls** (this plan) | new |
+
+**Correction vs spec §6 — API namespace.** The spec wrote the worduls API as `/api/worlds`. The
+editions system now owns the "worlds" URL brand (`/worlds`, `/w/`), so **this plan renames the worduls
+API to `/api/worduls*`** to match the `Worduls`/`WORDULS` DO and avoid a future collision if the
+editions browser ever adds a backing API. `/api/worlds*` is currently free (grep-verified), so this is
+a clean, forward-safe choice. **Everywhere the tasks below say `/api/worlds`, read `/api/worduls`.**
+
+**Correction — test file location (applies to EVERY task).** This repo keeps tests in
+`test/*.test.ts` importing `../src/...` (e.g. `test/daily-core.test.ts`, `test/user-h2h.test.ts`,
+`test/worlds.test.ts`). The task snippets below show `src/*.test.ts` with `./` imports — that is
+**wrong**. Create every test under `test/` and use `../src/...` imports. (`vitest` globs `test/`.)
+**Source** files (`wordul-core.ts`, `worduls.ts`, `worduls-routes.ts`) still go in `src/`.
+
+**Ops caveat (colony-wide).** CI currently **skips the Cloudflare deploy** (no `CLOUDFLARE_API_TOKEN`
+secret), so prod only advances when someone runs `npm run deploy` / `/push`. When P1 ships, deploy
+explicitly — and ideally set the CI secret first so prod stops drifting behind `main`. Other agents'
+commits that landed on `main` after the last manual deploy may not be live yet.
+
+---
+
 ## Prerequisite gate (MUST pass before Task 1)
+
+> **Status 2026-06-05: GATE ALREADY SATISFIED.** Re-verified against `origin/main`:
+> `src/account-crypto.ts` (`hashToken`) is present, and `src/user.ts` has the
+> `POST .../account/verify-session` → `{valid}` route (user.ts:200-209). The accounts auth layer is
+> on main. The check below is now a guard, not a blocker — run it, expect both PRESENT, proceed.
 
 - [ ] **Confirm the accounts auth layer is on `origin/main`.**
 
@@ -50,18 +92,18 @@ and `hashToken` (`src/account-crypto.ts`) exist.
 
 **Create:**
 - `src/wordul-core.ts` — pure, CF-free: `Wordul` type, `normalizeWordul`, `slugify`, `RESERVED_SLUGS`, `passesContentGate` (no-op P1), `wordulToWorld` synthesizer.
-- `src/wordul-core.test.ts` — unit tests for the above.
-- `src/worduls.ts` — `Worduls` DurableObject (storage, publish/list/get/patch/resolve).
-- `src/worduls.test.ts` — DO behavior tests.
+- `test/wordul-core.test.ts` — unit tests for the above (`../src/...` imports).
+- `src/worduls.ts` — `Worduls` DurableObject (storage, publish/list/get/patch/resolve/**play**).
+- `test/worduls.test.ts` — DO behavior tests (`../src/...` imports).
 - `public/wordul-publish.js` — client: build wordul from Vibe-Studio state, slug confirm, POST publish, success/share screen.
 - `public/worduls-gallery.js` — client: render `/@you/worduls` gallery.
 
 **Modify:**
 - `src/daily-core.ts` — extract shared `normalizeWorldBundle`; `normalizeWorld` delegates to it.
-- `src/daily-core.test.ts` — add a test that `normalizeWorld` still passes (regression guard).
+- `test/daily-core.test.ts` — add a test that `normalizeWorld` still passes (regression guard).
 - `src/types.ts` — add `WORDULS` to `Env`; add reserved `follows`/`followers` to `UserProfile`.
 - `src/user-core.ts` — seed `follows`/`followers` in `freshProfile`/`healProfile`.
-- `src/worker.ts` — routes `POST/GET/PATCH /api/worlds...`, owner-gate, `/@you/worduls` + wordul SSR meta.
+- `src/worker.ts` — routes `POST/GET/PATCH /api/worduls...`, owner-gate, `/@you/worduls` + wordul SSR meta, sitemap.
 - `src/room.ts` — `seedWordulIfNeeded` first-contact seam; call it alongside `seedDailyIfNeeded`.
 - `wrangler.jsonc` — `WORDULS` DO binding + migration with `new_sqlite_classes: ["Worduls"]`.
 - `public/vibe-studio.html` — enable the Submit seam; load `wordul-publish.js`.
@@ -72,24 +114,46 @@ and `hashToken` (`src/account-crypto.ts`) exist.
 ## Task 1: Extract shared `normalizeWorldBundle` from `normalizeWorld`
 
 **Files:**
-- Modify: `src/daily-core.ts` (the `normalizeWorld` function ~line 111)
-- Test: `src/daily-core.test.ts`
+- Modify: `src/daily-core.ts` (the `normalizeWorld` function, **line 111** — verified)
+- Test: `test/daily-core.test.ts` (exists — append a `describe`)
 
 - [ ] **Step 1: Write a regression test that locks current `normalizeWorld` behavior**
 
-Add to `src/daily-core.test.ts`:
+Add to the **existing** `test/daily-core.test.ts` (it already exists; append a new `describe`).
+This test is the ONLY safety net for the extraction — so it must lock **every** field the bundle
+touches (word, edition, voice, rows, invented, colorScheme, glow, vibeTitle) **and** every field that
+must stay in `normalizeWorld` and NOT leak into the bundle (date, bonusWord, curator). A thin test
+here lets the refactor silently drop `colorScheme`/`glow`/`vibeTitle`/`bonusWord`/`curator`.
 ```ts
 import { describe, it, expect } from "vitest";
-import { normalizeWorld } from "./daily-core.ts";
+import { normalizeWorld } from "../src/daily-core.ts";
 
 describe("normalizeWorld (regression after bundle extraction)", () => {
-  it("accepts a valid dated world and defaults edition/voice/rows", () => {
+  it("defaults edition/voice/rows + accepts a valid dated world", () => {
     const w = normalizeWorld({ date: "2026-06-10", word: "ember", story: { title: "Why", body: "B" } });
     expect(w).not.toBeNull();
     expect(w!.word).toBe("EMBER");
     expect(w!.edition).toBe("default");
     expect(w!.voice).toBe("yang");
     expect(w!.rows).toBe(6);
+  });
+  it("preserves the FULL playable + dated payload (anti-drop guard)", () => {
+    const w = normalizeWorld({
+      date: "2026-06-10", word: "ember", invented: false, voice: "luna", rows: 8,
+      vibeTitle: "Embers", bonusWord: "glow",
+      story: { title: "Why", body: "B", tip: "warm" },
+      colorScheme: { a1: "#012", a2: "#345", a3: "#678" },
+      glow: { atmosphere: 0.5, header: 0.2 },
+      curator: { username: "zang", message: "hi" },
+    })!;
+    expect(w.voice).toBe("luna");
+    expect(w.rows).toBe(8);
+    expect(w.vibeTitle).toBe("Embers");
+    expect(w.bonusWord).toBe("GLOW");
+    expect(w.story.tip).toBe("warm");
+    expect(w.colorScheme).toEqual({ a1: "#012", a2: "#345", a3: "#678" });
+    expect(w.glow).toEqual({ atmosphere: 0.5, header: 0.2 });
+    expect(w.curator).toEqual({ username: "zang", message: "hi" });
   });
   it("rejects a bad date", () => {
     expect(normalizeWorld({ date: "nope", word: "ember", story: { title: "t", body: "b" } })).toBeNull();
@@ -105,7 +169,7 @@ describe("normalizeWorld (regression after bundle extraction)", () => {
 
 - [ ] **Step 2: Run the test to confirm current behavior passes**
 
-Run: `npx vitest run src/daily-core.test.ts`
+Run: `npx vitest run test/daily-core.test.ts`
 Expected: PASS (these assert today's behavior).
 
 - [ ] **Step 3: Extract `normalizeWorldBundle` and make `normalizeWorld` delegate**
@@ -165,13 +229,14 @@ fields. Keep the existing `date` (`DATE_RE`) check, `edition` default, `bonusWor
 
 - [ ] **Step 4: Run the regression test + the full daily-core suite**
 
-Run: `npx vitest run src/daily-core.test.ts`
-Expected: PASS (behavior unchanged).
+Run: `npx vitest run test/daily-core.test.ts`
+Expected: PASS (behavior unchanged). If `colorScheme`/`glow`/`vibeTitle`/`bonusWord`/`curator` now
+fail, the extraction dropped a field — fix the delegation before moving on.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/daily-core.ts src/daily-core.test.ts
+git add src/daily-core.ts test/daily-core.test.ts
 git commit -m "refactor(daily): extract normalizeWorldBundle shared validator"
 ```
 
@@ -181,14 +246,14 @@ git commit -m "refactor(daily): extract normalizeWorldBundle shared validator"
 
 **Files:**
 - Create: `src/wordul-core.ts`
-- Test: `src/wordul-core.test.ts`
+- Test: `test/wordul-core.test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
-`src/wordul-core.test.ts`:
+`test/wordul-core.test.ts`:
 ```ts
 import { describe, it, expect } from "vitest";
-import { slugify, RESERVED_SLUGS, normalizeWordul, wordulToWorld, passesContentGate, type Wordul } from "./wordul-core.ts";
+import { slugify, RESERVED_SLUGS, normalizeWordul, wordulToWorld, passesContentGate, type Wordul } from "../src/wordul-core.ts";
 
 describe("slugify", () => {
   it("lowercases, hyphenates, strips junk", () => {
@@ -254,8 +319,8 @@ describe("passesContentGate (P1 no-op)", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `npx vitest run src/wordul-core.test.ts`
-Expected: FAIL ("Cannot find module './wordul-core.ts'").
+Run: `npx vitest run test/wordul-core.test.ts`
+Expected: FAIL ("Cannot find module '../src/wordul-core.ts'").
 
 - [ ] **Step 3: Implement `src/wordul-core.ts`**
 
@@ -368,13 +433,13 @@ export function wordulToWorld(w: Wordul): World {
 
 - [ ] **Step 4: Run tests to verify pass**
 
-Run: `npx vitest run src/wordul-core.test.ts`
+Run: `npx vitest run test/wordul-core.test.ts`
 Expected: PASS (all cases).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/wordul-core.ts src/wordul-core.test.ts
+git add src/wordul-core.ts test/wordul-core.test.ts
 git commit -m "feat(worduls): pure Wordul type, normalizeWordul, slugify, synthesizer"
 ```
 
@@ -384,8 +449,14 @@ git commit -m "feat(worduls): pure Wordul type, normalizeWordul, slugify, synthe
 
 **Files:**
 - Create: `src/worduls.ts`
-- Test: `src/worduls.test.ts`
+- Test: `test/worduls.test.ts`
 - Modify: `src/types.ts` (add `WORDULS` to `Env`), `wrangler.jsonc`
+
+> **Blocker fix — `plays` is NOT counted on `/resolve`.** A wordul at `/@owner/<slug>` is ONE shared
+> room DO, seeded once (`seedWordulIfNeeded` is idempotent). If `/resolve` incremented `plays`, the
+> counter would read ~1 forever — breaking the spec's core "watch plays tick up as people play" loop.
+> So `/resolve` only locks the word; a separate `POST /play` is bumped **once per distinct player**
+> from the room's per-player path (Task 5).
 
 - [ ] **Step 1: Add the `WORDULS` binding to `Env`**
 
@@ -396,13 +467,16 @@ In `src/types.ts`, inside `interface Env`, after `ARENA: DurableObjectNamespace;
 
 - [ ] **Step 2: Write the failing DO tests**
 
-`src/worduls.test.ts` (mirror the existing DO test pattern; use the vitest workers pool already
-configured for this repo — see `src/worlds.test.ts`/`src/account-core.test.ts` for the import style).
-If the repo tests DO logic via a plain class harness, instantiate `Worduls` with a fake `ctx.storage`
-Map-backed stub:
+`test/worduls.test.ts` (import style `../src/...`; see `test/worlds.test.ts` /
+`test/account-core.test.ts` for reference — note: those test **pure cores**, not DO classes, so this
+Map-stub instantiation of a `DurableObject` subclass is a new pattern here. The `cloudflare:workers`
+`DurableObject` base constructor just assigns `this.ctx`/`this.env`, so `new Worduls(ctx, env)` with a
+storage stub works. If vitest balks at importing `cloudflare:workers` outside the workers pool, fall
+back to extracting the publish/list/patch logic into a pure helper in `wordul-core.ts` and unit-test
+that instead.) Instantiate `Worduls` with a Map-backed `ctx.storage` stub:
 ```ts
 import { describe, it, expect, beforeEach } from "vitest";
-import { Worduls } from "./worduls.ts";
+import { Worduls } from "../src/worduls.ts";
 
 // Minimal in-memory DurableObjectState stub: only ctx.storage.get/put used.
 function makeStub() {
@@ -450,15 +524,19 @@ describe("Worduls DO", () => {
     expect(res.status).toBe(400);
   });
 
-  it("resolves a playable World and increments plays", async () => {
+  it("resolve locks the word WITHOUT counting a play; /play counts per player", async () => {
     await call(o, "POST", "/publish", { owner: "zang", desiredSlug: "ocean-day", bundle: { word: "ocean", story: { title: "Why", body: "B" } }, now: 1 });
     const r1 = await call(o, "GET", "/resolve?slug=ocean-day");
     expect(r1.status).toBe(200);
     expect((await r1.json() as { word: string }).word).toBe("OCEAN");
-    await call(o, "GET", "/resolve?slug=ocean-day");
-    const list = await (await call(o, "GET", "/list?owner=zang&includeAll=1")).json() as { worlds: Array<{ plays: number; wordLocked: boolean }> };
-    expect(list.worlds[0].plays).toBe(2);
-    expect(list.worlds[0].wordLocked).toBe(true); // locked after first resolve/play
+    await call(o, "GET", "/resolve?slug=ocean-day"); // idempotent re-seed — still no play
+    let list = await (await call(o, "GET", "/list?owner=zang&includeAll=1")).json() as { worlds: Array<{ plays: number; wordLocked: boolean }> };
+    expect(list.worlds[0].wordLocked).toBe(true); // locked on first resolve
+    expect(list.worlds[0].plays).toBe(0);         // resolve NEVER counts a play
+    await call(o, "POST", "/play?slug=ocean-day");
+    await call(o, "POST", "/play?slug=ocean-day");
+    list = await (await call(o, "GET", "/list?owner=zang&includeAll=1")).json() as { worlds: Array<{ plays: number }> };
+    expect(list.worlds[0].plays).toBe(2);          // two distinct players → 2
   });
 
   it("404s resolve for an unknown slug", async () => {
@@ -488,8 +566,8 @@ describe("Worduls DO", () => {
 
 - [ ] **Step 3: Run to verify failure**
 
-Run: `npx vitest run src/worduls.test.ts`
-Expected: FAIL ("Cannot find module './worduls.ts'").
+Run: `npx vitest run test/worduls.test.ts`
+Expected: FAIL ("Cannot find module '../src/worduls.ts'").
 
 - [ ] **Step 4: Implement `src/worduls.ts`**
 
@@ -559,14 +637,24 @@ export class Worduls extends DurableObject<Env> {
       return Response.json(w); // owner-only route upstream; full record incl. word
     }
 
-    // Server→server: a room seeds its playable World here, locking the word + counting a play.
+    // Server→server: a room seeds its playable World here. Locks the word (anti rug-pull) on first
+    // seed. Does NOT count a play — a wordul room is ONE shared DO seeded once, so coupling plays to
+    // resolve would count ~1 ever. Plays are bumped per-player via POST /play (below).
     if (req.method === "GET" && url.pathname === "/resolve") {
       const w = state.worlds[url.searchParams.get("slug") ?? ""];
       if (!w || w.status === "unpublished") return new Response("not found", { status: 404 });
-      w.plays += 1;
-      if (!w.wordLocked) w.wordLocked = true;
-      await this.save(state);
+      if (!w.wordLocked) { w.wordLocked = true; await this.save(state); }
       return Response.json(wordulToWorld(w));
+    }
+
+    // Server→server: the room bumps this ONCE per distinct player who plays the wordul (Task 5 calls
+    // it from the per-player terminal-status path, guarded so reconnects don't double-count).
+    if (req.method === "POST" && url.pathname === "/play") {
+      const w = state.worlds[url.searchParams.get("slug") ?? ""];
+      if (!w) return new Response("not found", { status: 404 });
+      w.plays += 1;
+      await this.save(state);
+      return Response.json({ plays: w.plays });
     }
 
     if (req.method === "PATCH" && url.pathname === "/patch") {
@@ -622,7 +710,7 @@ function publicCard(w: Wordul) {
 
 - [ ] **Step 5: Run tests to verify pass**
 
-Run: `npx vitest run src/worduls.test.ts`
+Run: `npx vitest run test/worduls.test.ts`
 Expected: PASS.
 
 - [ ] **Step 6: Register the DO in `wrangler.jsonc`**
@@ -631,21 +719,21 @@ In the `durable_objects.bindings` array, add:
 ```jsonc
       { "name": "WORDULS", "class_name": "Worduls" }
 ```
-Add a NEW migration entry at the end of the `migrations` array (use the next tag number after the
-last existing one — check the file; it must be a new tag, never edit a shipped one):
+Add a NEW migration entry at the end of the `migrations` array. **The next free tag is `v8`** —
+`v7` is already taken by `WordStats` (verified in `wrangler.jsonc:127`). Never edit a shipped tag:
 ```jsonc
-    { "tag": "v7", "new_sqlite_classes": ["Worduls"] }
+    { "tag": "v8", "new_sqlite_classes": ["Worduls"] }
 ```
-(If `v7` already exists, use the next free tag.) Then export the class from the Worker entrypoint
-(wherever `Room`, `User`, `Daily`, `Arena` are re-exported — likely `src/worker.ts` bottom or an
-index): add `export { Worduls } from "./worduls.ts";`.
+Then export the class from the Worker entrypoint. DOs are re-exported in `src/worker.ts:20`
+(`export { Room, User, WordStats, Challenge, Daily, Science, Arena };`) with imports at the top
+(`import { Worduls } from "./worduls.ts";`). Add `Worduls` to both the import list and the export.
 
 - [ ] **Step 7: Typecheck + commit**
 
 Run: `npm run typecheck`
 Expected: no errors.
 ```bash
-git add src/worduls.ts src/worduls.test.ts src/types.ts wrangler.jsonc src/worker.ts
+git add src/worduls.ts test/worduls.test.ts src/types.ts wrangler.jsonc src/worker.ts
 git commit -m "feat(worduls): per-owner Worduls DO + binding + migration"
 ```
 
@@ -655,15 +743,18 @@ git commit -m "feat(worduls): per-owner Worduls DO + binding + migration"
 
 **Files:**
 - Modify: `src/worker.ts`
-- Test: `src/worduls-routes.test.ts` (create — integration-style if the repo has a worker test
-  harness; otherwise unit-test the `verifyOwner` helper in isolation)
+- Create: `src/worduls-routes.ts` (helpers)
+- Test: `test/worduls-routes.test.ts`
+
+> **API namespace: `/api/worduls`** (not `/api/worlds` — see the Coexistence section; `/worlds` +
+> `/w/` belong to the live editions browser).
 
 - [ ] **Step 1: Write the failing test for the owner-gate helper**
 
-Create `src/worduls-routes.test.ts`:
+Create `test/worduls-routes.test.ts`:
 ```ts
 import { describe, it, expect } from "vitest";
-import { extractBearer } from "./worduls-routes.ts";
+import { extractBearer } from "../src/worduls-routes.ts";
 
 describe("extractBearer", () => {
   it("pulls the token from an Authorization header", () => {
@@ -678,14 +769,14 @@ describe("extractBearer", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `npx vitest run src/worduls-routes.test.ts`
-Expected: FAIL ("Cannot find module './worduls-routes.ts'").
+Run: `npx vitest run test/worduls-routes.test.ts`
+Expected: FAIL ("Cannot find module '../src/worduls-routes.ts'").
 
 - [ ] **Step 3: Implement `src/worduls-routes.ts` (small pure-ish helpers) + wire into worker**
 
 Create `src/worduls-routes.ts`:
 ```ts
-// src/worduls-routes.ts — helpers for the worker's /api/worlds endpoints.
+// src/worduls-routes.ts — helpers for the worker's /api/worduls endpoints.
 import type { Env } from "./types.ts";
 
 export function extractBearer(req: Request): string {
@@ -714,8 +805,8 @@ export function wordulsStub(env: Env, owner: string) {
 In `src/worker.ts`, add this route block (place it near the existing `/api/account/` and
 `/api/user/` blocks; import the helpers + `normalizeUsername`/`isValidUsername` already in scope):
 ```ts
-    // --- Worduls: user-authored creations ---
-    if (url.pathname === "/api/worlds" && req.method === "POST") {
+    // --- Worduls: user-authored creations (namespace /api/worduls — /api/worlds is the editions' to take) ---
+    if (url.pathname === "/api/worduls" && req.method === "POST") {
       const body = await req.json().catch(() => null) as { owner?: string; desiredSlug?: string; bundle?: unknown } | null;
       const owner = normalizeUsername(body?.owner ?? "");
       if (!isValidUsername(owner)) return Response.json({ error: "bad_owner" }, { status: 400 });
@@ -725,13 +816,13 @@ In `src/worker.ts`, add this route block (place it near the existing `/api/accou
         body: JSON.stringify({ owner, desiredSlug: body?.desiredSlug, bundle: body?.bundle, now: Date.now() }),
       });
     }
-    const wlist = url.pathname.match(/^\/api\/worlds\/([a-z0-9_-]{3,20})$/);
+    const wlist = url.pathname.match(/^\/api\/worduls\/([a-z0-9_-]{3,20})$/);
     if (wlist && req.method === "GET") {
       const owner = normalizeUsername(wlist[1]);
       const includeAll = await isOwner(env, owner, extractBearer(req));
       return wordulsStub(env, owner).fetch(`https://do/list?owner=${owner}${includeAll ? "&includeAll=1" : ""}`);
     }
-    const wone = url.pathname.match(/^\/api\/worlds\/([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/);
+    const wone = url.pathname.match(/^\/api\/worduls\/([a-z0-9_-]{3,20})\/([a-z0-9-]{1,40})$/);
     if (wone) {
       const owner = normalizeUsername(wone[1]);
       const slug = wone[2];
@@ -754,13 +845,13 @@ In `src/worker.ts`, add this route block (place it near the existing `/api/accou
 
 - [ ] **Step 4: Run helper test + typecheck**
 
-Run: `npx vitest run src/worduls-routes.test.ts && npm run typecheck`
+Run: `npx vitest run test/worduls-routes.test.ts && npm run typecheck`
 Expected: PASS, no type errors.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/worduls-routes.ts src/worduls-routes.test.ts src/worker.ts
+git add src/worduls-routes.ts test/worduls-routes.test.ts src/worker.ts
 git commit -m "feat(worduls): worker routes + owner-gate via verify-session"
 ```
 
@@ -822,6 +913,46 @@ add:
 ```
 Order matters: daily first (cheap path check returns immediately for non-daily), then wordul.
 
+- [ ] **Step 2b: Count one play per distinct player (the "watch it tick up" loop)**
+
+`seedWordulIfNeeded` sets `isDaily = true` but the path is `@owner/<slug>` (not `daily/<date>`), so a
+wordul room is unambiguously **`this.state.isDaily && !dailyDateOf(this.state.path)`**. Use that
+discriminator to bump `plays` exactly once per player — NOT on seed (which fires once for the whole
+shared room).
+
+Hook it into the SAME once-per-player terminal-status seam the daily uses. In `onHello`, the daily
+retry block already runs per player and is guarded against re-firing:
+```ts
+    if (this.state.isDaily) {
+      const p = this.state.players.find((x) => x.username === username);
+      if (p && p.status !== "playing" && !p.scored) await this.afterPlayerStatus(p);
+    }
+```
+Add the play bump where a player FIRST reaches a terminal status in a wordul room, guarded by a
+per-player flag so reconnects/re-hellos never double-count:
+```ts
+    if (this.state.isDaily && !dailyDateOf(this.state.path)) {
+      const p = this.state.players.find((x) => x.username === username);
+      if (p && p.status !== "playing" && !p.wordulCounted) {
+        p.wordulCounted = true;
+        const [owner, slug] = this.state.path.split("/");
+        this.ctx.waitUntil(
+          this.env.WORDULS.get(this.env.WORDULS.idFromName(owner))
+            .fetch(`https://do/play?slug=${encodeURIComponent(slug)}`, { method: "POST" })
+            .catch((e) => console.error("wordul play bump failed", this.state.path, (e as Error).message)),
+        );
+      }
+    }
+```
+Add the optional flag to `PlayerState` in `src/types.ts`: `wordulCounted?: boolean;`. (You could reuse
+`p.scored`, but only if `afterPlayerStatus` sets it for ALL terminal players — verify before reusing;
+a dedicated flag is safe and obvious.) Place this block right after the daily-scoring retry block so
+both run on the same per-player hello.
+> **Design note:** counting on terminal status = one count per player who actually played (truest
+> "play"). The spec said "on session start"; terminal is the cleaner, double-count-proof seam and
+> matches the existing per-player guard. If you want join-time counting instead, bump on first
+> registration into `players[]` with the same `wordulCounted` guard.
+
 - [ ] **Step 3: Typecheck**
 
 Run: `npm run typecheck`
@@ -847,7 +978,7 @@ git commit -m "feat(worduls): room seeds a published wordul for solo play"
 
 **Files:**
 - Modify: `src/types.ts` (`UserProfile`), `src/user-core.ts` (`freshProfile`, `healProfile`)
-- Test: `src/user-core.test.ts` (extend existing)
+- Test: `test/user-h2h.test.ts` (the existing user-core test; it already imports `freshProfile`/`healProfile` from `../src/user-core.ts`)
 
 - [ ] **Step 1: Add the reserved fields to `UserProfile`**
 
@@ -859,19 +990,19 @@ In `src/types.ts`, in `UserProfile`, add (optional — reserved, no behavior in 
 
 - [ ] **Step 2: Write a failing test that fresh/healed profiles default them to []**
 
-In `src/user-core.test.ts` add:
+In `test/user-h2h.test.ts` add (`freshProfile` takes a single `username` arg — verified in
+`src/user-core.ts:8`):
 ```ts
 it("seeds empty follows/followers arrays", () => {
-  const p = freshProfile("zang", 1000); // match the real freshProfile signature
+  const p = freshProfile("zang");
   expect(p.follows).toEqual([]);
   expect(p.followers).toEqual([]);
 });
 ```
-(Adjust the `freshProfile` call to its actual signature — check `src/user-core.ts`.)
 
 - [ ] **Step 3: Run to verify failure**
 
-Run: `npx vitest run src/user-core.test.ts`
+Run: `npx vitest run test/user-h2h.test.ts`
 Expected: FAIL (`follows` undefined).
 
 - [ ] **Step 4: Default them in `freshProfile` and backfill in `healProfile`**
@@ -882,13 +1013,13 @@ In `src/user-core.ts`:
 
 - [ ] **Step 5: Run to verify pass**
 
-Run: `npx vitest run src/user-core.test.ts`
+Run: `npx vitest run test/user-h2h.test.ts`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/types.ts src/user-core.ts src/user-core.test.ts
+git add src/types.ts src/user-core.ts test/user-h2h.test.ts
 git commit -m "feat(worduls): reserve follows/followers profile seams"
 ```
 
@@ -903,13 +1034,19 @@ git commit -m "feat(worduls): reserve follows/followers profile seams"
 - [ ] **Step 1: Build the publish module**
 
 Create `public/wordul-publish.js`. It reads the current Vibe-Studio `vibe` state, confirms a slug
-(prefilled from the title), POSTs to `/api/worlds` with the stored session token, and on success
+(prefilled from the title), POSTs to `/api/worduls` with the stored session token, and on success
 redirects to the new wordul page.
+
+> **Blocker fix — real auth keys (verified).** The session token lives under `wr.session` and is read
+> via the **exported** `getSessionToken()` in `public/account.js`. The active handle lives under
+> **`wr.username`** (`LS.username` in `public/app.js:36`, set by `setUsername`). There is NO
+> `wordul.session.*` key — do not invent one. Import the token helper from `/account.js`; read the
+> username from `wr.username`.
 ```js
 // public/wordul-publish.js — turn the current Vibe-Studio draft into a published wordul.
-// Session token + username come from the accounts client (localStorage keys set at login).
-const SESSION_KEY = "wordul.session.token";   // adjust to the real accounts key (see public/account*.js)
-const USERNAME_KEY = "wordul.session.username";   // adjust to the real accounts key
+import { getSessionToken, openSecureSheet } from "/account.js";
+
+const USERNAME_KEY = "wr.username"; // LS.username in app.js — the active handle
 
 function slugify(t) {
   return (String(t || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "")
@@ -917,13 +1054,12 @@ function slugify(t) {
 }
 
 export async function publishWordul(vibe) {
-  const token = localStorage.getItem(SESSION_KEY);
-  const owner = localStorage.getItem(USERNAME_KEY);
-  if (!token || !owner) {
-    // Not claimed/logged in → send to the claim/login flow, return here after.
-    location.href = `/account?next=${encodeURIComponent(location.pathname)}`;
+  const owner = (localStorage.getItem(USERNAME_KEY) || "").trim();
+  if (!owner) {
+    alert("Pick a name first (top-right on the home screen), then come back and publish.");
     return;
   }
+  const token = getSessionToken();
   const desiredSlug = prompt("Your wordul's link:  /@" + owner + "/", slugify(vibe.vibeTitle || vibe.word));
   if (desiredSlug === null) return; // cancelled
   const bundle = {
@@ -931,24 +1067,30 @@ export async function publishWordul(vibe) {
     story: { title: vibe.vibeTitle || "Why this word", body: vibe.story || "" },
     colorScheme: vibe.colorScheme,
   };
-  const res = await fetch("/api/worlds", {
+  const res = await fetch("/api/worduls", {
     method: "POST",
-    headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
+    headers: { "content-type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ owner, desiredSlug: slugify(desiredSlug), bundle }),
   });
+  if (res.status === 401) {
+    // Name not secured (or session expired) → open the claim/secure sheet, then retry once.
+    // The draft persists in localStorage, so a redirect-to-home path is also safe.
+    openSecureSheet(owner, () => publishWordul(vibe));
+    return;
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    alert(err.error === "unauthorized" ? "Please log in again to publish." : "Could not publish — try again.");
+    alert(err.error === "bad_owner" ? "That name can't publish — check your handle." : "Could not publish — try again.");
     return;
   }
   const { url } = await res.json();
   location.href = url; // land on the new wordul page (share link + play counter)
 }
 ```
-> **Engineer note:** the two `localStorage` key names are placeholders — open `public/account*.js`
-> (the accounts client that ships with the auth layer) and use the ACTUAL keys it writes the session
-> token + username under. Fix the typo'd const names (`SESSION_KEY`) to clean identifiers while
-> you're there. Do not invent a new auth storage scheme.
+> **Engineer note:** `getSessionToken`/`openSecureSheet` are real exports of `public/account.js`
+> (verified). If a claimed-but-logged-out case needs a *login* (not claim) sheet, route to home `/`
+> instead of `openSecureSheet` — the draft is preserved in `localStorage` (`DRAFT_KEY`), so returning
+> to the studio restores it. Do not invent a new auth storage scheme.
 
 - [ ] **Step 2: Enable the Submit seam in `vibe-studio.html`**
 
@@ -989,7 +1131,21 @@ git commit -m "feat(worduls): wire Vibe Studio Submit -> publish a wordul"
 
 **Files:**
 - Create: `public/worduls-gallery.js`
-- Modify: `src/worker.ts` (route `/@<user>/worduls` to a gallery page + wordul SSR meta)
+- Modify: `src/worker.ts` (route `/@<user>/worduls` to a gallery page + wordul SSR meta; sitemap)
+
+> **Decision — SEO/discoverability of published worduls (RECOMMENDED: register them).** The plan
+> stores worduls only in the `Worduls` DO; the gallery reads straight from it, so the room works
+> WITHOUT touching `DIRECTORY` KV or `ownedRooms`. But that means published public worduls are absent
+> from the sitemap and the profile's room list — whereas the live editions register all 7 worlds in
+> the sitemap (`worker.ts:501-502`). Given discoverability is a project default, **register each
+> published wordul** so it's crawlable:
+> - On publish (Task 3 DO `/publish` success → Task 4 route, or a `ctx.waitUntil` in the worker),
+>   `env.DIRECTORY.put(\`wordul:@${owner}/${slug}\`, "1")`.
+> - On unpublish (`PATCH status:"unpublished"`), `env.DIRECTORY.delete(...)` the same key.
+> - In the sitemap builder (`worker.ts` ~line 501), list `wordul:*` DIRECTORY keys and emit
+>   `${origin}/@${owner}/${slug}` URLs (spoiler-safe — the URL carries no word).
+> If you'd rather keep P1 minimal and gallery-only, SKIP this step and **`log()` the decision** so SEO
+> coverage is a known, deliberate gap (not a silent one). Default: do the registration.
 
 - [ ] **Step 1: Add the gallery + wordul routes to the SSR layer**
 
@@ -1018,13 +1174,16 @@ Implement `injectGalleryMeta` next to `injectMeta`: it serves the static app she
 Create `public/worduls-gallery.js`:
 ```js
 // public/worduls-gallery.js — renders @<owner>'s published worduls as play cards.
+import { getSessionToken } from "/account.js";
 const m = location.pathname.match(/^\/@([a-z0-9_-]{3,20})\/worduls$/);
 const owner = m ? m[1] : null;
 
 async function render() {
   if (!owner) return;
-  const token = localStorage.getItem("wordul.session.token"); // use the real key (see account*.js)
-  const res = await fetch(`/api/worlds/${owner}`, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
+  // Only sends the token when the VIEWER is the owner (so drafts show). app.js's LS.username
+  // is the active handle; a non-owner viewer's token simply fails isOwner → published-only list.
+  const token = (localStorage.getItem("wr.username") === owner) ? getSessionToken() : "";
+  const res = await fetch(`/api/worduls/${owner}`, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
   const { worlds } = await res.json();
   const root = document.getElementById("worduls-root") || document.body;
   root.innerHTML = `<h1>@${owner}'s worduls</h1>` + (worlds.length
@@ -1088,9 +1247,12 @@ In the Vibe Studio: set a title ("Ocean Day"), a real word ("OCEAN"), a palette,
 - The wordul page loads, themed by the palette, with a share link.
 - Open `/@tester/worduls` → the card shows, `0 plays`, masked board, no word visible in page source.
 - Play the wordul to a solve → leaderboard records you, story reveals, chat unlocks.
-- Reload `/@tester/worduls` → play count incremented.
-- Edit the title via `PATCH` (or the edit UI if built) → reflected; attempting to change the word
-  after a play is rejected.
+- Reload `/@tester/worduls` → **`1 play`** (counted once for you). Reload again → STILL `1` (no
+  double-count on re-hello — this is the Blocker-1 fix; a resolve-coupled counter would NOT tick here).
+- In a second browser/handle (e.g. `tester2`), play the same wordul → owner's gallery now shows
+  **`2 plays`**. This is the real "watch it tick up as people play" loop.
+- Edit the title via `PATCH /api/worduls/<owner>/<slug>` (or the edit UI if built) → reflected;
+  attempting to change the word after a play is rejected (`wordLocked`).
 - Unpublish → disappears from the public gallery; still visible to you (owner token).
 
 - [ ] **Step 4: Verify spoiler-safety**
@@ -1117,6 +1279,34 @@ Expected: all green.
 - **Type consistency:** `Wordul`, `normalizeWordul`, `wordulToWorld`, `normalizeWorldBundle`,
   `WordBundle`→`WorldBundle`, `Worduls` DO, `WORDULS` binding, `isOwner`/`extractBearer`/`wordulsStub`
   used consistently across tasks.
-- **Known soft spots flagged inline:** the two client `localStorage` key names + the room
-  seed-tail copy (Task 5 Step 1) require reading the real accounts client / `seedDailyIfNeeded` body;
-  both are called out as engineer notes rather than guessed.
+- **Known soft spots flagged inline:** the room seed-tail copy (Task 5 Step 1) requires reading the
+  real `seedDailyIfNeeded` body (verified to exist at room.ts:533-575); called out as an engineer note.
+
+---
+
+## Review patch log (2026-06-05 — applied after a codebase-verification pass)
+
+Reviewed against the live tree; the plan's structural claims held, but these were corrected:
+
+1. **Prerequisite gate already satisfied** — accounts auth (`hashToken`, `account/verify-session`) is
+   confirmed on `origin/main`. The gate is now a guard, not a blocker; execution can start.
+2. **Blocker — `plays` never ticked per player.** Resolve fires once per shared room DO, so the
+   counter would read ~1 forever. Split into `/resolve` (locks word only) + `POST /play` (Task 3),
+   bumped once per distinct player from the room's terminal-status seam (Task 5 Step 2b, guarded by a
+   new `PlayerState.wordulCounted`). Tests + Task 9 updated to assert per-player counting.
+3. **Blocker — wrong auth keys.** Real keys are `wr.session` (via exported `getSessionToken()` in
+   `public/account.js`) and `wr.username` (`LS.username`, app.js:36). The guessed `wordul.session.*`
+   keys don't exist. Publish + gallery clients rewritten; 401 routes to `openSecureSheet`.
+4. **Blocker — test location.** Repo keeps tests in `test/*.test.ts` with `../src/` imports
+   (`test/daily-core.test.ts` already exists). All task test paths/imports corrected.
+5. **Migration tag `v8`** (not `v7` — `v7` is `WordStats`, verified `wrangler.jsonc:127`).
+6. **API renamed `/api/worlds` → `/api/worduls`** to avoid colliding semantics with the now-LIVE
+   editions browser (`/worlds`, `/w/`, `WorldDef`). See the Coexistence section.
+7. **Task 1 regression test strengthened** to lock colorScheme/glow/vibeTitle/bonusWord/curator —
+   the exact fields the `normalizeWorldBundle` extraction could silently drop.
+8. **SEO decision added** (Task 8) — register published worduls in `DIRECTORY` + sitemap (recommended)
+   or `log()` it as a deliberate gap; the live editions are already in the sitemap.
+
+Still-open (intentional) for the engineer to confirm during build: spec §8's author-excluded-from-
+own-leaderboard and username-rename coverage for owner-worlds are NOT yet tasked — decide in-flight or
+defer with a `log()`. DO-class unit-test instantiation is a new pattern here (Task 3 note).
