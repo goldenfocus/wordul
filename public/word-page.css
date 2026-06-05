@@ -1,5 +1,6 @@
 /* public/word-page.css — standalone styles for the word wiki pages. */
 :root { --bg:#121213; --fg:#d7dadc; --green:#6aaa64; --muted:#818384; }
+html, .wp { overflow-x:clip; } /* belt-and-braces: no lateral scroll on mobile (see iOS scar) */
 .wp { margin:0; background:var(--bg); color:var(--fg); font-family:system-ui,Arial,sans-serif; line-height:1.5; }
 .wp-head { padding:16px 20px; border-bottom:1px solid #2a2a2c; }
 .wp-head a { color:var(--fg); text-decoration:none; }
@@ -13,6 +14,11 @@
 .wp-quote cite { display:block; color:var(--muted); margin-top:6px; font-style:normal; }
 .wp-rel h3 { font-size:14px; color:var(--muted); margin:14px 0 4px; }
 .wp-rel a, .wp-main section a { color:var(--green); text-decoration:none; margin-right:10px; }
+/* Related-word links are emitted back-to-back (</a><a>) with no whitespace, so inline flow
+   has no break opportunity and the row can't wrap → it ran off-screen on mobile. Flex-wrap
+   the row so every link is its own wrappable item; gap replaces the inline margin. */
+.wp-rel p { display:flex; flex-wrap:wrap; gap:4px 10px; }
+.wp-rel p a { margin-right:0; }
 .wp-faq details { border-top:1px solid #2a2a2c; padding:8px 0; }
 .wp-faq summary { cursor:pointer; }
 .wp-cta { text-align:center; margin-top:40px; }

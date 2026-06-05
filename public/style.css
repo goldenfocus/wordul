@@ -28,6 +28,10 @@ html, body {
   font-family: var(--font-body, -apple-system, system-ui, "Helvetica Neue", Arial, sans-serif);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
+  /* No horizontal scroll, ever: decorative auras/orbs (.home-aura, .orb) bleed past the
+     viewport edges by design. `clip` contains that bleed without creating a scroll
+     container (so position:sticky and vertical scrolling are unaffected). */
+  overflow-x: clip;
   /* Disable iOS Safari's 300ms double-tap-zoom on the whole app. Pinch-zoom still works. */
   touch-action: manipulation;
 }
