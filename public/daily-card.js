@@ -123,9 +123,15 @@ function renderLeaderboard(view, me) {
   // header carries only the day's stat, no duplicate "you #N". In the top 3, your medal
   // row already highlights you. #dailyPlayed is filled async (real count).
   const pinned = view.you ? `<li class="daily-top-sep" aria-hidden="true"></li>${row(view.you, view.you.rank, { pinned: true })}` : "";
+  // Discoverability: the row-tap-to-preview interaction is invisible on touch (no hover/
+  // cursor), so spell it out once there's actually someone else to swap to.
+  const others = view.top.length + (view.you ? 1 : 0) > 1;
+  const hint = others
+    ? `<p class="daily-top-hint">Tap a player to preview their board · <b>@name</b> opens their profile</p>`
+    : "";
   return `<div class="daily-top-head"><span class="section-label">Today's Top</span>` +
     `<span class="daily-top-stat"><span id="dailyPlayed"></span></span></div>` +
-    `<ul class="daily-top-list">${medals}${pinned}</ul>`;
+    `<ul class="daily-top-list">${medals}${pinned}</ul>${hint}`;
 }
 
 // Deterministic featured edition for a date: rotates the non-default editions so

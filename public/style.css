@@ -2817,6 +2817,9 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .daily-top-mark.is-quit { color: var(--error); }  /* gave up — forfeited to 0 */
 .daily-top-mark.is-out { color: var(--muted); }    /* ran out of guesses */
 .daily-top-sep { height: 1px; margin: .25rem 0; background: var(--muted); opacity: .25; }
+/* One quiet line teaching the (touch-invisible) row-tap-to-preview interaction. */
+.daily-top-hint { margin: .5rem 0 0; font-size: .8rem; color: var(--muted); text-align: center; }
+.daily-top-hint b { color: var(--fg); font-weight: 600; }
 
 /* Full player roster on the stats page — lean ranked list (rank · name · gold · in N · time). */
 .daily-roster-list { list-style: none; margin: .25rem 0 0; padding: 0; display: grid; gap: .35rem; }
