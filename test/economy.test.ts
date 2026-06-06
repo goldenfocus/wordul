@@ -239,4 +239,10 @@ describe("settleParts", () => {
     const r = settle({ buyIn: 0, points: 2150, mult: 1, spends: 0, bonus: 0 });
     expect(settleParts(r)).toEqual([{ label: "score", delta: 22 }]);
   });
+  it("bonus and mult each emit their own leg", () => {
+    const r = settle({ buyIn: 50, points: 2850, mult: 3, spends: 0, bonus: 25 });
+    const parts = settleParts(r);
+    expect(parts.map((p) => p.label)).toEqual(["score", "bonus"]);
+    expect(parts.reduce((s, p) => s + p.delta, 0)).toBe(r.payout - r.buyIn); // invariant
+  });
 });

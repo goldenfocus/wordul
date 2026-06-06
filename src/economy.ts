@@ -169,7 +169,7 @@ export type SettlementReceipt = {
   spends: number; bonus: number; payout: number; net: number; signed: boolean;
 };
 export function settle(i: SettlementInput): SettlementReceipt {
-  const minted = Math.max(0, Math.round(i.points / 100));
+  const minted = goldFromPoints(i.points);
   const earned = Math.round(minted * i.mult);
   const raw = i.buyIn + earned - i.spends + i.bonus;
   const payout = i.signed ? raw : Math.max(0, raw);
