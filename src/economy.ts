@@ -167,7 +167,7 @@ export function goldFromPoints(points: number, rate = 100): number {
 
 // --- Settlement (Phase 1 spec: docs/superpowers/specs/2026-06-05-gold-settlement-engine-design.md)
 // The Law: wallet moves only at game edges. This is the edge.
-//   minted = round(points/100) · earned = round(minted × mult)
+//   minted = round(points / rate) · earned = round(minted × mult)   [rate default = 100]
 //   payout = buyIn + earned − spends + bonus, clamped ≥ 0 unless `signed` (hard-mode preset).
 export type SettlementInput = {
   buyIn: number; points: number; mult: number; spends: number; bonus: number;
