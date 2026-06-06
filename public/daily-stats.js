@@ -1,38 +1,35 @@
-// public/daily-stats.js — pure view-model for the daily Stats page.
-// Takes a SciencePublicDailySummary (privacy-preserving public aggregates) and
-// derives only what we can honestly show: play count, solve rate, average guesses
-// (among solves), average score, and a guess-distribution for bars. No usernames
-// exist in the source, so no leaderboard here — that's a deliberate fast-follow.
+// public/daily-stats.js — pure view-models for the daily Stats page.
+// EVERYTHING on the page derives from one source: the daily room's full roster
+// (/api/daily/<date>/leaderboard?full=1). The Science feed still powers /feed (the
+// Lab) but is no longer used here — it is day-sharded across ALL modes (rooms,
+// challenges, daily) and counts rounds, not people, which made the tiles disagree
+// with the player list (Jun 6 incident: "2 PLAYED" above a 4-player roster).
 
-export function computeDailyStatsView(summary) {
-  const totals = (summary && summary.totals) || {};
-  const outcomes = (summary && summary.outcomes) || {};
+export function computeDailyStatsFromRoster(full) {
+  const rows = (full && Array.isArray(full.players)) ? full.players : [];
+  const played = rows.length;
+  const wins = rows.filter((r) => r.won).length;
+  const losses = rows.filter((r) => !r.won && !r.resigned).length;
+  const winRate = played > 0 ? Math.round((wins / played) * 100) : null;
 
-  const played = totals.roundsStarted ?? totals.playerFinishes ?? 0;
-  const wins = totals.wins ?? 0;
-  const losses = totals.losses ?? 0;
-  const resigns = totals.resigns ?? 0;
-  const finished = wins + losses + resigns;
-  const winRate = finished > 0 ? Math.round((wins / finished) * 100) : null;
-
-  // Guess distribution covers solved games keyed by guess count ("1".."8").
-  const dist = outcomes.guessDistribution || {};
+  // Guess distribution over SOLVES (a loser's row count is not a solve).
   let weighted = 0;
-  let solved = 0;
   let maxCount = 0;
   const distRows = [];
   for (let g = 1; g <= 8; g++) {
-    const count = dist[g] ?? dist[String(g)] ?? 0;
-    if (count > 0) { weighted += g * count; solved += count; }
+    const count = rows.filter((r) => r.won && r.guesses === g).length;
+    if (count > 0) weighted += g * count;
     if (count > maxCount) maxCount = count;
     distRows.push({ guesses: g, count });
   }
-  const avgGuesses = solved > 0 ? weighted / solved : null;
-  const avgScore = outcomes.points && typeof outcomes.points.mean === "number"
-    ? outcomes.points.mean
+  const avgGuesses = wins > 0 ? weighted / wins : null;
+
+  const scores = rows.filter((r) => typeof r.score === "number");
+  const avgScore = scores.length > 0
+    ? scores.reduce((sum, r) => sum + r.score, 0) / scores.length
     : null;
 
-  return { played, wins, losses, finished, winRate, avgGuesses, avgScore, distRows, maxCount };
+  return { played, wins, losses, winRate, avgGuesses, avgScore, distRows, maxCount };
 }
 
 // Shape the full-roster API response ({ players:[{rank,username,gold,guesses,won,resigned,durationMs}], youRank, total })
