@@ -8,7 +8,7 @@
 //
 // NOTE: type is WorldDef, NOT World — src/daily-core.ts already owns `World`
 // (the curated-day bundle). These are deliberately distinct.
-import { mergeWorlds, EMPTY_OVERRIDES, type WorldOverrides } from "./world-overrides.ts";
+import { mergeWorlds, EMPTY_OVERRIDES, normalizeOverrides, type WorldOverrides } from "./world-overrides.ts";
 
 export type WorldDef = {
   id: string;        // stable identity (=== editionId for the launch Worlds)
@@ -63,8 +63,11 @@ export const WORLD_OVERRIDES_KEY = "worlds:overrides";
 export async function getEffectiveWorlds(env: { DIRECTORY: KVNamespace }): Promise<WorldDef[]> {
   let ov: WorldOverrides = EMPTY_OVERRIDES;
   try {
-    const stored = (await env.DIRECTORY.get(WORLD_OVERRIDES_KEY, "json")) as WorldOverrides | null;
-    if (stored) ov = stored;
+    const stored = await env.DIRECTORY.get(WORLD_OVERRIDES_KEY, "json");
+    if (stored) {
+      const norm = normalizeOverrides(stored, WORLDS);
+      if (norm.ok) ov = norm.value; // ignore a corrupt/old-schema blob -> serve base
+    }
   } catch {
     /* fall back to base */
   }

@@ -81,6 +81,11 @@ describe("getEffectiveWorlds", () => {
     const out = await getEffectiveWorlds(env);
     expect(out.length).toBe(WORLDS.length);
   });
+
+  it("falls back to base when the stored blob is malformed", async () => {
+    const out = await getEffectiveWorlds(fakeEnv({ edits: "oops", added: null, deleted: 7 }));
+    expect(out.length).toBe(WORLDS.length);
+  });
 });
 
 import {
