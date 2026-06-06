@@ -51,4 +51,40 @@ describe("studio-worlds-core", () => {
     const ov = buildOverrides(working, base);
     expect(ov.deleted).toEqual(["a"]);
   });
+
+  it("updateField coerces featured strings to booleans", () => {
+    const out = updateField(base, "b", "featured", "true");
+    expect(out.find((w) => w.id === "b").featured).toBe(true);
+    const out2 = updateField(base, "a", "featured", "false");
+    expect(out2.find((w) => w.id === "a").featured).toBe(false);
+  });
+
+  it("updateField coerces order strings to finite numbers", () => {
+    const out = updateField(base, "a", "order", "5");
+    expect(out.find((w) => w.id === "a").order).toBe(5);
+    const out2 = updateField(base, "a", "order", "nope");
+    expect(out2.find((w) => w.id === "a").order).toBe(0);
+  });
+
+  it("moveWorld is a no-op at the boundaries", () => {
+    expect(moveWorld(base, "a", -1)).toEqual(base); // first up
+    expect(moveWorld(base, "b", +1)).toEqual(base); // last down
+    expect(moveWorld(base, "missing", -1)).toEqual(base); // unknown id
+  });
+
+  it("addWorld makes a unique id when the slug collides", () => {
+    const out = addWorld(base, { slug: "a", name: "Dup", editionId: "default" });
+    const ids = out.map((w) => w.id);
+    expect(new Set(ids).size).toBe(ids.length); // all unique
+  });
+
+  it("buildOverrides keeps an added-then-edited world in added (not edits)", () => {
+    let working = addWorld(base, { slug: "c", name: "C", editionId: "default" });
+    const newId = working.find((w) => w.slug === "c").id;
+    working = updateField(working, newId, "name", "C2");
+    const ov = buildOverrides(working, base);
+    expect(ov.added).toHaveLength(1);
+    expect(ov.added[0].name).toBe("C2");
+    expect(ov.edits[newId]).toBeUndefined();
+  });
 });

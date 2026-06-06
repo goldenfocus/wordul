@@ -5,7 +5,15 @@
 const FIELDS = ["slug", "name", "blurb", "editionId", "featured", "order"];
 
 export function updateField(list, id, key, value) {
-  return list.map((w) => (w.id === id ? { ...w, [key]: value } : w));
+  const v = coerceField(key, value);
+  return list.map((w) => (w.id === id ? { ...w, [key]: v } : w));
+}
+
+// Coerce form-supplied values to the types the server validator expects.
+function coerceField(key, value) {
+  if (key === "featured") return value === true || value === "true";
+  if (key === "order") { const n = Number(value); return Number.isFinite(n) ? n : 0; }
+  return value;
 }
 
 export function addWorld(list, partial) {
@@ -17,7 +25,7 @@ export function addWorld(list, partial) {
     slug,
     name: partial.name || "New World",
     blurb: partial.blurb || "",
-    editionId: partial.editionId || "default",
+    editionId: partial.editionId || (list[0] && list[0].editionId) || "default",
     featured: !!partial.featured,
     order,
   };
