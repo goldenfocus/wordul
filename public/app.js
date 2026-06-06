@@ -762,6 +762,7 @@ function showRoom(owner, slug) {
   game.snapshot = null;
   game.pending = "";
   game.hasShownEndStats = false;
+  game.pendingForfeitReveal = false; // stale forfeit one-shot must not announce in a new room
   game.lastChatLen = 0;
   game.chatChannel = "table"; // your-game chat is the only visible channel (Global hidden this release)
   game.unreadChat = 0;
@@ -878,6 +879,7 @@ async function showChallenge(id) {
   game.snapshot = null;
   game.pending = "";
   game.hasShownEndStats = false;
+  game.pendingForfeitReveal = false; // stale forfeit one-shot must not announce in a new room
   game.lastChatLen = 0;
   game.chatChannel = "table"; // your-game chat is the only visible channel (Global hidden this release)
   game.unreadChat = 0;
@@ -2219,6 +2221,15 @@ function onServerMessage(msg) {
     if ((phaseEnded || personallyLost || personallyWon) && !game.hasShownEndStats && !game.isDaily) {
       handleGameOver(msg.room);
     }
+    // Forfeit's deferred reveal: forfeit() resigns BEFORE the server has told us the word
+    // (per-viewer snapshots only reveal it once we're marked lost), so it arms this one-shot
+    // instead of announcing a wordless reveal. The first snapshot that carries the word
+    // completes the announcement — toast + spoken word. Fires for races AND daily (forfeit
+    // set hasShownEndStats, so neither generic path re-announces).
+    if (game.pendingForfeitReveal && msg.room.word) {
+      game.pendingForfeitReveal = false;
+      announceGameEnd({ won: false, answer: msg.room.word });
+    }
     if (msg.room.phase === "finished") {
       // Settlement spec: the receipt (server-confirmed mint) drives the show. It may arrive
       // on a FOLLOW-UP snapshot (the confirmed re-broadcast), so run on whichever snapshot
@@ -2310,6 +2321,7 @@ function onServerMessage(msg) {
     if (msg.proposer !== getUsername()) renderRematchPrompt(msg.proposer);
   } else if (msg.type === "rematch_accepted") {
     game.hasShownEndStats = false;
+    game.pendingForfeitReveal = false; // the rematch round must not inherit a stale reveal
     renderRematchIdle();
     closeStats();
   } else if (msg.type === "rematch_cancelled") {
@@ -2937,6 +2949,7 @@ function resetRound(round) {
   // or a duel REPLAY (ready→KOTH next round) leaves the keyboard dead — that path never hits the
   // rematch_accepted handler that otherwise resets it. Covers fresh start, rematch, and reconnect.
   game.hasShownEndStats = false;
+  game.pendingForfeitReveal = false; // a forfeit reveal never carries across rounds
   game.finishReason = null; // C4: how this round ended, from my view — fresh each round
   game.goldThisRound = 0; // per-round earnings, shown as your score on the end screen
   game.cashedOut = false; // §B: re-arm the daily cash-out for this round's solve (one mint, once)
@@ -4061,7 +4074,12 @@ function forfeit(reason) {
   // Tell the server we're out: it marks us lost (others see OUT) and the next snapshot
   // reveals the word to US, so the end-screen word card has it by the time it opens.
   send({ type: "resign" });
-  announceGameEnd({ won: false, answer: snap.word });
+  // That same timing means the word is usually NOT here yet — announcing now would speak
+  // a wordless reveal ("the word was…" + silence, the silent-forfeit bug). Announce only
+  // if we somehow already have it; otherwise arm a one-shot and let the first revealing
+  // snapshot fire the announcement (the snapshot handler owns the other half).
+  if (snap.word) announceGameEnd({ won: false, answer: snap.word });
+  else game.pendingForfeitReveal = true;
   triggerLoseSequence(snap, me);
 }
 

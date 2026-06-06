@@ -87,8 +87,17 @@ export function companionReact(event, ctx = {}) {
 
   // Flat bank → use the array; nested bank → resolve the tier and read its array.
   const tier = Array.isArray(banks) ? null : resolveTier(event, ctx, react);
-  const bank = Array.isArray(banks) ? banks : (banks[tier] ?? []);
+  let bank = Array.isArray(banks) ? banks : (banks[tier] ?? []);
   if (bank.length === 0) return { text: "", raw: "", tier, speak: false };
+
+  // A loss with a KNOWN answer must say the word — the spoken reveal is the payoff,
+  // and speakTemplated only routes the word to the robot voice when the line carries
+  // {answer}. Restrict the pick to token-carrying lines (the bank keeps token-less
+  // variety for the no-answer case); fall through untouched if none carry it.
+  if (event === "loss" && ctx.answer) {
+    const revealing = bank.filter((l) => l.includes("{answer}"));
+    if (revealing.length > 0) bank = revealing;
+  }
 
   // Round-robin within the chosen tier so the same line never repeats back-to-back.
   const counterKey = tier ? `${event}:${tier}` : event;

@@ -102,7 +102,10 @@ export const edition = {
         "Solved. For the record, the word was {answer}.",
       ],
       // Positive reinforcement only — a loss never gets mourned, it gets coached.
-      // ~100 lines so a player almost never hears the same one twice.
+      // ~100 lines so a player almost never hears the same one twice. Lines WITHOUT
+      // {answer} only play when the answer is unknown: companionReact filters the
+      // loss pick to {answer}-carrying lines whenever it has the word, so the spoken
+      // reveal can never go silent (the "didn't say the word after I lost" bug).
       loss: [
         "The word was {answer}. You'll get the next one, champion.",
         "It was {answer}. Six brave guesses — I'm proud of every one.",

@@ -66,6 +66,17 @@ describe("editions + companion", () => {
     }
     expect(substituted).toBe(true);
   });
+  it("a loss with a known answer ALWAYS picks an {answer} line — the reveal is never silent", () => {
+    // The round-robin must never land on a token-less line when the word is known:
+    // speakTemplated only routes the word to the robot voice via {answer}, so a
+    // token-less pick skipped the spoken reveal (the "didn't say the word" bug).
+    // 120 calls out-cycles the whole filtered pool, proving the rotation stays inside it.
+    for (let i = 0; i < 120; i++) {
+      const r = companionReact("loss", { answer: "CRANE" });
+      expect(r.raw).toContain("{answer}");
+      expect(r.text).toContain("CRANE");
+    }
+  });
   it("companion lines rotate on repeat calls", () => {
     const a = companionReact("wrong").text;
     const b = companionReact("wrong").text;

@@ -23,8 +23,11 @@ describe("yang edition", () => {
   it("idle is the biggest bank (the star)", () => {
     expect(ed.companion.lines.idle.length).toBeGreaterThanOrEqual(20);
   });
-  it("loss bank includes {answer} template lines", () => {
-    expect(ed.companion.lines.loss.some((l) => l.includes("{answer}"))).toBe(true);
+  it("loss bank keeps a healthy pool of {answer} reveal lines", () => {
+    // companionReact restricts a loss-with-answer pick to these lines (the spoken
+    // reveal must say the word), so the pool needs real variety, not a token one.
+    const revealing = ed.companion.lines.loss.filter((l) => l.includes("{answer}"));
+    expect(revealing.length).toBeGreaterThanOrEqual(10);
   });
   it("every line is TTS-clean: short, no emoji/symbols/quotes", () => {
     const collect = (node, out = []) => {
