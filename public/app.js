@@ -2725,6 +2725,7 @@ function renderMyTable(snap) {
       el.className = "seat you";
       const me = getUsername();
       el.textContent = me ? me[0].toUpperCase() : "◆";
+      if (snap.isDuel && s.ready) el.classList.add("rdy");
     } else if (s.kind === "taken") {
       el.className = "seat taken";
       takenSeen++;
@@ -2732,6 +2733,7 @@ function renderMyTable(snap) {
       if (takenSeen > prevTaken) el.classList.add("seatin");
       const name = s.username || "";
       el.textContent = name ? name[0].toUpperCase() : "◆";
+      if (snap.isDuel && s.ready) el.classList.add("rdy");
     } else if (s.kind === "ghost") {
       el.className = "seat ghost";
       el.textContent = s.username ? s.username[0].toUpperCase() : "◆";

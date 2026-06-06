@@ -11,10 +11,11 @@ export function triesFor(length) {
 export function seatModel(snap, me) {
   const players = Array.isArray(snap && snap.players) ? snap.players : [];
   const capacity = Math.max(2, Number(snap && snap.capacity) || players.length || 2);
+  const mine = players.find((p) => p && p.username === me);
   const others = players.filter((p) => p && p.username !== me);
   const seats = [];
-  seats.push({ kind: "you", username: me, icon: null });
-  for (const p of others) seats.push({ kind: "taken", username: p.username, isBot: !!p.isBot });
+  seats.push({ kind: "you", username: me, icon: null, ready: !!(mine && mine.ready) });
+  for (const p of others) seats.push({ kind: "taken", username: p.username, isBot: !!p.isBot, ready: !!p.ready });
   while (seats.length < capacity) seats.push({ kind: "empty" });
   return { seats: seats.slice(0, Math.max(capacity, seats.length)), taken: players.length, capacity };
 }

@@ -41,6 +41,21 @@ describe("ghostSeatModel", () => {
   });
 });
 
+describe("seatModel ready marks", () => {
+  it("carries each player's ready flag onto you/taken seats", () => {
+    const snap = {
+      capacity: 3,
+      players: [
+        { username: "me", ready: true },
+        { username: "bo", ready: false },
+      ],
+    };
+    const m = seatModel(snap, "me");
+    expect(m.seats[0]).toMatchObject({ kind: "you", ready: true });
+    expect(m.seats[1]).toMatchObject({ kind: "taken", username: "bo", ready: false });
+  });
+});
+
 describe("compactRowProps (floor row)", () => {
   it("derives ×T tries from wordLength", () => {
     const p = compactRowProps({ routePath: "/@a/x", personaIcon: "🦊", host: "maya", wordLength: 8, seats: "4/5", edition: "jackpot" });
