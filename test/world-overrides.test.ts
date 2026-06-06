@@ -34,3 +34,50 @@ describe("mergeWorlds", () => {
     expect(mergeWorlds(WORLDS, EMPTY_OVERRIDES).length).toBe(WORLDS.length);
   });
 });
+
+import { normalizeOverrides } from "../src/world-overrides.ts";
+
+describe("normalizeOverrides", () => {
+  const base: WorldDef[] = [
+    { id: "a", slug: "a", name: "A", blurb: "ba", editionId: "default", featured: true, order: 0 },
+  ];
+
+  it("accepts a well-formed doc and echoes a clean copy", () => {
+    const raw = { edits: { a: { name: "AA" } }, added: [], deleted: [] };
+    const r = normalizeOverrides(raw, base);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.edits.a.name).toBe("AA");
+  });
+
+  it("coerces a non-object into EMPTY_OVERRIDES", () => {
+    const r = normalizeOverrides(null, base);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual({ edits: {}, added: [], deleted: [] });
+  });
+
+  it("rejects an added world with a bad slug", () => {
+    const raw = { edits: {}, deleted: [],
+      added: [{ id: "x", slug: "Bad Slug!", name: "X", blurb: "b", editionId: "default", featured: false, order: 1 }] };
+    const r = normalizeOverrides(raw, base);
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects a duplicate slug against a base world", () => {
+    const raw = { edits: {}, deleted: [],
+      added: [{ id: "x", slug: "a", name: "X", blurb: "b", editionId: "default", featured: false, order: 1 }] };
+    const r = normalizeOverrides(raw, base);
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects an unknown editionId", () => {
+    const raw = { edits: {}, deleted: [],
+      added: [{ id: "x", slug: "x", name: "X", blurb: "b", editionId: "nope", featured: false, order: 1 }] };
+    const r = normalizeOverrides(raw, base);
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects an empty name on an edited world", () => {
+    const r = normalizeOverrides({ edits: { a: { name: "" } }, added: [], deleted: [] }, base);
+    expect(r.ok).toBe(false);
+  });
+});
