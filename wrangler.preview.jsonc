@@ -1,0 +1,78 @@
+{
+  // STAGING/PREVIEW deploy lane — `npx wrangler deploy -c wrangler.preview.jsonc`.
+  //
+  // Why this exists: Cloudflare version Preview URLs are NOT generated for Workers
+  // that implement Durable Objects (and require workers_dev), so the main "wordul"
+  // worker can never serve a `<version>-wordul.*.workers.dev` preview. Instead this
+  // config stands up a SEPARATE worker, "wordul-preview", with its own BRAND-NEW,
+  // EMPTY DO namespaces — a branch can be smoke-tested at
+  //   https://wordul-preview.love-00b.workers.dev
+  // without touching prod (wordul.com) traffic or data.
+  //
+  // Differences from wrangler.jsonc (keep the rest in lockstep):
+  //  - name: wordul-preview (fresh worker + fresh DOs)
+  //  - workers_dev: true (the preview URL IS the workers.dev subdomain)
+  //  - kv DIRECTORY uses the preview namespace id, so test rooms/usernames never
+  //    leak into the prod sitemap registry
+  //  - no cron triggers (no bot heartbeat burning free-tier invocations on staging)
+  //
+  // Cleanup when done: npx wrangler delete -c wrangler.preview.jsonc
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wordul-preview",
+  "workers_dev": true,
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-04-25",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOM", "class_name": "Room" },
+      { "name": "USER", "class_name": "User" },
+      { "name": "WORDSTATS", "class_name": "WordStats" },
+      { "name": "CHALLENGE", "class_name": "Challenge" },
+      { "name": "DAILY", "class_name": "Daily" },
+      { "name": "SCIENCE", "class_name": "Science" },
+      { "name": "ARENA", "class_name": "Arena" },
+      { "name": "WORDULS", "class_name": "Worduls" }
+    ]
+  },
+
+  // Staging uses the DIRECTORY *preview* namespace (same account, separate data).
+  "kv_namespaces": [
+    {
+      "binding": "DIRECTORY",
+      "id": "9856da97562443939a39a257719f5cfa"
+    }
+  ],
+
+  "r2_buckets": [
+    { "binding": "DESIGNS", "bucket_name": "wordul-designs" },
+    { "binding": "OG", "bucket_name": "wordul-og" }
+  ],
+
+  "ai": {
+    "binding": "AI"
+  },
+
+  // Same migration ladder as prod — a fresh worker replays it from v1 and every
+  // namespace MUST be SQLite-backed on the free plan (err 10097 otherwise).
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Room"] },
+    { "tag": "v2", "new_sqlite_classes": ["User"] },
+    { "tag": "v3", "new_sqlite_classes": ["Challenge"] },
+    { "tag": "v4", "new_sqlite_classes": ["Daily"] },
+    { "tag": "v5", "new_sqlite_classes": ["Science"] },
+    { "tag": "v6", "new_sqlite_classes": ["Arena"] },
+    { "tag": "v7", "new_sqlite_classes": ["WordStats"] },
+    { "tag": "v8", "new_sqlite_classes": ["Worduls"] }
+  ],
+
+  "observability": {
+    "enabled": true
+  }
+}
