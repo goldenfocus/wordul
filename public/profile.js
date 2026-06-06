@@ -8,9 +8,10 @@
 // Do NOT interpolate any raw profile field into markup.
 //
 // SPOILER SAFETY: the answer word is NEVER rendered (the server strips it via
-// toPublicGame; recentGameView never reads it either). A player's board is only ever drawn
-// LETTERLESS from solveGrid, and today's daily stays locked until the viewer has played —
-// see profile-core.js for the rules.
+// toPublicGame; recentGameView never reads it either). Today's daily stays locked until
+// the viewer has played, then renders letterless — UNLESS the viewer FINISHED today, in
+// which case their finisher token (server-validated) unlocks this profile's letter rows
+// via the daily leaderboard API. See profile-core.js for the rules.
 import { recentGameView, formatLedgerRow } from "/profile-core.js";
 import { renderStamp } from "/daily-card.js";
 import { t } from "/i18n.js";
@@ -24,6 +25,25 @@ function partLabel(label) {
 }
 
 const DAILY_SOLVE_LS = "wr.dailySolve"; // mirrors LS.dailySolve in app.js (client-only solve)
+const DAILY_TOKEN_LS = "wr.dailyToken"; // mirrors LS.dailyToken in app.js (per-date proof-of-finish)
+
+// A viewer who FINISHED today's daily holds the per-date finisher token. Exchange it (the
+// server validates — a wrong/absent token just yields no letters) for this profile's letter
+// rows on today's daily, so a finisher sees the full letter-card instead of colors-only.
+// Returns string[] | null; null on any miss (not played, storage off, not on the board, …).
+async function fetchTodayWords(username, today) {
+  let token = "";
+  try { token = localStorage.getItem(`${DAILY_TOKEN_LS}:${today}`) || ""; } catch { /* storage off */ }
+  if (!token) return null;
+  try {
+    const res = await fetch(`/api/daily/${today}/leaderboard?full=1&t=${encodeURIComponent(token)}`);
+    if (!res.ok) return null;
+    const lb = await res.json();
+    const want = String(username).toLowerCase();
+    const hit = (lb.players || []).find((e) => String(e.username || "").toLowerCase() === want);
+    return hit && Array.isArray(hit.words) && hit.words.length ? hit.words : null;
+  } catch { return null; }
+}
 
 export async function renderProfile(username, mountEl) {
   if (!mountEl) return;
@@ -58,8 +78,14 @@ export async function renderProfile(username, mountEl) {
   let playedToday = false;
   try { playedToday = !!localStorage.getItem(`${DAILY_SOLVE_LS}:${today}`); } catch { /* storage off */ }
 
+  // Only worth a fetch when this profile actually has a letters-stripped game for today.
+  const hasLiveDaily = (p.games || []).some(
+    (g) => String(g.roomPath || "") === `daily/${today}` && !(Array.isArray(g.words) && g.words.length),
+  );
+  const todayWords = playedToday && hasLiveDaily ? await fetchTodayWords(username, today) : null;
+
   const recent = (p.games || [])
-    .map((g) => renderRecentGame(recentGameView(g, { today, playedToday })))
+    .map((g) => renderRecentGame(recentGameView(g, { today, playedToday, todayWords })))
     .join("");
 
   const goldRows = (p.goldHistory || [])

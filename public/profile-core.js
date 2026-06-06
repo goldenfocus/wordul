@@ -9,6 +9,9 @@
 //     card. Games with only colors (legacy records) render letterless.
 //   • TODAY's daily stays LOCKED (no colors, no letters) until the viewer has played today,
 //     so a stranger's board can't hint at the live answer. Past dailies + rooms are open.
+//   • A viewer who FINISHED today holds the per-date finisher token; profile.js exchanges
+//     it (server-validated) for this profile's letter rows and passes them as ctx.todayWords,
+//     so a finisher sees the full letter-card. The lock above never consults it.
 
 import { t } from "/i18n.js";
 
@@ -66,10 +69,14 @@ export function prettyRoomLabel(slug) {
 
 // Build the view-model for one recent game.
 //   game: a PublicGameRecord ({ roomPath, result, guesses, solveGrid?, words?, ... }) — NO word.
-//   ctx:  { today: "YYYY-MM-DD", playedToday: boolean }
+//   ctx:  { today: "YYYY-MM-DD", playedToday: boolean, todayWords?: string[] | null }
+//     todayWords: this profile's letter rows for TODAY's daily, fetched by profile.js from
+//     the token-gated leaderboard (only a viewer who FINISHED today holds that token — at
+//     that point the answer isn't a secret to them). Used only when the record itself
+//     shipped no words, and only when it aligns row-for-row with the color grid.
 // Returns { kind, icon, label, result, date, grid, words, locked, roomHref }.
 export function recentGameView(game, ctx = {}) {
-  const { today = "", playedToday = false } = ctx;
+  const { today = "", playedToday = false, todayWords = null } = ctx;
   const roomPath = String(game.roomPath || "");
   const won = game.result === "won";
   const icon = won ? "✅" : "❌";
@@ -84,10 +91,17 @@ export function recentGameView(game, ctx = {}) {
     const label = isToday ? "Daily" : `Daily · ${date}`;
     // Lock today's board until the viewer has played; withhold colors AND letters while locked.
     const locked = isToday && !playedToday;
+    // The live daily ships no `words` (server-stripped) — fall back to the finisher-token
+    // letters when they align with the grid; a mismatch renders letterless, never misrowed.
+    const unlockedWords =
+      rawWords ??
+      (isToday && Array.isArray(todayWords) && rawGrid && todayWords.length === rawGrid.length
+        ? todayWords
+        : null);
     return {
       kind: "daily", icon, label, result, date,
       grid: locked ? null : rawGrid,
-      words: locked ? null : rawWords,
+      words: locked ? null : unlockedWords,
       locked,
       roomHref: null,  // /@daily/<date> would render the VIEWER's own board — never link it
     };

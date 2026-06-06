@@ -49,6 +49,31 @@ describe("recentGameView", () => {
     expect(v.words).toBeNull();               // server withholds today's letters → letterless
   });
 
+  it("fills today's letters from ctx.todayWords (finisher-token fetch) when the server stripped them", () => {
+    const v = recentGameView(daily(today, { words: undefined }), { today, playedToday: true, todayWords: ["AROSE", "BRAVE"] });
+    expect(v.locked).toBe(false);
+    expect(v.grid).toEqual(["yxxxx", "ggggg"]);
+    expect(v.words).toEqual(["AROSE", "BRAVE"]); // full letter-card, like any past game
+  });
+
+  it("ignores todayWords that don't align row-for-row with the grid (letterless, never misrowed)", () => {
+    const v = recentGameView(daily(today, { words: undefined }), { today, playedToday: true, todayWords: ["AROSE"] });
+    expect(v.words).toBeNull();
+  });
+
+  it("never lets todayWords leak through the lock (viewer hasn't played)", () => {
+    // Belt-and-braces: profile.js only fetches todayWords for a finisher, but the lock must hold regardless.
+    const v = recentGameView(daily(today, { words: undefined }), { today, playedToday: false, todayWords: ["AROSE", "BRAVE"] });
+    expect(v.locked).toBe(true);
+    expect(v.grid).toBeNull();
+    expect(v.words).toBeNull();
+  });
+
+  it("never applies todayWords to a PAST daily missing its letters (legacy record stays letterless)", () => {
+    const v = recentGameView(daily("2026-06-01", { words: undefined }), { today, playedToday: true, todayWords: ["AROSE", "BRAVE"] });
+    expect(v.words).toBeNull();
+  });
+
   it("renders a room game's stored letter-card (no link fallback when a board exists)", () => {
     const v = recentGameView(room("crane/snappy-moose", { solveGrid: ["xyxxx"], words: ["AUDIO"] }), { today, playedToday: true });
     expect(v.kind).toBe("room");
