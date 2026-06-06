@@ -19,14 +19,18 @@ export function seatModel(snap, me) {
   return { seats: seats.slice(0, Math.max(capacity, seats.length)), taken: players.length, capacity };
 }
 
-// Map a server OpenGame to a compact floor-row's props, adding ×T tries.
+// Map a server OpenGame to a compact floor-row's props. The row shows the board as
+// letters×rows (e.g. 5×6); OpenGame has no maxGuesses, so rows = triesFor(wordLength)
+// (the smart default — a host's set_rows override isn't carried in the open-games feed).
 export function compactRowProps(game) {
+  const tries = triesFor(game.wordLength);
   return {
     routePath: game.routePath,
     avatar: game.personaIcon,
     host: game.host,
     wordLength: game.wordLength,
-    tries: triesFor(game.wordLength),
+    tries,
+    dim: `${game.wordLength}×${tries}`,
     seats: game.seats || "1/2",
     edition: game.edition,
   };

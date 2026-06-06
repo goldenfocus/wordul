@@ -200,17 +200,22 @@
            visible in every phase. The two-zone GRID layout is gated to the lobby phase by CSS
            (Task 7: `.lobby-grid`/`.lobby-left`/`.lobby-right` default to `display:contents` so
            the board flows as before during play; `body.lobby` activates the grid). Lobby-only
-           children (#triesBadge, #myTable, the #lobbyRight zone) are individually hidden. -->
+           children (#dimWrap, #myTable, the #lobbyRight zone) are individually hidden. -->
       <div id="lobbyGrid" class="lobby-grid">
         <div class="lobby-left">
           <!-- #boards (the player board grid) is relocated here so the single-row lobby board
                sits in the left zone; the tries badge + your-table sit beneath it. -->
           <div id="boards" class="boards"></div>
-          <div class="tries-badge" id="triesBadge" hidden>
-            <button class="tb-pm tb-minus" id="tbMinus" tabindex="-1" aria-label="Fewer letters">−</button>
-            <span class="tb-x" id="tbX">×6</span>
-            <span class="tb-lethint" id="tbLetters">5 letters</span>
-            <button class="tb-pm tb-plus" id="tbPlus" tabindex="-1" aria-label="More letters">+</button>
+          <!-- Dimension control: letters × rows. Tap the 5 × 6 to open a popover with two
+               steppers (Letters → set_length, Rows → set_rows). Lobby-only; hidden elsewhere. -->
+          <div class="dimwrap" id="dimWrap" hidden>
+            <button class="dim" id="dim" type="button" aria-label="Board size (letters by rows)">
+              <span class="n" id="dimCols">5</span><span class="by">×</span><span class="n" id="dimRows">6</span>
+            </button>
+            <div class="dimpop" id="dimPop">
+              <div class="drow"><span class="lbl">Letters</span><div class="step"><button id="colMinus" type="button" aria-label="Fewer letters">−</button><span class="v" id="colVal">5</span><button id="colPlus" type="button" aria-label="More letters">+</button></div></div>
+              <div class="drow"><span class="lbl">Rows</span><div class="step"><button id="rowMinus" type="button" aria-label="Fewer rows">−</button><span class="v" id="rowVal">6</span><button id="rowPlus" type="button" aria-label="More rows">+</button></div></div>
+            </div>
           </div>
           <div class="mytable" id="myTable" hidden aria-label="Your table">
             <span class="mytable-lab"></span>

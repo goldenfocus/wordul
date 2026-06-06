@@ -33,7 +33,7 @@ import { pickInspire, pickForfeit } from "/inspire.js";
 import { renderSettlement } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
-import { triesFor, seatModel } from "/lobby-view.js";
+import { seatModel } from "/lobby-view.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
 
@@ -809,7 +809,7 @@ function showRoom(owner, slug) {
   });
   wireChat();
   wireRoomTabs();
-  wireTriesBadge();
+  wireDim();
   wireRoomIconButtons();
   buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
   connect();
@@ -2718,17 +2718,29 @@ function render() {
 
   syncModeChip(snap);
 
-  // Tries badge rides above the single-row lobby board (×N tries / word-length control,
-  // wired in a later task) — it only makes sense while waiting in the lobby.
-  const triesBadge = $("#triesBadge");
-  if (triesBadge) {
-    triesBadge.hidden = snap.phase !== "lobby";
-    // Reflect the room's current word length every render so a remote change
-    // (another player resizing the words) updates this viewer's badge.
-    const len = snap.wordLength;
-    const tbX = $("#tbX"); if (tbX) tbX.textContent = `×${triesFor(len)}`;
-    const tbLetters = $("#tbLetters"); if (tbLetters) tbLetters.textContent = `${len} letters`;
-    triesBadge.classList.toggle("locked", !canEditLength(snap));
+  // Dimension control (letters × rows) rides above the single-row lobby board — it only
+  // makes sense while waiting in the lobby. Repaint from the snapshot every render so a
+  // remote change (another player resizing) or the smart-default rows reset shows up.
+  const dimWrap = $("#dimWrap");
+  if (dimWrap) {
+    const inLobby = snap.phase === "lobby";
+    dimWrap.hidden = !inLobby;
+    if (inLobby) {
+      const cols = snap.wordLength, rows = snap.maxGuesses;
+      const dimCols = $("#dimCols"); if (dimCols) dimCols.textContent = cols;
+      const dimRows = $("#dimRows"); if (dimRows) dimRows.textContent = rows;
+      const colVal = $("#colVal"); if (colVal) colVal.textContent = cols;
+      const rowVal = $("#rowVal"); if (rowVal) rowVal.textContent = rows;
+      const editable = canEditLength(snap);
+      dimWrap.classList.toggle("locked", !editable);
+      // Disable steppers at bounds (and entirely when not editable).
+      const colMinus = $("#colMinus"); if (colMinus) colMinus.disabled = !editable || cols <= MIN_COLS;
+      const colPlus = $("#colPlus"); if (colPlus) colPlus.disabled = !editable || cols >= MAX_COLS;
+      const rowMinus = $("#rowMinus"); if (rowMinus) rowMinus.disabled = !editable || rows <= MIN_ROWS;
+      const rowPlus = $("#rowPlus"); if (rowPlus) rowPlus.disabled = !editable || rows >= MAX_ROWS;
+    } else {
+      closeDim(); // tearing down the lobby closes any open popover
+    }
   }
 
   // "Your table" seat strip rides alongside the tries badge — lobby-only. Reveal + paint
@@ -3088,59 +3100,61 @@ function canEditLength(snap) {
   return !!snap && snap.phase === "lobby" && !game.isDaily;
 }
 
-// Clamp n to the supported range, and if it changed from the room's current length,
-// tell the server (set_length) and optimistically repaint the badge for instant feedback.
-function setLen(n) {
-  const snap = game.snapshot;
-  if (!canEditLength(snap)) return;
-  const min = SUPPORTED_LENGTHS[0];
-  const max = SUPPORTED_LENGTHS[SUPPORTED_LENGTHS.length - 1];
-  const clamped = Math.max(min, Math.min(max, n));
-  if (clamped === snap.wordLength) return;
-  setPreferredLength(clamped); // remember the user's local pref regardless of socket state
-  // Only optimistically repaint the badge if the change actually went out. If the socket
-  // is down, leave the badge alone and let the next server snapshot drive it.
-  if (!send({ type: "set_length", wordLength: clamped })) return;
-  const tbX = $("#tbX"); if (tbX) tbX.textContent = `×${triesFor(clamped)}`;
-  const tbLetters = $("#tbLetters"); if (tbLetters) tbLetters.textContent = `${clamped} letters`;
+// Dimension-control bounds. Cols mirror SUPPORTED_LENGTHS' ends; rows mirror the server
+// clamp in room-core.ts (clampRows: [3, 8]). triesFor stays in lockstep with guessesFor.
+const MIN_COLS = SUPPORTED_LENGTHS[0];
+const MAX_COLS = SUPPORTED_LENGTHS[SUPPORTED_LENGTHS.length - 1];
+const MIN_ROWS = 3;
+const MAX_ROWS = 8;
+
+function closeDim() {
+  const pop = $("#dimPop"); if (pop) pop.classList.remove("open");
+  const dim = $("#dim"); if (dim) dim.classList.remove("open");
 }
 
-// The #triesBadge doubles as the word-length control: tap to reveal −/+, or press-drag ↕
-// (each ~24px = ±1 letter). The −/+ buttons step by one. Wired once per room mount.
-function wireTriesBadge() {
-  const badge = $("#triesBadge");
-  if (!badge || badge.dataset.wired) return;
-  badge.dataset.wired = "1";
-  const curLen = () => (game.snapshot ? game.snapshot.wordLength : DEFAULT_LENGTH);
-  let dragging = false, startY = 0, startLen = 0, moved = 0;
-  badge.addEventListener("pointerdown", (e) => {
+// Step letters: clamp, then tell the server (set_length). The next snapshot repaints the
+// numbers (and resets rows to the smart default) — we don't optimistically desync.
+function stepCols(d) {
+  const snap = game.snapshot;
+  if (!canEditLength(snap)) return;
+  const clamped = Math.max(MIN_COLS, Math.min(MAX_COLS, snap.wordLength + d));
+  if (clamped === snap.wordLength) return;
+  setPreferredLength(clamped); // remember the user's local pref regardless of socket state
+  send({ type: "set_length", wordLength: clamped });
+}
+
+// Step rows: clamp to [MIN_ROWS, MAX_ROWS], tell the server (set_rows). Snapshot repaints.
+function stepRows(d) {
+  const snap = game.snapshot;
+  if (!canEditLength(snap)) return;
+  const clamped = Math.max(MIN_ROWS, Math.min(MAX_ROWS, snap.maxGuesses + d));
+  if (clamped === snap.maxGuesses) return;
+  send({ type: "set_rows", rows: clamped });
+}
+
+// The 5 × 6 control: tap the .dim to open the popover with Letters/Rows steppers; a
+// click outside closes it. The steppers drive set_length / set_rows. Wired once per mount.
+function wireDim() {
+  const dim = $("#dim");
+  if (!dim || dim.dataset.wired) return;
+  dim.dataset.wired = "1";
+  dim.addEventListener("click", (e) => {
+    e.stopPropagation();
     if (!canEditLength(game.snapshot)) return;
-    if (e.target.closest(".tb-pm")) return; // −/+ buttons handle their own taps
-    dragging = true; startY = e.clientY; startLen = curLen(); moved = 0;
-    try { badge.setPointerCapture(e.pointerId); } catch {}
-    badge.classList.add("editing");
+    const pop = $("#dimPop");
+    const opening = pop && !pop.classList.contains("open");
+    if (pop) pop.classList.toggle("open", opening);
+    dim.classList.toggle("open", !!opening);
   });
-  badge.addEventListener("pointermove", (e) => {
-    if (!dragging) return;
-    const dy = startY - e.clientY;
-    moved = Math.max(moved, Math.abs(dy));
-    setLen(startLen + Math.round(dy / 24));
+  // Click-outside closes the popover (scoped: ignore clicks within the control itself).
+  document.addEventListener("click", (e) => {
+    const pop = $("#dimPop");
+    if (pop && pop.classList.contains("open") && !e.target.closest("#dimWrap")) closeDim();
   });
-  badge.addEventListener("pointerup", () => {
-    if (!dragging) return;
-    dragging = false;
-    if (moved < 6) badge.classList.toggle("editing"); // a tap (no real drag) toggles edit mode
-    else badge.classList.remove("editing");           // a real drag closes the expanded UI
-  });
-  badge.addEventListener("pointercancel", () => {
-    // A cancelled gesture (e.g. iOS scroll takeover) must clear dragging, or the next
-    // pointermove would change the length unintentionally.
-    if (!dragging) return;
-    dragging = false;
-    badge.classList.remove("editing");
-  });
-  $("#tbMinus")?.addEventListener("click", (e) => { e.stopPropagation(); setLen(curLen() - 1); });
-  $("#tbPlus")?.addEventListener("click", (e) => { e.stopPropagation(); setLen(curLen() + 1); });
+  $("#colMinus")?.addEventListener("click", (e) => { e.stopPropagation(); stepCols(-1); });
+  $("#colPlus")?.addEventListener("click", (e) => { e.stopPropagation(); stepCols(1); });
+  $("#rowMinus")?.addEventListener("click", (e) => { e.stopPropagation(); stepRows(-1); });
+  $("#rowPlus")?.addEventListener("click", (e) => { e.stopPropagation(); stepRows(1); });
 }
 
 // The lobby gear — one bare ⚙ that opens Settings (where length + theme live). The

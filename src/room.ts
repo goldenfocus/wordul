@@ -30,6 +30,8 @@ import {
   BOT_REMATCH_MAX_MS,
   ABANDON_GRACE_MS,
   hasConnectedHuman,
+  guessesFor,
+  clampRows,
   type RematchEffect,
 } from "./room-core.ts";
 import type { RoomMode } from "./modes.ts";
@@ -84,12 +86,6 @@ function sanitizeEdition(raw: string): string {
   return id || "default";
 }
 
-function guessesFor(length: number): number {
-  // length+1 preserves the classic 5/6 feel for short words (4→5, 5→6, 6→7, 7→8),
-  // then plateaus at 8. Longer words convey more info per guess, so we don't
-  // actually need 13 rows for a 12-letter board — it just looks intimidating.
-  return Math.min(length + 1, 8);
-}
 
 export class Room extends DurableObject<Env> {
   private state: RoomSnapshot;
@@ -399,6 +395,8 @@ export class Room extends DurableObject<Env> {
         return this.onChat(ws, msg.text);
       case "set_length":
         return this.onSetLength(ws, msg.wordLength);
+      case "set_rows":
+        return this.onSetRows(ws, msg.rows);
       case "set_edition":
         return this.onSetEdition(ws, msg.edition);
       case "set_mode":
@@ -696,6 +694,27 @@ export class Room extends DurableObject<Env> {
     this.state.maxGuesses = guessesFor(length);
     const who = this.userFor(ws) ?? "someone";
     this.pushSystem(`${who} set word length to ${length}`);
+    await this.persistAndBroadcast();
+  }
+
+  // Rows override: set maxGuesses directly, independent of letters. Mirrors onSetLength's
+  // guards (lobby-only, not daily) and persist/broadcast. Out-of-range values are clamped
+  // to [MIN_ROWS, MAX_ROWS]. Note: a later set_length resets maxGuesses to guessesFor(len).
+  private async onSetRows(ws: WebSocket, rows: number): Promise<void> {
+    if (this.state.isDaily) return; // daily word/theme are locked by the World
+    if (this.state.phase !== "lobby") {
+      this.send(ws, { type: "error", message: "can't change rows mid-game" });
+      return;
+    }
+    if (typeof rows !== "number" || !Number.isFinite(rows)) {
+      this.send(ws, { type: "error", message: "unsupported row count" });
+      return;
+    }
+    const clamped = clampRows(rows);
+    if (clamped === this.state.maxGuesses) return;
+    this.state.maxGuesses = clamped;
+    const who = this.userFor(ws) ?? "someone";
+    this.pushSystem(`${who} set rows to ${clamped}`);
     await this.persistAndBroadcast();
   }
 

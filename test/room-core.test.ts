@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { outpacedLosers } from "../src/room-core.ts";
 import type { PlayerState } from "../src/types.ts";
-import { rematchReduce, botAccepts, nextAlarmAt, REMATCH_TIMEOUT_MS, botDelay, dueBots, nextBotAlarmAt, hasConnectedHuman } from "../src/room-core.ts";
+import { rematchReduce, botAccepts, nextAlarmAt, REMATCH_TIMEOUT_MS, botDelay, dueBots, nextBotAlarmAt, hasConnectedHuman, guessesFor, clampRows, MIN_ROWS, MAX_ROWS } from "../src/room-core.ts";
 
 function player(username: string, status: PlayerState["status"], isBot = false): PlayerState {
   return { username, connected: true, guesses: [], status, isBot, points: 0, pointsSpent: 0 };
@@ -134,6 +134,27 @@ describe("rematchReduce", () => {
   });
 });
 
+describe("board dimensions (letters × rows)", () => {
+  it("guessesFor is the smart default: length+1, plateauing at MAX_ROWS — set_length resets rows here", () => {
+    expect(guessesFor(4)).toBe(5);
+    expect(guessesFor(5)).toBe(6);
+    expect(guessesFor(7)).toBe(8);
+    expect(guessesFor(11)).toBe(MAX_ROWS); // plateau, not 12
+  });
+
+  it("clampRows keeps an in-range override (set_rows within [MIN,MAX])", () => {
+    expect(clampRows(3)).toBe(3);
+    expect(clampRows(6)).toBe(6);
+    expect(clampRows(8)).toBe(8);
+  });
+
+  it("clampRows clamps out-of-range and rounds non-integers", () => {
+    expect(clampRows(2)).toBe(MIN_ROWS);
+    expect(clampRows(99)).toBe(MAX_ROWS);
+    expect(clampRows(5.7)).toBe(6);
+  });
+});
+
 describe("botAccepts", () => {
   it("accepts below the threshold, declines at/above it", () => {
     expect(botAccepts(0)).toBe(true);
@@ -157,6 +178,22 @@ describe("snapshot strips internal rematch fields (matrix #11)", () => {
     for (const field of ["rematch: undefined", "botRematchAt: undefined", "rematchTimeoutAt: undefined"]) {
       expect(src).toContain(field);
     }
+  });
+});
+
+describe("set_rows handler wiring (room.ts)", () => {
+  const src = readFileSync(new URL("../src/room.ts", import.meta.url), "utf8");
+  it("is dispatched in the message switch", () => {
+    expect(src).toContain('case "set_rows":');
+    expect(src).toContain("this.onSetRows(ws, msg.rows)");
+  });
+  it("onSetRows clamps to [MIN,MAX] via clampRows and writes maxGuesses", () => {
+    expect(src).toContain("private async onSetRows(");
+    expect(src).toContain("const clamped = clampRows(rows);");
+    expect(src).toContain("this.state.maxGuesses = clamped;");
+  });
+  it("set_length still resets maxGuesses to the smart default", () => {
+    expect(src).toContain("this.state.maxGuesses = guessesFor(length);");
   });
 });
 

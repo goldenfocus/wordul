@@ -141,6 +141,7 @@ export type ClientMessage =
   | { type: "rematch_decline" }
   | { type: "chat"; text: string }
   | { type: "set_length"; wordLength: number }
+  | { type: "set_rows"; rows: number }
   | { type: "set_mode"; mode: RoomMode }
   | { type: "set_edition"; edition: string }
   | { type: "rename"; name: string }

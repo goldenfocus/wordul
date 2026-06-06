@@ -107,8 +107,9 @@ describe("nextPollMs (F6) — adaptive poll while the list is empty", () => {
     expect(nextPollMs("empty", true)).toBe(8000);
     expect(nextPollMs("error", true)).toBe(8000);
 describe("compact floor row", () => {
-  it("row props carry ×T tries derived from wordLength", () => {
+  it("row props carry a letters×rows board dimension (rows = smart default tries)", () => {
     const p = compactRowProps({ routePath: "/@m/x", personaIcon: "🦊", host: "maya", wordLength: 6, seats: "2/4", edition: "default" });
     expect(p.tries).toBe(7);
+    expect(p.dim).toBe("6×7");
   });
 });

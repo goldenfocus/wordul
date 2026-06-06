@@ -90,6 +90,8 @@ export function mountArenaList(mountEl, { onJoin, excludePath } = {}) {
     list.className = "arena-list";
     for (const g of visible) {
       const p = arenaRowProps(g);
+      // OpenGame carries wordLength but not maxGuesses, so the row shows the smart-default
+      // rows (triesFor) as the board height — a host's set_rows override isn't in the feed.
       const tries = triesFor(p.wordLength);
       const row = document.createElement("button");
       row.type = "button";
@@ -98,7 +100,7 @@ export function mountArenaList(mountEl, { onJoin, excludePath } = {}) {
       row.innerHTML =
         `<span class="arena-row-avatar" aria-hidden="true">${p.avatar}</span>` +
         `<span class="arena-row-body"><span class="arena-row-host">${p.host}</span>` +
-        `<span class="arena-row-meta muted">${p.wordLength} letters · <span class="arena-row-tries">×${tries}</span></span></span>` +
+        `<span class="arena-row-meta muted"><span class="arena-row-dim">${p.wordLength}×${tries}</span> board</span></span>` +
         `<span class="arena-row-seats">${p.seats}</span>`;
       row.addEventListener("click", () => { if (onJoin) onJoin(p.routePath); });
       list.appendChild(row);

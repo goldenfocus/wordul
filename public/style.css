@@ -3212,49 +3212,59 @@ body.lobby .lobby-left .lobby-controls .btn.primary:disabled {
 /* Hide the room-chrome icons in the immersive playing view, like the room name. */
 body.playing .room-icon-btn { display: none; }
 
-/* 2 ── Tries badge = word-length control ────────────────────────────────────*/
-.tries-badge {
-  position: relative;
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 10px 16px; min-width: 96px;
-  border: 1px solid transparent; border-radius: 5px;
-  cursor: ns-resize; user-select: none; -webkit-user-select: none;
-  touch-action: none; /* drag adjusts length — must not scroll the page */
-  transition: background 0.16s ease;
+/* 2 ── Dimension control = letters × rows (tap 5 × 6 → steppers) ─────────────*/
+.dimwrap { position: relative; padding-top: 6px; }
+.dim {
+  display: flex; align-items: baseline; gap: 5px;
+  background: none; border: 1px solid transparent; border-radius: 6px;
+  padding: 6px 10px; cursor: pointer; transition: 0.16s;
+  font-family: var(--font-display);
 }
-.tries-badge:hover, .tries-badge.editing {
-  background: radial-gradient(120% 130% at 50% 0,
-    color-mix(in oklab, var(--accent) 16%, transparent), transparent);
+.dim:hover, .dim.open {
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
 }
-.tries-badge.locked { opacity: 0.55; cursor: default; }
-.tries-badge .tb-x {
-  font-family: var(--font-display); font-weight: 700;
-  font-size: 42px; line-height: 0.95; color: var(--accent);
-  text-shadow: 0 0 24px color-mix(in oklab, var(--accent) 40%, transparent);
+.dimwrap.locked .dim { opacity: 0.55; cursor: default; }
+.dimwrap.locked .dim:hover { border-color: transparent; background: none; }
+.dim .n {
+  font-weight: 700; font-size: 30px; line-height: 1; color: var(--accent);
+  text-shadow: 0 0 16px color-mix(in oklab, var(--accent) 35%, transparent);
 }
-.tries-badge.bump .tb-x { animation: tb-bump 0.2s; }
-@keyframes tb-bump { 50% { transform: scale(1.18); } }
-.tries-badge small {
-  color: var(--muted); font-size: 10.5px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.12em;
+.dim .by { font-weight: 600; font-size: 18px; color: var(--muted); }
+.dimpop {
+  position: absolute; top: 100%; left: 50%;
+  transform: translateX(-50%) translateY(-4px); margin-top: 6px;
+  width: 188px; z-index: 5;
+  background: color-mix(in oklab, var(--bg-card) 92%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 22%, var(--border));
+  border-radius: 8px; padding: 10px; display: none;
+  box-shadow: 0 24px 60px -24px #000; backdrop-filter: blur(16px);
 }
-.tries-badge .tb-lethint {
-  font-size: 11px; font-weight: 600; color: var(--accent);
-  height: 0; opacity: 0; overflow: hidden; transition: height 0.18s ease, opacity 0.18s ease;
+.dimpop.open { display: block; animation: dim-rise 0.16s ease; }
+@keyframes dim-rise { from { opacity: 0; transform: translateX(-50%) translateY(0); } }
+.drow {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 5px 2px;
 }
-.tries-badge.editing .tb-lethint { height: 15px; opacity: 1; margin-top: 3px; }
-.tries-badge .tb-pm {
-  position: absolute; top: 50%; transform: translateY(-50%);
-  width: 24px; height: 24px; border-radius: 50%;
-  border: 1px solid var(--accent); background: var(--bg-card); color: var(--accent);
-  font-size: 15px; font-weight: 700; line-height: 1; padding-bottom: 2px;
-  display: grid; place-items: center; cursor: pointer;
-  opacity: 0; pointer-events: none; transition: opacity 0.16s ease;
+.drow + .drow {
+  border-top: 1px solid color-mix(in oklab, var(--fg) 6%, var(--border));
+  margin-top: 2px;
 }
-.tries-badge.editing .tb-pm { opacity: 1; pointer-events: auto; }
-.tries-badge .tb-minus { left: -10px; }
-.tries-badge .tb-plus  { right: -10px; }
-.tries-badge .tb-pm:active { transform: translateY(-50%) scale(0.88); }
+.drow .lbl { font-family: var(--font-body); font-size: 12px; color: var(--muted); font-weight: 600; }
+.step { display: flex; align-items: center; gap: 9px; }
+.step button {
+  width: 24px; height: 24px; border-radius: 5px;
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--border));
+  background: color-mix(in oklab, var(--bg-card) 60%, transparent);
+  color: var(--accent); font-size: 14px; cursor: pointer;
+  display: grid; place-items: center; transition: 0.12s;
+}
+.step button:hover { background: color-mix(in oklab, var(--accent) 16%, transparent); }
+.step button:disabled { opacity: 0.3; cursor: default; }
+.step .v {
+  font-family: var(--font-display); font-weight: 700; font-size: 17px;
+  min-width: 18px; text-align: center;
+}
 
 /* 3 ── Your table seat strip ───────────────────────────────────────────────*/
 .mytable {
@@ -3286,7 +3296,7 @@ body.playing .room-icon-btn { display: none; }
 }
 
 /* 4 ── Compact floor rows (the existing .arena-row / .lobby-rail base stays). */
-.arena-row-tries { color: var(--accent); font-weight: 600; }
+.arena-row-dim { color: var(--accent); font-weight: 600; }
 .arena-count {
   font-size: 11px; font-weight: 600; color: var(--muted);
   padding: 2px 4px 8px;
@@ -3380,16 +3390,14 @@ body.lobby #chatLog { max-height: 200px; }
   from { opacity: 0; transform: translateY(-10px) scale(0.96); }
 }
 
-/* Reduced motion — disable the badge bump, seat pop, chat ping, and bloom.
+/* Reduced motion — disable the seat pop, chat ping, and bloom.
    Honor BOTH the OS query and the app's body.reduced-motion toggle. */
 @media (prefers-reduced-motion: reduce) {
-  .tries-badge.bump .tb-x,
   .seat.seatin,
   .chat-tab-ping,
   .boards.blooming .grid-row { animation: none; }
   .boards.blooming .grid-row { opacity: 1; transform: none; }
 }
-body.reduced-motion .tries-badge.bump .tb-x,
 body.reduced-motion .seat.seatin,
 body.reduced-motion .chat-tab-ping,
 body.reduced-motion .boards.blooming .grid-row { animation: none !important; }

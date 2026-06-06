@@ -11,6 +11,22 @@ export const BOT_REMATCH_MAX_MS = 9_000;    // bot "thinking" window, high end
 export const BOT_REMATCH_ACCEPT_P = 0.8;    // P(bot says yes)
 export const ABANDON_GRACE_MS = 45_000;     // public lobby emptied of humans → delist after this
 
+// --- Board dimensions: letters (wordLength) × rows (maxGuesses) ----------------
+// Rows can be overridden independently via set_rows, but changing letters resets
+// rows to this smart default. Mirrored client-side by triesFor (public/lobby-view.js).
+export const MIN_ROWS = 3;
+export const MAX_ROWS = 8;
+// length+1 preserves the classic 5/6 feel for short words (4→5, 5→6, 6→7, 7→8),
+// then plateaus at 8 — longer words convey more info per guess, so 13 rows for a
+// 12-letter board is needless intimidation.
+export function guessesFor(length: number): number {
+  return Math.min(length + 1, MAX_ROWS);
+}
+// Clamp a requested row count into [MIN_ROWS, MAX_ROWS], rounding non-integers.
+export function clampRows(rows: number): number {
+  return Math.max(MIN_ROWS, Math.min(MAX_ROWS, Math.round(rows)));
+}
+
 // --- Abandon-close: don't strand an emptied public room in the open-games index ----
 // True when at least one non-bot player is currently connected. Drives the grace-window
 // delist: a public Arena room with no connected human (host left/refreshed) arms a timer,
