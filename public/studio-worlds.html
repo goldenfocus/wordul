@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en" data-themed="0">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>World Manager · Wordul Studio</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .wm-wrap { max-width: 880px; margin: 0 auto; padding: 24px 16px 80px; }
+    .wm-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .wm-token { width: 100%; margin: 12px 0 20px; padding: 10px 12px; border-radius: 10px;
+      border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); background: rgba(0,0,0,.35); color: inherit; }
+    .wm-row { display: grid; grid-template-columns: 1.2fr 2fr 1fr auto auto; gap: 8px; align-items: center;
+      padding: 10px; border-radius: 12px; background: rgba(255,255,255,.04); margin-bottom: 8px; }
+    .wm-row input, .wm-row select { width: 100%; padding: 6px 8px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,.12); background: rgba(0,0,0,.3); color: inherit; }
+    .wm-actions { display: flex; gap: 6px; }
+    .wm-bar { position: sticky; bottom: 0; display: flex; gap: 10px; justify-content: flex-end;
+      padding: 14px 0; background: linear-gradient(transparent, rgba(0,0,0,.6) 30%); }
+    .wm-status { min-height: 1.4em; opacity: .85; }
+    button { cursor: pointer; }
+    button.danger { color: #ff8a8a; }
+  </style>
+</head>
+<body>
+  <div class="wm-wrap">
+    <div class="wm-head">
+      <h1>World Manager</h1>
+      <a href="/vibe-studio">← Studio</a>
+    </div>
+    <input id="adminToken" class="wm-token" type="password" placeholder="Admin token (Bearer)" autocomplete="off" />
+    <div id="rows"></div>
+    <button id="addBtn">+ Add World</button>
+    <div class="wm-bar">
+      <span id="status" class="wm-status"></span>
+      <button id="revertBtn" class="danger">Revert all</button>
+      <button id="saveBtn">Save changes</button>
+    </div>
+  </div>
+  <script type="module" src="/studio-worlds.js"></script>
+</body>
+</html>
