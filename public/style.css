@@ -1481,7 +1481,10 @@ html[data-edition="default"] .key.pressed {
 /* ✨ Power-ups: one subtle magic icon, hidden until you can afford the cheapest
    power-up. Tapping opens a popover of currently-affordable power-ups — icons only,
    no price (you learn the cost by watching the balance dip). */
-.magic-bar { position: relative; display: flex; justify-content: center; gap: 10px; width: 100%; max-width: 520px; margin: 0 auto; padding: 0 8px 6px; }
+/* min-height keeps the bar's footprint constant now that 🔊 lives here always —
+   the absolutely-pinned mute can't overhang the board, and the board no longer
+   jumps when the transient ✨/💀 icons appear. */
+.magic-bar { position: relative; display: flex; justify-content: center; gap: 10px; width: 100%; max-width: 520px; min-height: 44px; margin: 0 auto; padding: 0 8px 6px; }
 .magic-icon {
   width: 44px; height: 44px; border-radius: 8px;
   border: 1px solid var(--border); background: var(--bg-card, var(--key-bg));
@@ -1503,6 +1506,20 @@ html[data-edition="default"] .key.pressed {
 .give-up-icon .glyph { width: 28px; height: 28px; }
 .give-up-icon:hover { opacity: 1; }
 .give-up-icon:active { transform: scale(0.9); }
+/* 🔊 mute: always-visible in-game sound toggle, pinned to the board's right edge so the
+   centered ✨/💀 cluster doesn't shift around it. Dimmed at rest; full-strength when
+   muted so the off state is impossible to miss. */
+.mute-icon {
+  position: absolute; right: 8px; top: 0;
+  width: 44px; height: 44px;
+  border: none; background: none;
+  font-size: 19px; line-height: 1; cursor: pointer; padding: 0; opacity: 0.45;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform 0.08s, opacity 0.15s;
+}
+.mute-icon:hover { opacity: 1; }
+.mute-icon:active { transform: scale(0.92); }
+.mute-icon.is-muted { opacity: 0.9; }
 .magic-popover {
   /* The magic-bar now sits ABOVE the board, so the popover opens DOWNWARD. */
   position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);

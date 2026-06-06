@@ -29,6 +29,7 @@ export default defineConfig({
       { find: /^\/hacklog\.js$/, replacement: new URL("./public/hacklog.js", import.meta.url).pathname },
       { find: /^\/keyboard\.js$/, replacement: new URL("./public/keyboard.js", import.meta.url).pathname },
       { find: /^\/settings\.js$/, replacement: new URL("./public/settings.js", import.meta.url).pathname },
+      { find: /^\/mute-btn\.js$/, replacement: new URL("./public/mute-btn.js", import.meta.url).pathname },
       { find: /^\/share-card\.js$/, replacement: new URL("./public/share-card.js", import.meta.url).pathname },
       { find: /^\/share-links\.js$/, replacement: new URL("./public/share-links.js", import.meta.url).pathname },
       { find: /^\/owner-tape\.js$/, replacement: new URL("./public/owner-tape.js", import.meta.url).pathname },

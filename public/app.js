@@ -13,6 +13,7 @@ import { createHacklog } from "/hacklog.js";
 import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, surfaceGiveUp, checkBankruptcy } from "/powerups.js";
 import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, detectLayout } from "/keyboard.js";
 import { getSettings, saveSettings, applySettings, openSettings, openHub } from "/settings.js";
+import { wireMuteBtn, toggleMuted } from "/mute-btn.js";
 import { buildShareCardModel, renderShareCard } from "/share-card.js";
 import { shareTargetUrl } from "/share-links.js";
 import { buildOwnerTape } from "/owner-tape.js";
@@ -850,6 +851,7 @@ function showRoom(owner, slug) {
   });
   wireChat();
   wireRoomTabs();
+  wireMuteBtn({ onToggle: (m) => toast(m ? "Muted" : "Sound on", { duration: 1000 }) });
   wireDim();
   wireLobbyPair();
   buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
@@ -942,6 +944,7 @@ async function showChallenge(id) {
   renderRoomHeader();
   wireChat();
   wireRoomTabs();
+  wireMuteBtn({ onToggle: (m) => toast(m ? "Muted" : "Sound on", { duration: 1000 }) });
   buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
 
   // No special ghost overlay. For ghostTape challenges we rely on autoStart=false
@@ -4988,10 +4991,10 @@ function showHub(anchor) {
 }
 
 // Flip the mute flag (companion voice + chimes already honor wordul.muted).
+// Delegates to mute-btn.js so the in-game 🔊 button's glyph stays in sync too.
 function toggleMute() {
-  const muted = localStorage.getItem("wordul.muted") === "1";
-  localStorage.setItem("wordul.muted", muted ? "0" : "1");
-  toast(muted ? "Sound on" : "Muted", { duration: 1000 });
+  const muted = toggleMuted();
+  toast(muted ? "Muted" : "Sound on", { duration: 1000 });
 }
 
 // Tear down any live room connection when leaving a room view.
