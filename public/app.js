@@ -4851,9 +4851,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Hydrate the effective Worlds registry (code defaults + admin KV overrides) without
   // blocking first paint. Once it arrives, re-render only the worlds-bearing views so
   // admin edits show up; other routes (in-game, profiles, etc.) are left untouched.
-  loadWorlds().then(() => {
+  loadWorlds().then((changed) => {
     const p = location.pathname;
-    if (p === "/" || p === "/worlds") route();
+    if (changed && (p === "/" || p === "/worlds")) route();
   });
 });
 

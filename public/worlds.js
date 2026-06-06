@@ -25,13 +25,20 @@ export function hydrateWorlds(list) {
   BY_SLUG = new Map(CURRENT.map((w) => [w.slug, w]));
 }
 
-// Fetch the effective registry from the worker and hydrate. Safe to call once at boot.
+// Fetch the effective registry from the worker and hydrate. Returns true if the
+// registry actually changed (so callers can re-render only when needed). Safe to call
+// once at boot; swallows errors and keeps the static fallback (returns false).
 export async function loadWorlds() {
   try {
     const res = await fetch("/worlds.json", { cache: "no-store" });
-    if (res.ok) hydrateWorlds(await res.json());
+    if (!res.ok) return false;
+    const next = await res.json();
+    if (!Array.isArray(next)) return false;
+    const before = JSON.stringify(CURRENT);
+    hydrateWorlds(next);
+    return JSON.stringify(CURRENT) !== before;
   } catch {
-    /* keep the static fallback */
+    return false; // keep the static fallback
   }
 }
 
