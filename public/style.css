@@ -236,10 +236,10 @@ input, textarea, .chat-log {
   100% { transform: translate(-50%, -180%) scale(1.05); opacity: 0; }
 }
 
-/* The hacker-log — a ZERO-HEIGHT float anchor directly BELOW the board frames. The
-   event line floats out of it (never pushing the board↔keyboard column), holds a few
-   seconds, and vanishes; a dim ▸ tap target persists; tapping expands the full
-   scrollback as an overlay rising UPWARD over the board. */
+/* The hacker-log — a ZERO-HEIGHT float anchor flex-centered inside .board-gap, so the
+   anchor point IS the middle of the board↔keyboard gap. The event line floats out of it
+   (never pushing the column), holds a few seconds, and vanishes; a dim ▸ tap target
+   persists; tapping expands the full scrollback as an overlay rising UPWARD over the board. */
 .hacklog {
   position: relative;
   width: 100%; max-width: 520px; margin: 0 auto;
@@ -248,11 +248,14 @@ input, textarea, .chat-log {
   font-size: 12.5px; line-height: 1.5;
   z-index: 30;
 }
-/* The floating line zone: bare text, no box, no chrome. Lines are toned from the
-   TILE PALETTE (hot/warm/error) softened toward fg, with a faint same-hue glow —
-   subtle by design, and editions re-light it for free via the vars. */
+/* The floating line zone: bare text, no box, no chrome, CENTERED on the gap midpoint
+   (the zero-height anchor is the vertical center; translateY splits the line on it).
+   Lines are toned from the TILE PALETTE (hot/warm/error) softened toward fg, with a
+   faint same-hue glow — subtle by design; editions re-light it for free via the vars. */
 .hacklog-float {
-  position: absolute; top: 4px; left: 0; right: 18px;
+  position: absolute; top: 50%; transform: translateY(-50%);
+  left: 44px; right: 44px; /* symmetric inset clears the 🔊 + ▸ at the right, keeps text optically centered */
+  text-align: center;
   pointer-events: none; /* never steals taps from the board/keyboard */
   white-space: nowrap;
 }
@@ -285,10 +288,12 @@ input, textarea, .chat-log {
   opacity: 0.2; font-size: 11.5px; text-shadow: none;
   transition: opacity 0.9s ease; /* GHOST_MS in hacklog.js */
 }
-/* The rest-state tap target: a dim ▸ tucked at the right edge of the anchor.
-   Generous padding ≈ a finger-sized hit area without visual weight. */
+/* The rest-state tap target: a dim ▸ at the right of the centered line, just inside
+   the 🔊 mute (which owns the last 44px of the row). Vertically centered on the
+   anchor like everything else in the gap row. Generous padding ≈ a finger-sized hit
+   area without visual weight. */
 .hacklog-ticker {
-  position: absolute; top: -8px; right: -10px;
+  position: absolute; top: 50%; transform: translateY(-50%); right: 38px;
   padding: 12px 14px; cursor: pointer;
   color: color-mix(in srgb, var(--muted) 70%, transparent);
 }
@@ -1000,15 +1005,29 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
 
   /* Keep the keyboard stuck to the bottom of the frame: your board can be as tall
      as it likes (or scroll), the keys are always right there under your thumbs.
-     Solid bg masks the board scrolling underneath; safe-area pad clears the home bar. */
+     The panel bg (base .keyboard rule) is opaque, so it masks the board scrolling
+     underneath; safe-area pad clears the home bar. */
   .keyboard {
     position: sticky;
     bottom: 0;
     z-index: 30;
-    background: var(--bg);
     padding-bottom: max(8px, env(safe-area-inset-bottom, 0));
     box-shadow: 0 -10px 18px -10px rgba(0, 0, 0, 0.7);
   }
+
+  /* During play the column becomes a flex stack and the gap row absorbs the free
+     space — the hacklog's centered line + the 🔊 at its right land in the visual
+     MIDDLE between board and keyboard. flex-grow only soaks up FREE space: a tall
+     board still compresses the row to its 44px floor (nothing pushes the keyboard). */
+  body.playing #tabPlay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+  }
+  body.playing .board-gap { flex: 1 0 44px; }
 }
 
 /* Game-start celebration — a big "GO!" pop + festive confetti rain. Fires on the
@@ -1340,6 +1359,11 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
   align-items: stretch;       /* rail matches the full letter-grid height */
   gap: 6px;
   padding: 8px;
+  /* One rectangle: the whole keyboard reads as a single panel. Opaque mix (bg→fg)
+     so the sticky mobile keyboard still masks the board scrolling underneath. */
+  background: color-mix(in srgb, var(--bg) 93%, var(--fg));
+  border: 1px solid var(--border);
+  border-radius: 16px;
   user-select: none;
   /* No long-press copy/callout on iOS — the bare user-select above isn't enough;
      Safari needs the -webkit pair or holding ⌫ pops the text-selection bubbles. */
@@ -1353,23 +1377,18 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
   flex-direction: column;
   gap: 6px;
 }
-/* Equal-fraction grid: every column in a row is an identical 1fr track, so the
-   keys within a row are pixel-identical — I and O measure the same (no flexbox
-   subpixel drift). Keys cap at 46px and shrink with the track on narrow screens;
-   wide keys (⌫ / Enter) span two tracks for their larger footprint. */
-/* Flex rows + per-row end spacers (set inline by buildKeyboard) so every letter key is
-   identical WITHIN and ACROSS rows — each row totals the same flex units. Fits any width
-   (flex), no subpixel drift. Wide keys (⌫/Enter) are 1.5×; spacers absorb the slack. */
+/* Flex rows that fill the keyboard rectangle edge-to-edge: keys are identical WITHIN
+   a row, and shorter rows (A-L, Z-M) get proportionally WIDER keys instead of being
+   padded to the QWERTY row with spacers — every row spans the same width. */
 .kb-row {
   display: flex;
   justify-content: center;
   gap: 6px;
 }
-.kb-spacer { flex: 0.5 1 0; } /* per-row flex overridden inline */
 .key {
   flex: 1 1 0;
   min-width: 0;
-  max-width: 56px;            /* bigger now that actions left the grid */
+  max-width: 64px;            /* roomy cap — lets the 7-key bottom row actually stretch */
   min-height: 62px;
   background: var(--key-bg);
   color: var(--fg);
@@ -1481,10 +1500,7 @@ html[data-edition="default"] .key.pressed {
 /* ✨ Power-ups: one subtle magic icon, hidden until you can afford the cheapest
    power-up. Tapping opens a popover of currently-affordable power-ups — icons only,
    no price (you learn the cost by watching the balance dip). */
-/* min-height keeps the bar's footprint constant now that 🔊 lives here always —
-   the absolutely-pinned mute can't overhang the board, and the board no longer
-   jumps when the transient ✨/💀 icons appear. */
-.magic-bar { position: relative; display: flex; justify-content: center; gap: 10px; width: 100%; max-width: 520px; min-height: 44px; margin: 0 auto; padding: 0 8px 6px; }
+.magic-bar { position: relative; display: flex; justify-content: center; gap: 10px; width: 100%; max-width: 520px; margin: 0 auto; padding: 0 8px 6px; }
 .magic-icon {
   width: 44px; height: 44px; border-radius: 8px;
   border: 1px solid var(--border); background: var(--bg-card, var(--key-bg));
@@ -1506,11 +1522,20 @@ html[data-edition="default"] .key.pressed {
 .give-up-icon .glyph { width: 28px; height: 28px; }
 .give-up-icon:hover { opacity: 1; }
 .give-up-icon:active { transform: scale(0.9); }
-/* 🔊 mute: always-visible in-game sound toggle, pinned to the board's right edge so the
-   centered ✨/💀 cluster doesn't shift around it. Dimmed at rest; full-strength when
+/* The board↔keyboard gap row: hosts the hacklog's floating line (dead-center) and the
+   🔊 mute (right edge, vertically centered with the text). A slim 44px strip by default;
+   on mobile during play it flex-GROWS to absorb the free space (see the mobile block),
+   so the pair always sits in the visual middle of the gap. */
+.board-gap {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; max-width: 520px; margin: 0 auto;
+  min-height: 44px;
+}
+/* 🔊 mute: always-visible in-game sound toggle. Dimmed at rest; full-strength when
    muted so the off state is impossible to miss. */
 .mute-icon {
-  position: absolute; right: 8px; top: 0;
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
   width: 44px; height: 44px;
   border: none; background: none;
   font-size: 19px; line-height: 1; cursor: pointer; padding: 0; opacity: 0.45;
@@ -1518,7 +1543,7 @@ html[data-edition="default"] .key.pressed {
   transition: transform 0.08s, opacity 0.15s;
 }
 .mute-icon:hover { opacity: 1; }
-.mute-icon:active { transform: scale(0.92); }
+.mute-icon:active { transform: translateY(-50%) scale(0.92); }
 .mute-icon.is-muted { opacity: 0.9; }
 .magic-popover {
   /* The magic-bar now sits ABOVE the board, so the popover opens DOWNWARD. */

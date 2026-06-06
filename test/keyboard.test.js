@@ -227,3 +227,23 @@ describe("buildKeyboard touch path — one tap, one letter", () => {
     root.remove();
   });
 });
+
+describe("buildKeyboard row sizing", () => {
+  // Rows fill the keyboard rectangle edge-to-edge: shorter rows get WIDER keys
+  // (flex stretch) instead of being padded to the longest row with end spacers.
+  it("rows contain only .key buttons — no equalizing spacers", () => {
+    const root = document.createElement("div");
+    buildKeyboard(root, "qwerty", noopHandlers());
+    expect(root.querySelectorAll(".kb-spacer").length).toBe(0);
+    for (const row of root.querySelectorAll(".kb-row")) {
+      for (const child of row.children) {
+        expect(child.classList.contains("key")).toBe(true);
+      }
+    }
+  });
+  it("azerty rows are spacer-free too (6-letter bottom row)", () => {
+    const root = document.createElement("div");
+    buildKeyboard(root, "azerty", noopHandlers());
+    expect(root.querySelectorAll(".kb-spacer").length).toBe(0);
+  });
+});

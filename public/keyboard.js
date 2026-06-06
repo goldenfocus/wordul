@@ -31,24 +31,14 @@ export function buildKeyboard(root, layoutId, handlers) {
   if (!root) return;
   const rows = KEYBOARD_LAYOUTS[activeLayoutId(layoutId)];
   root.innerHTML = "";
-  // Letters fill a column on the left; the two actions live in a tall right rail. With
-  // ⌫/Return out of the grid, every LETTER key is full-size and identical across rows —
-  // each row is padded to the widest row's unit count with end spacers (deficit split
-  // both ends) so letters render at lettersWidth / maxUnits regardless of row length.
-  const maxUnits = Math.max(...rows.map((r) => r.length));
-  const spacer = (flex) => {
-    const s = document.createElement("div");
-    s.className = "kb-spacer";
-    s.style.flex = `${flex} 1 0`;
-    return s;
-  };
+  // Letters fill a column on the left; the two actions live in a tall right rail.
+  // Every row stretches edge-to-edge of the keyboard rectangle: shorter rows simply
+  // get WIDER keys (flex stretch, capped by .key max-width) — no equalizing spacers.
   const letters = document.createElement("div");
   letters.className = "kb-letters";
   rows.forEach((rowLetters) => {
     const row = document.createElement("div");
     row.className = "kb-row";
-    const pad = (maxUnits - rowLetters.length) / 2; // split the deficit across both ends
-    if (pad > 0) row.appendChild(spacer(pad));
     for (const l of rowLetters) {
       const k = document.createElement("button");
       k.className = "key";
@@ -56,7 +46,6 @@ export function buildKeyboard(root, layoutId, handlers) {
       k.dataset.key = l;
       row.appendChild(k);
     }
-    if (pad > 0) row.appendChild(spacer(pad));
     letters.appendChild(row);
   });
   root.appendChild(letters);
