@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { triesFor, seatModel, compactRowProps } from "../public/lobby-view.js";
+import { triesFor, seatModel, compactRowProps, ghostSeatModel } from "../public/lobby-view.js";
 
 describe("triesFor (mirrors server guessesFor)", () => {
   it("is length+1, plateauing at 8", () => {
@@ -22,6 +22,22 @@ describe("seatModel (Your table)", () => {
     const m = seatModel({ players: [{ username: "papa" }] }, "papa");
     expect(m.capacity).toBeGreaterThanOrEqual(2);
     expect(m.taken).toBe(1);
+  });
+});
+
+describe("ghostSeatModel", () => {
+  it("is you + one seat per tape player, full house", () => {
+    const tape = { players: [{ username: "ada", host: true }, { username: "bo" }] };
+    const m = ghostSeatModel(tape);
+    expect(m.seats.map((s) => s.kind)).toEqual(["you", "ghost", "ghost"]);
+    expect(m.seats[1].username).toBe("ada");
+    expect(m.taken).toBe(3);
+    expect(m.capacity).toBe(3);
+  });
+  it("tolerates a missing tape", () => {
+    const m = ghostSeatModel(null);
+    expect(m.seats).toEqual([{ kind: "you" }]);
+    expect(m.capacity).toBe(1);
   });
 });
 

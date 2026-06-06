@@ -19,6 +19,17 @@ export function seatModel(snap, me) {
   return { seats: seats.slice(0, Math.max(capacity, seats.length)), taken: players.length, capacity };
 }
 
+// Challenge rooms are solo-vs-ghosts (one DO per player): the seat strip shows the
+// real ghost field, not the fictional 1/8 the default capacity would suggest.
+export function ghostSeatModel(tape) {
+  const ghosts = Array.isArray(tape && tape.players) ? tape.players : [];
+  return {
+    seats: [{ kind: "you" }, ...ghosts.map((g) => ({ kind: "ghost", username: g.username || "" }))],
+    taken: 1 + ghosts.length,
+    capacity: 1 + ghosts.length,
+  };
+}
+
 // Map a server OpenGame to a compact floor-row's props. The row shows the board as
 // letters×rows (e.g. 5×6); OpenGame has no maxGuesses, so rows = triesFor(wordLength)
 // (the smart default — a host's set_rows override isn't carried in the open-games feed).

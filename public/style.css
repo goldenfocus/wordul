@@ -3396,6 +3396,11 @@ body.playing .room-icon-btn { display: none; }
   color: var(--bg);
 }
 .seat.taken { background: color-mix(in oklab, var(--accent) 16%, transparent); }
+.seat.ghost {
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  border: 1.5px dashed color-mix(in oklab, var(--accent) 40%, transparent);
+  opacity: 0.7;
+}
 .seat.empty {
   border: 1.5px dashed var(--cold); background: transparent; color: var(--cold);
 }

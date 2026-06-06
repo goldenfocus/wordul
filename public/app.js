@@ -33,7 +33,7 @@ import { pickInspire, pickForfeit } from "/inspire.js";
 import { renderSettlement } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
-import { seatModel } from "/lobby-view.js";
+import { seatModel, ghostSeatModel } from "/lobby-view.js";
 import { encodeLocalSolve, needsDailyRecovery, recoverDailyArtifacts } from "/daily-recover.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
@@ -2713,7 +2713,7 @@ function renderMyTable(snap) {
   const seatsEl = $("#myTableSeats");
   const countEl = $("#myTableCount");
   if (!seatsEl) return;
-  const model = seatModel(snap, getUsername());
+  const model = game.challengeId ? ghostSeatModel(game.ghostTape) : seatModel(snap, getUsername());
   // A seat is "new" if it's a taken seat beyond the count we last rendered (front-loaded:
   // you=seat0, then takens in order), so freshly-joined players pop while existing ones stay put.
   const prevTaken = game.lastSeatCount || 0;
@@ -2732,6 +2732,9 @@ function renderMyTable(snap) {
       if (takenSeen > prevTaken) el.classList.add("seatin");
       const name = s.username || "";
       el.textContent = name ? name[0].toUpperCase() : "◆";
+    } else if (s.kind === "ghost") {
+      el.className = "seat ghost";
+      el.textContent = s.username ? s.username[0].toUpperCase() : "◆";
     } else {
       el.className = "seat empty";
       el.textContent = "＋";
@@ -2739,7 +2742,12 @@ function renderMyTable(snap) {
     seatsEl.appendChild(el);
   }
   game.lastSeatCount = takenSeen;
-  if (countEl) countEl.textContent = `${model.taken}/${model.capacity}`;
+  if (countEl) {
+    const nGhosts = model.taken - 1;
+    countEl.textContent = game.challengeId
+      ? `vs ${nGhosts} ghost${nGhosts === 1 ? "" : "s"}`
+      : `${model.taken}/${model.capacity}`;
+  }
 }
 
 function render() {
@@ -2853,11 +2861,14 @@ function render() {
 
   // "Your table" seat strip rides alongside the tries badge — lobby-only. Reveal + paint
   // it while waiting; hide (and reset the new-seat tracker) in any other phase.
+  // Tape-less challenges auto-start (never sit in lobby), so hide the strip entirely;
+  // ghost-tape challenges show the real ghost field instead of the fictional 1/8.
   const myTable = $("#myTable");
   if (myTable) {
     const inLobby = snap.phase === "lobby";
-    myTable.hidden = !inLobby;
-    if (inLobby) renderMyTable(snap);
+    const show = inLobby && (!game.challengeId || !!game.ghostTape);
+    myTable.hidden = !show;
+    if (show) renderMyTable(snap);
     else game.lastSeatCount = 0;
   }
 
