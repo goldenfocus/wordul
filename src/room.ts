@@ -71,7 +71,7 @@ type SeedBody = {
 };
 
 // Wordul of the Day: a flat gold goody on completion, on top of the score-based mint.
-const DAILY_GOLD_BONUS = 100; // ← tune to taste (1 gold ≈ 100 points)
+const DAILY_GOLD_BONUS = 100; // ← tune to taste (flat goody on top of the ÷9 score mint)
 
 // A room whose canonical path is daily/<YYYY-MM-DD> is the day's puzzle.
 function dailyDateOf(path: string): string | null {

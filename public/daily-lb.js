@@ -100,7 +100,10 @@ export function mountDailyLeaderboard({ mount, date, username, t = (_k, f) => f 
   fetch(api("&n=3"))
     .then((r) => (r.ok ? r.json() : null))
     .then((view) => {
-      if (!view || !Array.isArray(view.top) || view.top.length === 0) return;
+      if (!view || !Array.isArray(view.top) || view.top.length === 0) {
+        delete mount.dataset.wired; // transient miss — let the next snapshot's mount retry
+        return;
+      }
       view.top.forEach((e) => entries.set(escAttr(e.username), e));
       if (view.you) entries.set(escAttr(view.you.username), view.you);
       const more = view.total > view.top.length + (view.you ? 1 : 0);
@@ -128,5 +131,5 @@ export function mountDailyLeaderboard({ mount, date, username, t = (_k, f) => f 
           .catch(() => { showAll.disabled = false; });
       });
     })
-    .catch(() => {}); // recap renders fine without a board
+    .catch(() => { delete mount.dataset.wired; }); // recap renders fine without a board; retry next snapshot
 }
