@@ -119,4 +119,24 @@ describe("host model", () => {
     await join(room, mockWs(), "alice");
     expect(room.snapshotFor("alice").hostId).toBe("alice");
   });
+
+  it("daily rooms never get a host", async () => {
+    const { room } = makeRoom();
+    room.state.path = "daily/2026-06-06";
+    const a = mockWs();
+    await join(room, a, "alice");
+    expect(room.state.hostId).toBe(null);
+  });
+
+  it("bots never host", async () => {
+    const { room } = makeRoom();
+    const a = mockWs();
+    await join(room, a, "alice");
+    room.state.players.push({
+      username: "botty", connected: true, isBot: true, guesses: [], status: "playing",
+      ready: true, role: "duelist", revealHints: 0, vowelHints: 0, points: 0, pointsSpent: 0,
+    });
+    await room.webSocketClose(a);
+    expect(room.state.hostId).toBe(null);
+  });
 });

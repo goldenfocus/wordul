@@ -381,8 +381,10 @@ export class Room extends DurableObject<Env> {
   // First connected human holds the host seat; when they disconnect it passes to the
   // next connected human in join order. No reclaim — a returning ex-host is a guest.
   // Bots never host; daily rooms have no host. Announce changes, not the first seat.
+  // Daily detection uses both state.isDaily AND the path, because assignHost() is called
+  // in onHello before seedDailyIfNeeded() has set isDaily = true on a fresh room.
   private assignHost(): void {
-    if (this.state.isDaily) return;
+    if (this.state.isDaily || dailyDateOf(this.state.path)) return;
     const cur = this.state.players.find((p) => p.username === this.state.hostId);
     if (cur && cur.connected && !cur.isBot) return; // host still seated
     const prev = this.state.hostId ?? null;
