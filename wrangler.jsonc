@@ -138,6 +138,14 @@
 
   "observability": {
     "enabled": true
+  },
+
+  // Wordulers' WOTD heartbeat: every 10 minutes the worker pokes today's daily room;
+  // personas whose deterministic play time has passed join and play (src/bots.ts
+  // wotdPlayTime). 10-min granularity keeps "their minute" roughly honest at 144
+  // free-tier invocations/day.
+  "triggers": {
+    "crons": ["*/10 * * * *"]
   }
 
   // HISTORY (legacy wordle-race worker):

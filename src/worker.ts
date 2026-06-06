@@ -558,6 +558,22 @@ export default {
     // Everything else: static asset (SPA fallback handled by wrangler).
     return env.ASSETS.fetch(req);
   },
+
+  // Cron (wrangler.jsonc triggers): poke today's daily room so wordulers play at
+  // "their hour" even on a day no human has opened the daily (the DO can't set its
+  // own alarm before it exists — this tick is what creates/seeds it).
+  async scheduled(_ctrl: ScheduledController, env: Env): Promise<void> {
+    const date = activeDate(Date.now());
+    const path = `daily/${date}`;
+    const stub = env.ROOM.get(env.ROOM.idFromName(path));
+    try {
+      const res = await stub.fetch(`https://do/bots/tick?path=${encodeURIComponent(path)}`, { method: "POST" });
+      if (!res.ok && res.status !== 409) console.error("wotd bot tick non-ok", date, res.status);
+      // 409 = daily word not set yet (the Room couldn't resolve it from the Daily DO) — next tick retries.
+    } catch (e) {
+      console.error("wotd bot tick threw", date, e);
+    }
+  },
 };
 
 async function sitemap(env: Env, origin: string): Promise<Response> {
