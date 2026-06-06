@@ -25,7 +25,7 @@ const hotMask = ["hot", "hot", "hot", "hot", "hot"];
 
 // Builds a harness with a configurable USER-DO fetch so both the "confirmed" and
 // "hangs forever" cases can reuse identical state setup.
-function makeHarness({ userFetch }: { userFetch: () => Promise<Response> }) {
+function makeHarness({ userFetch }: { userFetch: (url: string, init?: RequestInit) => Promise<Response> }) {
   const store = new Map<string, unknown>();
   const broadcasts: unknown[] = [];
 
@@ -118,8 +118,17 @@ function makeHarness({ userFetch }: { userFetch: () => Promise<Response> }) {
 
 describe("race settlement: receipt attached only on a confirmed mint", () => {
   it("attaches receipt + re-broadcasts after a confirmed race mint", async () => {
-    const h = makeHarness({ userFetch: async () => new Response("{}", { status: 200 }) });
+    const ledgerBodies: string[] = [];
+    const h = makeHarness({
+      userFetch: async (url: string, init?: RequestInit) => {
+        if (url.includes("/ledger/append") && init?.body) {
+          ledgerBodies.push(init.body as string);
+        }
+        return new Response("{}", { status: 200 });
+      },
+    });
     await h.playRaceToWin();
+    await flushMicro();
     await flushMicro();
 
     // The confirmed mint path sets player.receipt then sends a snapshot broadcast.
@@ -131,11 +140,17 @@ describe("race settlement: receipt attached only on a confirmed mint", () => {
     expect(alice!.receipt).toBeDefined();
     // Phase 1: mult=1, no extras → payout === minted
     expect(alice!.receipt!.payout).toBe(alice!.receipt!.minted);
+
+    // Pin the ledger body: parts deltas must sum to the top-level delta.
+    expect(ledgerBodies.length).toBeGreaterThan(0);
+    const body = JSON.parse(ledgerBodies[0]);
+    expect(body.parts.reduce((s: number, p: { delta: number }) => s + p.delta, 0)).toBe(body.delta);
   });
 
   it("no receipt when the mint never confirms", async () => {
-    const h = makeHarness({ userFetch: () => new Promise(() => {}) }); // hangs forever
+    const h = makeHarness({ userFetch: (_url: string, _init?: RequestInit) => new Promise(() => {}) }); // hangs forever
     await h.playRaceToWin();
+    await flushMicro();
     await flushMicro();
 
     // No re-broadcast fires (mint pending), and the PlayerState has no receipt.

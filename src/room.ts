@@ -807,6 +807,7 @@ export class Room extends DurableObject<Env> {
       p.firstGuessAt = undefined;
       p.finishedAt = undefined;
       p.guessAts = undefined;
+      p.receipt = undefined;
     }
     this.pushSystem(`${who} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
     this.emitRoundStarted();
@@ -1595,6 +1596,7 @@ export class Room extends DurableObject<Env> {
               // (Same rule as the daily's goldAwarded — never celebrate an unconfirmed mint.)
               if (res.ok && player) {
                 player.receipt = receipt;
+                // Deliberately ephemeral — no storage.put: the receipt is a one-shot finish-screen payload; if the DO hibernates first, the client's refreshGold fallback still reconciles the wallet.
                 // Per-socket: each viewer gets a snapshot whose `word`/`players` are
                 // projected specifically for them (same loop as persistAndBroadcast).
                 for (const ws of this.ctx.getWebSockets()) {
