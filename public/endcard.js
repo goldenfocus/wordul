@@ -17,6 +17,15 @@ export function wireCardArt(preview, textEls) {
   });
 }
 
+// Whether a pre-rendered OG card exists for this word. Only the 5-letter answer pool
+// was ever built + uploaded to R2 (scripts/gen-word-pages.mjs defaults to length 5;
+// other lengths are opt-in and unbuilt) — so for any other length the /word/og/<w>.png
+// fetch is a guaranteed 404 and the end card should skip the preview entirely. If
+// another length's batch ever ships, widen this predicate.
+export function hasOgCard(word) {
+  return String(word).length === 5;
+}
+
 // "Look it up" hand-off to Google AI Mode (udm=50) — used when the dictionary has no
 // entry, so the link never dead-ends on a missing /word/<w> page. The prompt MUST stay
 // in sync with the wiki's "Continue with AI ✦" CTA in scripts/lib/word-page.mjs.

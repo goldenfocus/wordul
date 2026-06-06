@@ -1,7 +1,7 @@
 // Wordul — client
 // Single-file SPA: home → room (lobby → playing → finished), localStorage stats.
 import { getSessionToken, openSecureSheet } from "/account.js";
-import { wireCardArt, aiLookupHref } from "/endcard.js";
+import { wireCardArt, aiLookupHref, hasOgCard } from "/endcard.js";
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
 import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
@@ -3845,37 +3845,39 @@ function renderWordCard(parent, word) {
 
   const intel = wordIntel(word);
 
-  // The reward: an inline preview of the word's OG card. Every answer word has a
-  // pre-rendered card at /word/og/<slug>.png; this only runs when the word is
-  // revealed (renderWordCard is only called with snap.word present). Lazy + async
-  // so it never blocks the modal, and self-hides on error so a missing image can
-  // never break the end-card.
-  const preview = document.createElement("img");
-  preview.className = "ewc-preview";
-  preview.src = `/word/og/${w}.png`;
-  preview.alt = `${word.toUpperCase()} — word card`;
-  preview.loading = "lazy";
-  preview.decoding = "async";
-  // Keep it small and tasteful even before any .ewc-preview CSS lands: the OG card
-  // is 1200×630, so a fluid full-width box with a 1200/630 aspect ratio stays crisp.
-  preview.style.width = "100%";
-  preview.style.maxWidth = "320px";
-  preview.style.aspectRatio = "1200 / 630";
-  preview.style.height = "auto";
-  preview.style.borderRadius = "10px";
-  preview.style.display = "block";
-  preview.style.margin = "10px auto 0";
-  card.appendChild(preview);
+  // The reward: an inline preview of the word's OG card. Only words with a pre-rendered
+  // card in R2 get one (hasOgCard — the 5-letter pool; other lengths were a guaranteed
+  // 404 per game, e.g. CHAOTICAL Jun 6). Lazy + async so it never blocks the modal, and
+  // self-hides on error so a missing image can never break the end-card.
+  let preview = null;
+  if (hasOgCard(w)) {
+    preview = document.createElement("img");
+    preview.className = "ewc-preview";
+    preview.src = `/word/og/${w}.png`;
+    preview.alt = `${word.toUpperCase()} — word card`;
+    preview.loading = "lazy";
+    preview.decoding = "async";
+    // Keep it small and tasteful even before any .ewc-preview CSS lands: the OG card
+    // is 1200×630, so a fluid full-width box with a 1200/630 aspect ratio stays crisp.
+    preview.style.width = "100%";
+    preview.style.maxWidth = "320px";
+    preview.style.aspectRatio = "1200 / 630";
+    preview.style.height = "auto";
+    preview.style.borderRadius = "10px";
+    preview.style.display = "block";
+    preview.style.margin = "10px auto 0";
+    card.appendChild(preview);
+  }
 
   const def = document.createElement("div");
   def.className = "ewc-def";
   card.appendChild(def);
 
-  if (intel) {
+  if (preview && intel) {
     // Dedup: the art already shows the word (tiles) and definition (tagline), so the
     // big-word + def text start hidden; if the art fails to load they return (endcard.js).
     wireCardArt(preview, [big, def]);
-  } else {
+  } else if (preview) {
     preview.onerror = () => { preview.remove(); };
   }
 

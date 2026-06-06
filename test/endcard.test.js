@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
-import { wireCardArt, aiLookupHref } from "/endcard.js";
+import { wireCardArt, aiLookupHref, hasOgCard } from "/endcard.js";
 
 // End-game word card dedup: the OG tile art shows the word (tiles) and the definition
 // (tagline), so once the art has LOADED the duplicate text hides. Until then the text
@@ -67,6 +67,22 @@ describe("wireCardArt", () => {
       preview.dispatchEvent(new Event("error"));
     }).not.toThrow();
     expect(document.body.contains(preview)).toBe(false);
+  });
+});
+
+// Only the 5-letter answer pool has pre-rendered OG cards in R2 (scripts/gen-word-pages.mjs
+// builds length 5 by default; other lengths are opt-in and never ran). Fetching
+// /word/og/<w>.png for any other length is a guaranteed 404 — skip it entirely.
+describe("hasOgCard", () => {
+  it("true for 5-letter answers (the built pool), any case", () => {
+    expect(hasOgCard("crane")).toBe(true);
+    expect(hasOgCard("CRANE")).toBe(true);
+  });
+
+  it("false for other lengths — the card was never built (chaotical 404, Jun 6)", () => {
+    expect(hasOgCard("chaotical")).toBe(false);
+    expect(hasOgCard("till")).toBe(false);
+    expect(hasOgCard("")).toBe(false);
   });
 });
 
