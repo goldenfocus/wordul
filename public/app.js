@@ -3201,13 +3201,11 @@ function syncLengthSelect(snap) {
   if (parseInt(sel.value, 10) !== snap.wordLength) sel.value = String(snap.wordLength);
 }
 
-// Length can only be changed while genuinely in a multiplayer lobby — same gate the
 // Length can only be changed while genuinely in a multiplayer lobby — and only by the
 // host (snap.hostId: first connected human, succession on disconnect). Challenge rooms
 // pin the word, so the dim control is read-only there (the server rejects the messages
-// too). An un-hosted snapshot (older server) stays editable for everyone.
-// server enforces in onSetLength (phase must be "lobby", never the daily, whose word is
-// locked by the World). Mirrors syncLengthSelect's disabled rule (phase !== "lobby").
+// too — onSetLength/onSetRows guard daily, challenge, and phase). An un-hosted snapshot
+// (older server) stays editable for everyone.
 function canEditLength(snap) {
   if (!snap || snap.phase !== "lobby" || game.isDaily) return false;
   if (game.challengeId) return false;
