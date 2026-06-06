@@ -29,7 +29,7 @@ import { getWorld, worldSlugFromPath, listWorlds, featuredWorlds } from "/worlds
 import { renderWorldCard, pushRecentWorld, getRecentWorldSlugs } from "/world-card.js";
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
-import { pickInspire } from "/inspire.js";
+import { pickInspire, pickForfeit } from "/inspire.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
@@ -3720,9 +3720,13 @@ function handleGameOver(snap) {
 
 function triggerLoseSequence(snap, me) {
   game.exploding = true;
-  // However the round ended, the player gets a lift, not a roast: one random line
-  // from the great-minds pool.
-  const inspire = pickInspire();
+  // However the round ended, the player gets a lift, not a roast. A FORFEIT draws
+  // from its own pool (empowerment + tips) and the line is SPOKEN — the word reveal
+  // stays silent on a forfeit (no answer revealed yet, see announceGameEnd), so the
+  // quote owns the audio moment. Other losses keep the silent great-minds quote:
+  // their spoken slot belongs to the "the word was…" reveal.
+  const forfeited = game.finishReason === "gave_up" || game.finishReason === "bankrupt";
+  const inspire = forfeited ? pickForfeit() : pickInspire();
 
   // 1. Screen flash.
   const flash = document.createElement("div");
@@ -3771,6 +3775,7 @@ function triggerLoseSequence(snap, me) {
   setTimeout(() => {
     game.exploding = false;
     if (game.snapshot) renderBoards(game.snapshot, game.snapshot.players.find((p) => p.username === getUsername()));
+    if (forfeited) speakLine(VOICE_EDITION, inspire, inspire); // voice + screen land together
     openStats({
       snap: game.snapshot ?? snap,
       me,
