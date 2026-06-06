@@ -1294,7 +1294,8 @@ function renderRoomLink() {
       btn._flashTimer = setTimeout(() => btn.classList.remove("copied"), 1500);
     });
   }
-  btn.hidden = false;
+  // Real rooms only — a bare challenge has no @owner/slug, so there's nothing to copy here.
+  btn.hidden = !(game.owner && game.slug);
 }
 
 // Copy the room link with a subtle confirmation. The whole share/copy surface
@@ -3184,10 +3185,15 @@ function wireDim() {
     dim.classList.toggle("open", !!opening);
   });
   // Click-outside closes the popover (scoped: ignore clicks within the control itself).
-  document.addEventListener("click", (e) => {
-    const pop = $("#dimPop");
-    if (pop && pop.classList.contains("open") && !e.target.closest("#dimWrap")) closeDim();
-  });
+  // Registered ONCE at the document level — mount() rebuilds #dim on every room entry,
+  // so without this guard a fresh listener would accumulate per visit.
+  if (!wireDim._outsideWired) {
+    wireDim._outsideWired = true;
+    document.addEventListener("click", (e) => {
+      const pop = $("#dimPop");
+      if (pop && pop.classList.contains("open") && !e.target.closest("#dimWrap")) closeDim();
+    });
+  }
   $("#colMinus")?.addEventListener("click", (e) => { e.stopPropagation(); stepCols(-1); });
   $("#colPlus")?.addEventListener("click", (e) => { e.stopPropagation(); stepCols(1); });
   $("#rowMinus")?.addEventListener("click", (e) => { e.stopPropagation(); stepRows(-1); });
