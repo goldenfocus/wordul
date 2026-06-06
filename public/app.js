@@ -18,7 +18,7 @@ import { shareTargetUrl } from "/share-links.js";
 import { buildOwnerTape } from "/owner-tape.js";
 import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
 import { mountArenaList, pickNextGame } from "/arena-panel.js";
-import { computeDailyStatsView, computeRosterView } from "/daily-stats.js";
+import { computeDailyStatsFromRoster, computeRosterView } from "/daily-stats.js";
 import { fmtDuration, goldValue } from "/daily-card.js";
 import { computeFeedStreamView, computeFeedPostView } from "/feed.js";
 import { EDITIONS, getEdition } from "/editions/index.js";
@@ -987,26 +987,21 @@ async function showDailyStats(date) {
   app.appendChild(screen);
   $("#dailyStatsBack").addEventListener("click", (e) => { e.preventDefault(); navigate("/"); });
   $("#dailyLabLink").addEventListener("click", (e) => { e.preventDefault(); navigate("/feed"); });
-  let summary = null;
-  try {
-    const res = await fetch(`/api/science/daily/${date}`);
-    if (res.ok) summary = await res.json();
-  } catch (_) { /* offline / cold day — render the empty state */ }
-  if (parseRoute().kind !== "daily-stats") return; // navigated away mid-fetch
-  renderDailyStatsBody(summary);
-  void renderDailyRoster(date);
-}
-
-// Append the full ranked roster (names, gold, guesses, duration) below the aggregates.
-// Source is the Room DO leaderboard (public usernames) — NOT the anonymized SCIENCE feed.
-async function renderDailyRoster(date) {
-  const me = getUsername();
   let full = null;
   try {
+    const me = getUsername();
     const res = await fetch(`/api/daily/${date}/leaderboard?full=1&username=${encodeURIComponent(me)}`);
     if (res.ok) full = await res.json();
-  } catch (_) { /* offline / cold day — show the empty line */ }
+  } catch (_) { /* offline / cold day — render the empty state */ }
   if (parseRoute().kind !== "daily-stats") return; // navigated away mid-fetch
+  renderDailyStatsBody(full);
+  renderDailyRoster(full);
+}
+
+// Paint the full ranked roster (names, gold, guesses, duration) below the aggregates.
+// Same payload as the tiles — one source, no disagreement possible.
+function renderDailyRoster(full) {
+  const me = getUsername();
   const host = $("#dailyRoster");
   if (!host) return;
   const view = computeRosterView(full, me);
@@ -1030,14 +1025,14 @@ async function renderDailyRoster(date) {
   });
 }
 
-function renderDailyStatsBody(summary) {
+function renderDailyStatsBody(full) {
   const body = $("#dailyStatsBody");
   if (!body) return;
-  if (!summary || !summary.totals) {
+  const v = computeDailyStatsFromRoster(full);
+  if (v.played === 0) {
     body.innerHTML = `<p class="muted daily-stats-empty">No numbers yet today — be the first to finish.</p>`;
     return;
   }
-  const v = computeDailyStatsView(summary);
   const fmt = (n) => (n == null ? "—" : n.toLocaleString());
   const stat = (num, label) => `<div class="dstat"><div class="dstat-num">${num}</div><div class="dstat-label">${label}</div></div>`;
   const rows = v.distRows.filter((r) => r.count > 0).map((r) => {
