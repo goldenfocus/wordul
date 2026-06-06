@@ -77,4 +77,9 @@ export const en = {
   "daily.keepPlaying": "Keep playing",
   "daily.browsePast": "Browse past days →",
   "daily.archiveTitle": "Every Wordul of the Day",
+
+  // Settlement screen (settle.js)
+  "settle.toWallet": "to your wallet",
+  "settle.net": "net",
+  "settle.bust": "buy-in was your max loss",
 };
