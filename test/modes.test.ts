@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { MODES, DEFAULT_MODE, isAvailableMode } from "../src/modes.ts";
+import { MODES, DEFAULT_MODE, isAvailableMode, defaultRulesetForMode, initialRuleset, seededRuleset } from "../src/modes.ts";
+import { VANILLA, WILD } from "../src/lane.ts";
 
 describe("modes registry", () => {
   it("has race as the default and only available mode for now", () => {
@@ -21,5 +22,28 @@ describe("modes registry", () => {
     expect(isAvailableMode("longgame")).toBe(false);
     expect(isAvailableMode("nope")).toBe(false);
     expect(isAvailableMode(undefined)).toBe(false);
+  });
+});
+
+describe("mode rulesets", () => {
+  it("every mode declares a defaultRuleset; race is Wild", () => {
+    for (const m of Object.values(MODES)) expect(m.defaultRuleset).toBeDefined();
+    expect(MODES.race.defaultRuleset).toEqual(WILD);
+  });
+
+  it("defaultRulesetForMode falls back to Wild for unknown modes", () => {
+    expect(defaultRulesetForMode("race")).toEqual(WILD);
+    expect(defaultRulesetForMode("nope")).toEqual(WILD);
+  });
+
+  it("initialRuleset: daily is Vanilla, normal rooms take the mode default", () => {
+    expect(initialRuleset(true, "race")).toEqual(VANILLA);  // daily flagship is fair
+    expect(initialRuleset(false, "race")).toEqual(WILD);
+  });
+
+  it("seededRuleset: explicit unlocked lane overrides the mode default", () => {
+    expect(seededRuleset("race", "vanilla")).toEqual(VANILLA);
+    expect(seededRuleset("race", "wild")).toEqual(WILD);
+    expect(seededRuleset("race", undefined)).toEqual(WILD); // no override → mode default
   });
 });
