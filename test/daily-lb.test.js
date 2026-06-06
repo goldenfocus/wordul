@@ -74,3 +74,40 @@ describe("mountDailyLeaderboard", () => {
     expect(mount.hidden).toBe(true);
   });
 });
+
+describe("openReplayModal — no orphaned keydown listeners on replace", () => {
+  // Regression: opening bob's modal while ada's is open used to evict ada's via .remove()
+  // without calling close(), leaving ada's keydown listener alive on document. A later Escape
+  // would fire that orphaned listener and try to return focus to ada's row.
+  it("evicts via close() so no orphaned listener remains after replace + dismiss", async () => {
+    const mount = document.getElementById("dailyLeaderboard");
+    mountDailyLeaderboard({ mount, date: "2026-06-06", username: "yan" });
+    await flush();
+
+    const adaRow = mount.querySelector('[data-user="ada"]');
+    const bobRow = mount.querySelector('[data-user="bob"]');
+
+    // Open ada's modal by clicking her row (grid is present in topView entries).
+    adaRow.click();
+    expect(document.getElementById("dailyLbModal")).not.toBeNull();
+
+    // Open bob's modal — this should evict ada's through close() (not raw .remove()).
+    bobRow.click();
+    const bobModal = document.getElementById("dailyLbModal");
+    expect(bobModal).not.toBeNull();
+    // Ada's modal is gone.
+    expect(document.querySelectorAll(".daily-lb-modal").length).toBe(1);
+
+    // Dismiss bob's modal via Escape — focus should return to bob's row.
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(document.getElementById("dailyLbModal")).toBeNull();
+    expect(document.activeElement).toBe(bobRow);
+
+    // A second Escape must NOT move focus to ada's row — her listener was cleaned up.
+    adaRow.blur();
+    bobRow.blur();
+    document.body.focus();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(document.activeElement).not.toBe(adaRow);
+  });
+});

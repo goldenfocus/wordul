@@ -12,6 +12,10 @@ import { playStampReplay } from "/stamp-replay.js";
 const SCROLL_AT = 25; // past this many rows the roster scrolls inside the card
 function escAttr(s) { return String(s).replace(/[^a-z0-9_-]/gi, ""); } // usernames are [a-z0-9_-]
 
+// Tracks the active modal's close fn so eviction goes through it (no orphaned keydown
+// listeners). Set to null when the modal self-closes; overwritten when one replaces another.
+let closeActive = null;
+
 // One full-roster row — same vocabulary as the home card's medal rows (medals for the
 // podium, plain #N beyond), so the expanded list reads as "more of the same board".
 function rosterRow(e, me) {
@@ -33,8 +37,11 @@ function rosterRow(e, me) {
 // Tap a row → that player's board pops up and replays itself. The stamp is built from
 // the row's leaderboard entry (grid always; words only when the server unlocked them
 // for this finisher). Scrim tap / ✕ / Esc dismiss; focus returns to the opener row.
+// Lifecycle: closeActive tracks the live close fn so evicting a prior modal goes through
+// close() — this removes its document keydown listener and avoids orphaned listeners.
+// The refocus param lets eviction skip the focus-return (the incoming modal owns focus).
 function openReplayModal(entry, opener) {
-  document.getElementById("dailyLbModal")?.remove();
+  closeActive?.({ refocus: false }); // evict any existing modal cleanly (no orphaned keydown)
   const u = escAttr(entry.username);
   const cols = Array.isArray(entry.grid) && entry.grid[0] ? String(entry.grid[0]).length : 5;
   const overlay = document.createElement("div");
@@ -49,16 +56,19 @@ function openReplayModal(entry, opener) {
     ${renderStamp(entry.grid, entry.words, boardRows(cols))}
   </div>`;
   const onKey = (e) => { if (e.key === "Escape") close(); };
-  const close = () => {
+  const close = ({ refocus = true } = {}) => {
+    closeActive = null;
     overlay.remove();
     document.removeEventListener("keydown", onKey);
-    opener?.focus?.();
+    if (refocus) opener?.focus?.();
   };
+  closeActive = close;
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay || e.target.closest(".daily-lb-modal-close")) close();
   });
   document.addEventListener("keydown", onKey);
   document.body.appendChild(overlay);
+  overlay.querySelector(".daily-lb-modal-close")?.focus(); // keyboard users land inside dialog
   const stamp = overlay.querySelector(".daily-stamp");
   if (stamp) playStampReplay(stamp); // auto-play on open; tap snaps to final (existing engine)
   return overlay;

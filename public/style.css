@@ -3560,6 +3560,7 @@ body.reduced-motion .boards.blooming .grid-row { opacity: 1 !important; transfor
   background: #15151c; border: 1px solid rgba(240, 193, 75, 0.25); border-radius: 16px;
   padding: 18px 20px 22px; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
   display: flex; flex-direction: column; gap: 12px; align-items: center;
+  max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); overflow: auto;
 }
 .daily-lb-modal-head { display: flex; align-items: center; gap: 12px; width: 100%; }
 .daily-lb-modal-close {
