@@ -3,6 +3,7 @@ import {
   POINTS, SPEED_CAP, SPEED_WINDOW_MS, comboMultiplier, escalatedPenalty,
   orderedDiscoveriesInLast, deadLettersFrom, wastedDeadLettersInLast,
   pointsEarned, speedBonusPoints, goldFromPoints, balance, settle, settleParts,
+  DAILY_GOLD_RATE,
 } from "../src/economy.ts";
 import type { GuessRow } from "../src/economy.ts";
 
@@ -144,6 +145,12 @@ describe("goldFromPoints", () => {
     expect(goldFromPoints(3500)).toBe(35);
     expect(goldFromPoints(-100)).toBe(0);
   });
+
+  it("honors a custom rate divisor (daily mints at ÷9)", () => {
+    expect(goldFromPoints(2300, DAILY_GOLD_RATE)).toBe(256); // 2300/9 = 255.55… → 256
+    expect(goldFromPoints(3500)).toBe(35);                   // default 100 unchanged
+    expect(goldFromPoints(-100, DAILY_GOLD_RATE)).toBe(0);   // never negative at any rate
+  });
 });
 
 describe("daily mint formula (spec §B + §C)", () => {
@@ -266,5 +273,15 @@ describe("settleParts", () => {
     const parts = settleParts(r);
     expect(parts.map((p) => p.label)).toEqual(["score", "bonus"]);
     expect(parts.reduce((s, p) => s + p.delta, 0)).toBe(r.payout - r.buyIn); // invariant
+  });
+});
+
+describe("settle with a rate divisor", () => {
+  it("mints at the given rate; default callers unchanged", () => {
+    const daily = settle({ buyIn: 0, points: 2300, mult: 1, spends: 0, bonus: 145, rate: DAILY_GOLD_RATE });
+    expect(daily.minted).toBe(256);
+    expect(daily.payout).toBe(256 + 145);
+    const race = settle({ buyIn: 0, points: 2300, mult: 1, spends: 0, bonus: 0 });
+    expect(race.minted).toBe(23); // ÷100 default — races untouched
   });
 });

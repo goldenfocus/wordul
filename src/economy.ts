@@ -158,8 +158,11 @@ export function pointsEarned(guesses: GuessRow[], maxGuesses: number): number {
 }
 
 // Cash-out conversion. Tunable. Never mints negative gold from a single bad game.
-export function goldFromPoints(points: number): number {
-  return Math.max(0, Math.round(points / 100));
+// rate is the points-per-gold divisor: races stay at the classic 100; the daily mints
+// at the generous DAILY_GOLD_RATE so combo play visibly pays (user decision, Jun 6 2026).
+export const DAILY_GOLD_RATE = 9;
+export function goldFromPoints(points: number, rate = 100): number {
+  return Math.max(0, Math.round(points / rate));
 }
 
 // --- Settlement (Phase 1 spec: docs/superpowers/specs/2026-06-05-gold-settlement-engine-design.md)
@@ -168,14 +171,14 @@ export function goldFromPoints(points: number): number {
 //   payout = buyIn + earned − spends + bonus, clamped ≥ 0 unless `signed` (hard-mode preset).
 export type SettlementInput = {
   buyIn: number; points: number; mult: number; spends: number; bonus: number;
-  signed?: boolean;
+  signed?: boolean; rate?: number;
 };
 export type SettlementReceipt = {
   buyIn: number; points: number; minted: number; mult: number; earned: number;
   spends: number; bonus: number; payout: number; net: number; signed: boolean;
 };
 export function settle(i: SettlementInput): SettlementReceipt {
-  const minted = goldFromPoints(i.points);
+  const minted = goldFromPoints(i.points, i.rate ?? 100);
   const earned = Math.round(minted * i.mult);
   const raw = i.buyIn + earned - i.spends + i.bonus;
   const payout = i.signed ? raw : Math.max(0, raw);
