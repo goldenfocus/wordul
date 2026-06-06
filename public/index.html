@@ -68,6 +68,14 @@
   <div class="topbar-left">
     <button id="brandBtn" class="brand" type="button" title="Home" aria-label="Wordul — home">Wordul<span class="brand-dot">.</span></button>
     <nav id="crumbs" class="crumbs" aria-label="Breadcrumb" hidden></nav>
+    <!-- In a room, the room shows as a copyable slug link with a chain-link icon
+         (@<owner>/<slug>). Tap to copy the room link — reuses copyRoomLink. Revealed
+         in a room by renderRoomHeader; hidden on home/profile via clearHeaderIdentity. -->
+    <button id="roomLinkBtn" class="room-link" type="button" title="Copy room link" aria-label="Copy room link" hidden>
+      <span class="room-link-slug" id="roomLinkSlug"></span>
+      <svg class="room-link-ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07l-1 1"/><path d="M14 11a5 5 0 0 0-7.07 0l-2.83 2.83a5 5 0 0 0 7.07 7.07l1-1"/></svg>
+      <span class="room-link-flash" aria-hidden="true">copied ✦</span>
+    </button>
   </div>
   <!-- Immersive in-game header (C5): avatar + username + gold only. The avatar IS
        the hub — one tap opens settings / theme / mute / stats (+ share / rename /
@@ -222,6 +230,19 @@
             <div class="mytable-seats" id="myTableSeats"></div>
             <span class="mytable-cnt" id="myTableCount">1/2</span>
           </div>
+          <!-- Setup · Invite pair, sits BELOW the Start button (CSS order). Setup opens
+               room settings (length · theme); Invite shares the room link. Wired once in
+               wireLobbyPair(); revealed in the lobby phase. -->
+          <div class="lobby-pair" id="lobbyPair" hidden>
+            <button type="button" class="lobby-pair-btn" id="lobbySetupBtn">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              Setup
+            </button>
+            <button type="button" class="lobby-pair-btn invite" id="lobbyInviteBtn">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+              Invite
+            </button>
+          </div>
         </div>
         <div class="lobby-right" id="lobbyRight">
           <!-- The compact "other tables" floor + chat will be placed here visually via CSS in a
@@ -282,8 +303,10 @@
       </button>
       <div id="chatBody" class="chat-body">
         <div class="chat-tabs" id="chatTabs" hidden role="tablist">
-          <button class="chat-tab is-active" id="chatTabGlobal" data-chan="global" role="tab" type="button">Global</button>
-          <button class="chat-tab" id="chatTabTable" data-chan="table" role="tab" type="button">Table<span class="chat-tab-ping" id="chatTabPing" hidden></span></button>
+          <!-- Global is hidden this release (no backend yet) — kept in the DOM, dormant, so
+               switchChatChannel('global') stays wired for when the global lobby lands. -->
+          <button class="chat-tab" id="chatTabGlobal" data-chan="global" role="tab" type="button" hidden>Global</button>
+          <button class="chat-tab is-active" id="chatTabTable" data-chan="table" role="tab" type="button"><span class="chat-tab-hash" aria-hidden="true">⌗</span> <span id="chatTabTableLabel">Table</span><span class="chat-tab-ping" id="chatTabPing" hidden></span></button>
         </div>
         <div id="chatLog" class="chat-log" role="log" aria-live="polite"></div>
         <form id="chatForm" class="chat-form" autocomplete="off">

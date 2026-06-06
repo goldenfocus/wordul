@@ -411,6 +411,50 @@ body.reduced-motion .tile.ghost-cursor {
 }
 .avatar-name[hidden] { display: none; }
 
+/* 2-line identity chip (prototype .idchip): username over gold, right-aligned, sitting
+   just left of the avatar. Scoped to in-room — #goldHud is only appended into .room-header
+   inside a room, so :has(#goldHud) gates the vertical stack and leaves the home header
+   (where .room-header is empty) untouched. The #goldHud internals are NOT modified. */
+.topbar-actions { align-items: center; }
+.room-header:has(#goldHud) {
+  flex-direction: column; align-items: flex-end; gap: 1px; line-height: 1.15;
+}
+.room-header:has(#goldHud) .header-name {
+  font-family: var(--font-display, inherit); font-weight: 700;
+  font-size: 14px; color: var(--fg); max-width: 38vw;
+}
+.room-header:has(#goldHud) .gold-hud {
+  font-size: 12.5px; padding: 0; border: 0; background: none;
+  box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+  color: var(--warm);
+}
+
+/* Header room copy-link (prototype .rn): @owner/slug + chain-link icon, copies on tap. */
+.room-link {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 10px 6px 12px;
+  border: none; border-left: 1px solid color-mix(in oklab, var(--fg) 10%, transparent);
+  border-radius: 5px; background: none; color: var(--fg); cursor: pointer;
+  transition: background 0.16s ease;
+  min-width: 0;
+}
+.room-link[hidden] { display: none; }
+.room-link:hover { background: color-mix(in oklab, var(--accent) 9%, transparent); }
+.room-link-slug {
+  font-size: 13.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38vw;
+}
+.room-link-ico { color: var(--muted); flex: none; transition: color 0.16s ease; }
+.room-link:hover .room-link-ico { color: var(--accent); }
+.room-link-flash {
+  font-size: 12px; color: var(--accent); opacity: 0; white-space: nowrap;
+  transition: opacity 0.18s ease;
+}
+.room-link.copied .room-link-flash { opacity: 1; }
+.room-link.copied .room-link-ico { color: var(--accent); }
+/* On mobile the slug eats too much width — collapse to just the chain-link icon. */
+@media (max-width: 520px) { .room-link-slug { display: none; } }
+
 /* The avatar hub popover — one menu consolidating settings / theme / mute / stats
    (+ share / rename / scoreboard in a room). Replaces the scattered topbar icons. */
 .hub-menu {
@@ -3196,6 +3240,30 @@ body.lobby .lobby-left .lobby-controls .btn.primary:disabled {
   opacity: 0.6; transform: none;
 }
 
+/* Setup · Invite pair (prototype .pair), below the Start button in the left zone. The
+   lobby-left flow is board → dim → your-table → (reparented) #lobbyControls → pair, so
+   CSS order pins the pair AFTER the reparented controls regardless of DOM position. */
+.lobby-pair { display: none; }
+.lobby-pair[hidden] { display: none; }
+body.lobby .lobby-left .lobby-pair {
+  display: flex; gap: 8px;
+  width: 100%; max-width: 320px;
+  order: 5; /* #lobbyControls is appended last in lobby (DOM order ~4); keep pair after it */
+}
+body.lobby .lobby-left .lobby-controls { order: 4; }
+.lobby-pair-btn {
+  flex: 1; height: 42px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid color-mix(in oklab, var(--fg) 9%, var(--border));
+  background: color-mix(in oklab, var(--bg-card) 40%, transparent);
+  color: var(--fg); border-radius: 6px; cursor: pointer;
+  font-family: var(--font-body); font-weight: 600; font-size: 13px;
+  transition: border-color 0.16s ease, color 0.16s ease;
+}
+.lobby-pair-btn:hover { border-color: var(--accent); color: var(--accent); }
+.lobby-pair-btn.invite:hover { border-color: var(--warm); color: var(--warm); }
+.lobby-pair-btn svg { flex: none; }
+
 /* 6 ── Header icon buttons (share / gear). They share .icon-btn; add only the
    square-iconbtn look from the prototype's .iconbtn. */
 .room-icon-btn {
@@ -3277,8 +3345,8 @@ body.playing .room-icon-btn { display: none; }
 /* Capacity is up to 8 — wrap so seats never overflow on mobile. */
 .mytable-seats { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
 .seat {
-  width: 30px; height: 30px; flex: none;
-  border-radius: 5px; display: grid; place-items: center; font-size: 15px;
+  width: 44px; height: 44px; flex: none;
+  border-radius: 8px; display: grid; place-items: center; font-size: 21px;
 }
 .seat.you {
   background: linear-gradient(135deg, var(--accent), var(--warm));
@@ -3334,6 +3402,9 @@ body.lobby .arena-row.is-hot {
   transition: color 0.15s ease, border-color 0.15s ease;
 }
 .chat-tab.is-active { color: var(--fg); border-color: var(--accent); }
+.chat-tab[hidden] { display: none; }
+/* The ⌗ glyph on the game tab reads as a room marker (prototype .room-i). */
+.chat-tab-hash { color: var(--accent); }
 .chat-tab-ping {
   position: absolute; top: 4px; right: 4px;
   width: 7px; height: 7px; border-radius: 50%;

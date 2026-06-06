@@ -624,10 +624,10 @@ const game = {
   // Chat state: how many entries we'd already rendered so we can flag new ones for
   // the unread badge while the panel is collapsed.
   lastChatLen: 0,
-  // Which chat channel is showing. "global" is a placeholder ("coming soon") this
-  // release; "table" is the real per-room chat. Defaults to global on room entry so a
-  // solo lobby host sees the Global panel rather than an empty Table.
-  chatChannel: "global",
+  // Which chat channel is showing. "table" is the real per-room chat; "global" is a
+  // dormant placeholder (the Global tab is hidden this release until the backend lands).
+  // Defaults to "table" — the your-game channel is the only visible tab.
+  chatChannel: "table",
   lastSeatCount: 0, // # of taken seats last "Your table" render — new seats get a pop (seatin)
   unreadChat: 0,
   chatCollapsed: false,
@@ -763,7 +763,7 @@ function showRoom(owner, slug) {
   game.pending = "";
   game.hasShownEndStats = false;
   game.lastChatLen = 0;
-  game.chatChannel = "global"; // fresh room → Global placeholder until a table msg pops Table
+  game.chatChannel = "table"; // your-game chat is the only visible channel (Global hidden this release)
   game.unreadChat = 0;
   game.chatCollapsed = false;
   game.lastGuessCounts = new Map();
@@ -810,24 +810,24 @@ function showRoom(owner, slug) {
   wireChat();
   wireRoomTabs();
   wireDim();
-  wireRoomIconButtons();
+  wireLobbyPair();
   buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
   connect();
 }
 
-// The header's room-only icon buttons (invite ↑ / gear ⚙). Wired once per page —
-// the topbar persists across mounts, so a dataset flag stops listeners from stacking
-// each time a room is shown. Invite reuses shareRoomInvite, gear opens room settings.
-function wireRoomIconButtons() {
-  const share = $("#roomShareBtn");
-  if (share && !share.dataset.wired) {
-    share.dataset.wired = "1";
-    share.addEventListener("click", () => shareRoomInvite());
+// The lobby Setup · Invite pair (below Start, in the left zone). Setup opens room
+// settings (length · theme); Invite shares the room link. Wired once — #lobbyPair lives
+// in #tpl-room which remounts per room, so guard with a dataset flag to avoid stacking.
+function wireLobbyPair() {
+  const setup = $("#lobbySetupBtn");
+  if (setup && !setup.dataset.wired) {
+    setup.dataset.wired = "1";
+    setup.addEventListener("click", () => showSettings());
   }
-  const gear = $("#roomGearBtn");
-  if (gear && !gear.dataset.wired) {
-    gear.dataset.wired = "1";
-    gear.addEventListener("click", () => showSettings());
+  const invite = $("#lobbyInviteBtn");
+  if (invite && !invite.dataset.wired) {
+    invite.dataset.wired = "1";
+    invite.addEventListener("click", () => shareRoomInvite());
   }
 }
 
@@ -879,7 +879,7 @@ async function showChallenge(id) {
   game.pending = "";
   game.hasShownEndStats = false;
   game.lastChatLen = 0;
-  game.chatChannel = "global";
+  game.chatChannel = "table"; // your-game chat is the only visible channel (Global hidden this release)
   game.unreadChat = 0;
   game.chatCollapsed = false;
   game.lastGuessCounts = new Map();
@@ -1256,9 +1256,45 @@ function renderRoomHeader() {
     nameEl.textContent = game.name || game.slug;
     nameEl.onclick = copyRoomLink;
   }
+  renderRoomLink();
+  renderChatTabLabel();
   renderHeaderIdentity();
   renderGoldHud();
   renderH2HBadge();
+}
+
+// Label the (single visible) game chat tab with the room's display name, e.g. "⌗ Jade Owl".
+// Global is hidden this release, so this tab reads as the chat header. Reuses the same
+// room-name source as #roomName.
+function renderChatTabLabel() {
+  const label = $("#chatTabTableLabel");
+  if (label) label.textContent = game.name || game.slug || "Table";
+}
+
+// The header room copy-link (@<owner>/<slug> + chain-link icon). Tap copies the room
+// link (reuses copyRoomLink) and flashes a "copied" affordance. Owner/slug come from
+// game state — never hardcoded. Hidden until there's a real owner (e.g. a bare challenge
+// has no slug, so we fall back to the display name and keep it copyable).
+function renderRoomLink() {
+  const btn = $("#roomLinkBtn");
+  if (!btn) return;
+  const slugEl = $("#roomLinkSlug");
+  if (slugEl) {
+    // A normal room: @owner/slug. A challenge (no slug) reads as its display name.
+    slugEl.textContent = game.owner && game.slug
+      ? `@${game.owner}/${game.slug}`
+      : (game.name || game.owner || "");
+  }
+  if (!btn.dataset.wired) {
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", async () => {
+      await copyRoomLink();
+      btn.classList.add("copied");
+      clearTimeout(btn._flashTimer);
+      btn._flashTimer = setTimeout(() => btn.classList.remove("copied"), 1500);
+    });
+  }
+  btn.hidden = false;
 }
 
 // Copy the room link with a subtle confirmation. The whole share/copy surface
@@ -1297,6 +1333,8 @@ function clearHeaderIdentity() {
   if (header) header.textContent = "";
   const nameEl = $("#avatarName");
   if (nameEl) { nameEl.textContent = ""; nameEl.hidden = true; }
+  const linkBtn = $("#roomLinkBtn");
+  if (linkBtn) { linkBtn.hidden = true; linkBtn.classList.remove("copied"); }
 }
 
 // Rename the current room. Shared (anyone present can rename) and reachable from
@@ -2794,13 +2832,12 @@ function render() {
 
   // Neon Floor lobby (Task 7): in the lobby phase the screen splits into two zones —
   // your game on the left, the floor + chat on the right. body.lobby drives the CSS
-  // (hides the .room-info title card + #roomTabs, activates the grid); the header's
-  // invite/gear icons stand in for the dropped title-card controls. We're inside a room
-  // render here, so reveal those icons now — leaveRoom() hides them again on home.
+  // (hides the .room-info title card + #roomTabs, activates the grid). The Setup · Invite
+  // pair (below Start, left zone) stands in for the dropped title-card controls — reveal
+  // it in the lobby phase only; it hides elsewhere with the rest of the lobby chrome.
   const isLobby = snap.phase === "lobby";
   document.body.classList.toggle("lobby", isLobby);
-  const shareBtn = $("#roomShareBtn"); if (shareBtn) shareBtn.hidden = false;
-  const gearBtn = $("#roomGearBtn"); if (gearBtn) gearBtn.hidden = false;
+  const pair = $("#lobbyPair"); if (pair) pair.hidden = !isLobby;
 
   renderBoards(snap, me);
   // Two-zone reparenting: move controls/floor/chat into the lobby zones while in lobby,
@@ -4827,9 +4864,7 @@ function leaveRoom() {
   document.body.classList.remove("playing"); // restore full chrome outside a room
   document.body.classList.remove("daily");
   document.body.classList.remove("lobby"); // drop the two-zone lobby layout outside a room
-  // The room-only header icons (invite ↑ / gear ⚙) mirror #roomHeader — gone on home.
-  const shareBtn = $("#roomShareBtn"); if (shareBtn) shareBtn.hidden = true;
-  const gearBtn = $("#roomGearBtn"); if (gearBtn) gearBtn.hidden = true;
+  // The header room-link mirrors #roomHeader — hidden on home by clearHeaderIdentity() above.
   game.isDaily = false; game.dailyDate = null;
   settlementShown = false; // discard stale latch so a different already-finished room can show
 }
