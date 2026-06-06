@@ -6,7 +6,7 @@
 //     to the next word, and Share / Stats. No replay teleport.
 // The shell (hub.js) supplies the header + modes; this file owns the card.
 import { GLYPH } from "/hub-glyphs.js";
-import { autoPlayStampOnce } from "/stamp-replay.js";
+import { autoPlayStampOnce, playStampReplay } from "/stamp-replay.js";
 
 function escAttr(s) { return String(s).replace(/[^a-z0-9_-]/gi, ""); } // usernames are [a-z0-9_-]
 
@@ -281,7 +281,7 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
           const rows = Array.from(board.querySelectorAll(".daily-top-row"));
           const myWords = (result && result.solveWords) || undefined;
           const myGrid = (result && result.solveGrid) || undefined;
-          const setFeatured = (name) => {
+          const setFeatured = (name, { replay } = {}) => {
             const hit = entries.get(name);
             if (!hit || !featured) return;
             const isYou = name === escAttr(username);
@@ -292,11 +292,17 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
               const a = featured.querySelector("a[data-profile]");
               if (a) a.addEventListener("click", (e) => { e.preventDefault(); onProfile(a.getAttribute("data-profile")); });
             }
+            // Deliberate row taps replay every time; the default landing card uses the
+            // once-per-visit discovery autoplay instead.
+            if (replay) {
+              const s = featured.querySelector(".daily-stamp");
+              if (s) playStampReplay(s);
+            }
           };
-          // Row taps swap the featured card; the inner @name link still opens the profile.
+          // Row taps swap the featured card (and replay it); the inner @name link still opens the profile.
           rows.forEach((row) => {
             const name = row.getAttribute("data-user");
-            row.addEventListener("click", () => setFeatured(name));
+            row.addEventListener("click", () => setFeatured(name, { replay: true }));
             const a = row.querySelector("a[data-profile]");
             if (a) a.addEventListener("click", (e) => {
               e.preventDefault(); e.stopPropagation();

@@ -29,13 +29,22 @@ function finish(stamp) {
   playing.delete(stamp);
 }
 
-function play(stamp) {
+// Comedic beat for a lost board: a head-shake "no…" then a squash flop. Lost is
+// read off the grid itself (last played row not all-gold), so it fires for your
+// misses AND other players' colors-only previews — gave up or ran out alike.
+function flop(stamp) {
+  stamp.classList.add("stamp-flop");
+  setTimeout(() => stamp.classList.remove("stamp-flop"), 1400);
+}
+
+export function playStampReplay(stamp) {
   if (playing.has(stamp)) { finish(stamp); return; } // tap mid-replay → snap to final
   // Reduced motion: the final board is already on screen; don't animate it away.
   // (typeof guard: jsdom has no matchMedia — tests stub it, but don't require it.)
   if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const { grid, cells } = stampBoard(stamp);
   if (!grid.length) return;
+  const won = /^g+$/.test(grid[grid.length - 1] || "");
   const { steps, total } = buildReplaySteps(grid, stamp.classList.contains("has-letters"));
   cells.flat().forEach((c) => c.classList.add("is-veiled"));
   const timers = steps.map((s) => setTimeout(() => {
@@ -44,9 +53,13 @@ function play(stamp) {
     if (s.kind === "type") cell.classList.add("is-typed");
     else { cell.classList.remove("is-veiled", "is-typed"); cell.classList.add("stamp-pop"); }
   }, s.t));
-  timers.push(setTimeout(() => finish(stamp), total + 400)); // sweep pop classes
+  timers.push(setTimeout(() => { // sweep pop classes; losses take a little bow
+    finish(stamp);
+    if (!won) flop(stamp);
+  }, total + 400));
   playing.set(stamp, { timers, cells });
 }
+const play = playStampReplay;
 
 // Discovery: most people never find tap-to-replay on their own, so the home recap
 // plays itself ONCE per page load (never a loop, never twice — even across SPA

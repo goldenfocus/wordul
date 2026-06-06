@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderStamp } from "../public/daily-card.js";
 import { wireStampReplays, autoPlayStampOnce } from "../public/stamp-replay.js";
-import { TIMING } from "../public/stamp-replay-core.js";
+import { TIMING, buildReplaySteps } from "../public/stamp-replay-core.js";
 
 let reduced = false;
 let root; // fresh container per test — re-wiring document.body would stack listeners
@@ -57,6 +57,25 @@ describe("stamp replay driver", () => {
     reduced = true;
     click(stamp());
     expect(cells(".is-veiled")).toBe(0);
+  });
+
+  it("a lost board ends its replay with the flop", () => {
+    root.innerHTML = renderStamp(["xxx", "xyx"], ["CAT", "DOG"]);
+    const s = root.querySelector(".daily-stamp");
+    click(s);
+    const { total } = buildReplaySteps(["xxx", "xyx"], true);
+    vi.advanceTimersByTime(total + 401); // replay swept → flop begins
+    expect(s.classList.contains("stamp-flop")).toBe(true);
+    vi.runAllTimers();
+    expect(s.classList.contains("stamp-flop")).toBe(false); // flop class swept too
+  });
+
+  it("a solved board never flops", () => {
+    const s = stamp(); // fixture's last row is all-gold
+    click(s);
+    const { total } = buildReplaySteps(["xyg", "ggg"], true);
+    vi.advanceTimersByTime(total + 401);
+    expect(s.classList.contains("stamp-flop")).toBe(false);
   });
 
   // Keep last: autoPlayStampOnce flips a module-level once-per-page-load flag, so
