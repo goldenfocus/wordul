@@ -104,3 +104,22 @@ describe("finisher secret / token delivery", () => {
     expect(room.snapshotFor(null).dailyToken).toBeUndefined();      // anonymous → none
   });
 });
+
+async function roster(room: ReturnType<typeof makeRoom>, query: string) {
+  const res = await room.fetch(new Request(`https://do/leaderboard?${query}`));
+  return res.json() as Promise<{ players: Array<{ username: string; grid?: string[]; words?: string[] }> }>;
+}
+
+describe("full roster boards (the golden card's Show-all + replay popups)", () => {
+  it("full=1 now carries color grids for every player", async () => {
+    const { players } = await roster(makeRoom(), "username=bob&full=1");
+    expect(players.find((e) => e.username === "yan")!.grid).toEqual(["xxxxx", "ggggg"]);
+  });
+  it("full=1 words stay token-gated exactly like the top view", async () => {
+    const open = await roster(makeRoom(), "username=yan&full=1&t=secret-123");
+    expect(open.players.find((e) => e.username === "yan")!.words).toEqual(["SLOTH", "CRANE"]);
+    const closed = await roster(makeRoom(), "username=bob&full=1&t=nope");
+    expect(closed.players.find((e) => e.username === "yan")!.words).toBeUndefined();
+    expect(JSON.stringify(closed)).not.toContain("CRANE");
+  });
+});

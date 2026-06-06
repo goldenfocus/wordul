@@ -225,7 +225,7 @@ export class Room extends DurableObject<Env> {
         p.firstGuessAt != null && p.finishedAt != null
           ? Math.max(0, p.finishedAt - p.firstGuessAt)
           : undefined;
-      // Shared base mapping. The full roster stays lean (no grid); the top-N view adds grid.
+      // Shared base mapping.
       const toRankable = (p: PlayerState) => ({
         username: p.username,
         guessCount: p.guesses.length,
@@ -236,10 +236,6 @@ export class Room extends DurableObject<Env> {
         score: p.points,
         durationMs: durationOf(p),
       });
-      if (full) {
-        return Response.json({ ...fullDaily(this.state.players.map(toRankable), username), lane: laneSig(this.state.ruleset ?? initialRuleset(!!this.state.isDaily, this.state.mode)) });
-      }
-      const n = Number(url.searchParams.get("n") ?? "3");
       // Proof-of-finish gate: a caller who presents today's finisher token (handed only to
       // a player who completed the daily) unlocks the REAL letter rows for every board — at
       // that point the answer isn't a secret to them anyway. Anyone else gets color-only
@@ -251,6 +247,10 @@ export class Room extends DurableObject<Env> {
         grid: encodeSolveGrid(p.guesses),
         words: unlock ? encodeSolveWords(p.guesses) : undefined,
       }));
+      if (full) {
+        return Response.json({ ...fullDaily(players, username), lane: laneSig(this.state.ruleset ?? initialRuleset(!!this.state.isDaily, this.state.mode)) });
+      }
+      const n = Number(url.searchParams.get("n") ?? "3");
       return Response.json({ ...topDaily(players, username, n), lane: laneSig(this.state.ruleset ?? initialRuleset(!!this.state.isDaily, this.state.mode)) });
     }
     return new Response("not found", { status: 404 });
