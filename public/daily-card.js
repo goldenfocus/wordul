@@ -258,6 +258,9 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
     // tap-to-replay on their own. Deferred until after the leaderboard swap settles
     // (setFeatured re-renders #dailyFeatured, which would cut a replay mid-flight).
     const autoReplay = () => {
+      // typeof guard: this fires on a delayed timer — in jsdom tests the env can be
+      // torn down before it lands, and a bare `document` then throws (flaky ship gate).
+      if (typeof document === "undefined") return;
       const s = document.querySelector("#dailyFeatured .daily-stamp");
       if (s) autoPlayStampOnce(s);
     };
