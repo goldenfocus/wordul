@@ -772,15 +772,28 @@ body.reduced-motion .tile.ghost-cursor {
 }
 .lobby-setup:hover { border-color: var(--accent); }
 
-/* Boards */
+/* Boards — hero + strip at EVERY width. Opponents collapse into a compact horizontal
+   strip on top; YOUR board is the full-width hero below it. This used to be the
+   mobile-only layout, but the old desktop grid (290px columns) let a long-word hero
+   board (9 letters × 56px ≈ 544px) paint straight through its neighbors' mini boards —
+   the columns were sized for 5-letter words while tiles sized off the viewport. */
 .boards {
   width: 100%;
   max-width: 920px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr));
-  gap: 20px;
-  justify-items: center;
+  display: flex;
+  flex-flow: row wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10px 18px;
   padding: 4px;
+}
+.player-board:not(.spectator) {
+  flex: 0 0 100%;
+  order: 2;
+}
+.player-board.spectator {
+  order: 1;
+  flex: 0 0 auto;
 }
 .player-board {
   display: flex;
@@ -887,26 +900,22 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
 }
 .player-board.spectator { --tile-size: 22px; }
 
-/* Tighter clamp on small screens for very long words. */
+/* Tighter clamp on small screens for very long words. The hero+strip layout itself
+   is global now (see .boards above) — this block only shrinks things to fit a phone. */
 @media (max-width: 520px) {
-  /* Multiplayer on mobile: opponents collapse into a compact horizontal strip at
-     the top; YOUR board is the full-width hero sitting right above the keyboard,
-     so two (or more) players fit on one screen without scrolling. */
   .boards {
-    display: flex;
-    flex-flow: row wrap;
-    align-items: flex-start;
-    justify-content: center;
     gap: 8px 14px;
   }
   .player-board:not(.spectator) {
-    flex: 0 0 100%;
-    order: 2;
-    --tile-size: clamp(24px, calc((100vw - 32px) / max(var(--cols, 5), 6)), 46px);
+    /* Subtract the inter-tile gaps too — without that, 9-letter boards run ~28px
+       past the right edge of the screen. */
+    --tile-size: clamp(
+      24px,
+      calc((100vw - 32px - (var(--cols, 5) - 1) * 5px) / max(var(--cols, 5), 6)),
+      46px
+    );
   }
   .player-board.spectator {
-    order: 1;
-    flex: 0 0 auto;
     gap: 4px;
     --tile-size: 20px;
   }
