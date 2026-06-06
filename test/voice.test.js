@@ -144,6 +144,17 @@ describe("full-robot reveal (speakTemplated)", () => {
     vi.useRealTimers();
   });
 
+  it("stays SILENT when the answer is empty — never a dangling 'the word was…'", async () => {
+    // Regression: a forfeit announced before the server's reveal snapshot landed,
+    // and the reveal spoke its frame with nothing after it.
+    mockRobotSpeech();
+    vi.resetModules();
+    const { speakTemplated } = await import("/voice.js");
+    await speakTemplated("ed_noanswer", "The word was {answer}.", { answer: "" });
+    await speakTemplated("ed_noanswer", "The word was {answer}.", {});
+    expect(spoken).toEqual([]);
+  });
+
   it('"split" mode preserves the cloned-frame + robot-word behavior', async () => {
     mockRobotSpeech();
     const plays = [];

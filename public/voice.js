@@ -121,6 +121,9 @@ export async function speakTemplated(editionId, rawLine, ctx = {}, mode = "robot
   if (!rawLine.includes("{answer}")) { // not actually templated — fall back to the normal path
     return speakLine(editionId, rawLine, rawLine);
   }
+  // A reveal with no answer would speak a dangling frame ("the word was… [silence]").
+  // Defense in depth — callers guard this too, but a missed path must stay silent.
+  if (!ctx.answer) return;
   const { prefix, suffix } = splitTemplate(rawLine);
 
   // The beat before the word: ½s by default; the WIN reveal passes ctx.pauseMs=1000

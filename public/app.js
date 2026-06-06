@@ -30,7 +30,7 @@ import { renderWorldCard, pushRecentWorld, getRecentWorldSlugs } from "/world-ca
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
 import { pickInspire } from "/inspire.js";
-import { lossKind } from "/race-copy.js";
+import { lossKind, duelVerdict } from "/race-copy.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
 
@@ -598,6 +598,7 @@ function showRoomEntry(owner, slug) {
 const game = {
   ws: null,
   challengeId: null,   // /c/<id> solo-replay: the challenge being raced (null in normal rooms)
+  challengeVs: "",     // ?vs=<username>: the named challenger — duel resolves on the END screen
   challengeMeta: null, // cached { owner, ownerScore, record, ... } from /api/challenge/<id>/meta
   myGuessTimes: [],    // Date.now() per accepted guess of MINE — paces the owner tape at mint
   isDaily: false,      // /daily/<date>: async one-shot, gated "underneath"
@@ -802,18 +803,20 @@ async function showChallenge(id) {
     navigate("/");
     return;
   }
-  // Ghost tape: a filed arena tape, OR (?vs=<sender> on a word challenge) the sender's
-  // stored run re-cut server-side — the dual-replay half of a wiki share. A miss or
-  // fetch hiccup just means a plain solo challenge — never a blocker.
+  // Ghost tape: a FILED arena tape only (real recorded race) — that one still replays
+  // live beside you. A ?vs=<sender> challenger stays UNTOLD: no ghost board, no synth
+  // pacing, no spoilers — the duel settles on the end screen, by guesses. In the
+  // wordul, lots of words are untold. A miss or fetch hiccup → plain solo challenge.
   const vs = normalizeVs(new URLSearchParams(location.search).get("vs"));
   let ghosts = null;
   try {
-    const gr = await fetch(`/api/challenge/${id}/ghosts${vs ? `?vs=${encodeURIComponent(vs)}` : ""}`);
+    const gr = await fetch(`/api/challenge/${id}/ghosts`);
     if (gr.ok) ghosts = (await gr.json()).ghosts;
   } catch { /* plain challenge — no ghosts */ }
   // Stand up the room view (same engine; challenge chrome instead of owner/slug).
   leaveRoom();
   game.challengeId = id;
+  game.challengeVs = vs; // the named challenger — resolved at the END, not raced live
   game.challengeMeta = meta;
   game.owner = meta.owner;
   game.slug = null;
@@ -1341,6 +1344,10 @@ function announceGameEnd({ won, answer, guessesUsed, delayMs = 0, quip = true })
       playChime([[523, 0], [659, 0.1], [784, 0.2], [1047, 0.32]]); // the race-win arpeggio
       if (quip) showCompanion("win", { guessesUsed }); // text-only quip (voice yields to the reveal)
       speakWinReveal(answer);
+    } else if (!answer) {
+      // A forfeit announces BEFORE the server's reveal snapshot lands — with no answer
+      // the reveal would speak a dangling "the word was…". Stay quiet; the end card
+      // carries the word the moment the reveal snapshot arrives.
     } else if (quip) {
       showCompanion("loss", { answer }); // toast + spoken reveal in one
     } else {
@@ -4151,18 +4158,37 @@ function openStats(opts = {}) {
   // ready in tens of ms, long before anyone reads the results and taps Share.
   requestAnimationFrame(() => requestAnimationFrame(() => { void prepareShareCard(); }));
 
-  // Challenge end screen: show how I did vs the standing record (re-fetched fresh —
-  // my own run may have just set/beaten it). Cleared for non-challenge games.
+  // Challenge end screen. The duel was UNTOLD during play (no live ghost for a ?vs=
+  // link) — so THIS line is where it resolves: the challenger's stored run is fetched
+  // now and judged by guesses (never synthetic replay timing). No vs (or a challenger
+  // who never played the word) → the standing record, re-fetched fresh.
   const recEl = document.getElementById("challengeRecordLine");
   if (recEl) recEl.textContent = "";
   if (game.challengeId && recEl) {
     const me = game.snapshot?.players.find((p) => p.username === getUsername());
-    const myScore = me?.status === "won" ? `${me.guesses.length}/${game.snapshot.maxGuesses}` : `X/${game.snapshot.maxGuesses}`;
-    fetch(`/api/challenge/${game.challengeId}/meta`).then((r) => r.json()).then((m) => {
-      const rec = m.record ? `Record: @${m.record.username} ${m.record.score}` : "You set the first record!";
-      const el = document.getElementById("challengeRecordLine");
-      if (el) el.textContent = `You: ${myScore} · ${rec}`;
-    }).catch(() => {});
+    const maxG = game.snapshot?.maxGuesses ?? 6;
+    const myWon = me?.status === "won";
+    const myScore = myWon ? `${me.guesses.length}/${maxG}` : `X/${maxG}`;
+    const recordLine = () =>
+      fetch(`/api/challenge/${game.challengeId}/meta`).then((r) => r.json()).then((m) => {
+        const rec = m.record ? `Record: @${m.record.username} ${m.record.score}` : "You set the first record!";
+        const el = document.getElementById("challengeRecordLine");
+        if (el) el.textContent = `You: ${myScore} · ${rec}`;
+      });
+    const duelLine = () =>
+      fetch(`/api/challenge/${game.challengeId}/ghosts?vs=${encodeURIComponent(game.challengeVs)}`)
+        .then((r) => r.json())
+        .then(({ ghosts }) => {
+          const finish = ghosts?.events?.find((e) => e.k === "finish");
+          if (!finish) return recordLine(); // challenger never played it — record instead
+          const el = document.getElementById("challengeRecordLine");
+          if (el && me) el.textContent = duelVerdict({
+            myWon, myGuesses: me.guesses.length, maxGuesses: maxG,
+            theirWon: finish.status === "won", theirGuesses: finish.guesses,
+            name: game.challengeVs,
+          });
+        });
+    (game.challengeVs && me ? duelLine() : recordLine()).catch(() => {});
   }
 
   $("#modalShare").onclick = () => shareResult();
@@ -4419,6 +4445,7 @@ function leaveRoom() {
   teardownLobbyRail(); // stop the open-games poll when leaving the room (incl. defection)
   stopHeartbeat();
   game.challengeId = null;
+  game.challengeVs = "";
   game.challengeMeta = null;
   pendingRoomEdition = null; // discard any pending one-shot edition from a failed/aborted create
   clearPayoutTimers(); // cancel any pending payout/drain so it can't fire off-screen + mutate gold
