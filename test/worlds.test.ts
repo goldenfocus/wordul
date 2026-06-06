@@ -58,6 +58,31 @@ describe("worlds registry", () => {
   });
 });
 
+import { getEffectiveWorlds } from "../src/worlds.ts";
+
+function fakeEnv(stored: unknown) {
+  return { DIRECTORY: { async get(_key: string, _type: "json") { return stored; } } } as any;
+}
+
+describe("getEffectiveWorlds", () => {
+  it("returns the code base when KV has no overrides", async () => {
+    const out = await getEffectiveWorlds(fakeEnv(null));
+    expect(out.length).toBe(WORLDS.length);
+  });
+
+  it("applies a stored edit", async () => {
+    const ov = { edits: { default: { name: "Renamed" } }, added: [], deleted: [] };
+    const out = await getEffectiveWorlds(fakeEnv(ov));
+    expect(out.find((w) => w.id === "default")!.name).toBe("Renamed");
+  });
+
+  it("falls back to base if KV throws", async () => {
+    const env = { DIRECTORY: { async get() { throw new Error("kv down"); } } } as any;
+    const out = await getEffectiveWorlds(env);
+    expect(out.length).toBe(WORLDS.length);
+  });
+});
+
 import {
   WORLDS as TWIN_WORLDS,
   listWorlds as twinListWorlds,

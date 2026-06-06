@@ -8,6 +8,7 @@
 //
 // NOTE: type is WorldDef, NOT World — src/daily-core.ts already owns `World`
 // (the curated-day bundle). These are deliberately distinct.
+import { mergeWorlds, EMPTY_OVERRIDES, type WorldOverrides } from "./world-overrides.ts";
 
 export type WorldDef = {
   id: string;        // stable identity (=== editionId for the launch Worlds)
@@ -53,4 +54,23 @@ export function worldSlugFromPath(pathname: unknown): string | null {
   if (typeof pathname !== "string") return null;
   const m = pathname.match(/^\/w\/([a-z0-9-]{1,40})$/);
   return m ? m[1] : null;
+}
+
+export const WORLD_OVERRIDES_KEY = "worlds:overrides";
+
+// Effective registry = code base merged with the admin KV override layer.
+// Never throws: any KV failure falls back to the static base.
+export async function getEffectiveWorlds(env: { DIRECTORY: KVNamespace }): Promise<WorldDef[]> {
+  let ov: WorldOverrides = EMPTY_OVERRIDES;
+  try {
+    const stored = (await env.DIRECTORY.get(WORLD_OVERRIDES_KEY, "json")) as WorldOverrides | null;
+    if (stored) ov = stored;
+  } catch {
+    /* fall back to base */
+  }
+  return mergeWorlds(WORLDS, ov);
+}
+
+export function getEffectiveWorld(list: WorldDef[], slug: unknown): WorldDef | null {
+  return typeof slug === "string" ? list.find((w) => w.slug === slug) ?? null : null;
 }
