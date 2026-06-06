@@ -4,7 +4,7 @@
 // they pin tiles/sounds. Default: "supernova" (design ritual winner, 2026-06-05).
 //
 // Decoupling note: this module NEVER imports app.js. App-owned hooks come in via opts:
-//   { renderer?, reducedMotion, walletBefore, onWalletTick(value), playChime }
+//   { renderer?, reducedMotion, walletBefore, onWalletTick(value), playChime, lines?, bonusCaption? }
 // Same pattern as gold.js.
 
 // ── Pure: receipt → display lines ────────────────────────────────────────────────────────
@@ -43,6 +43,27 @@ export function receiptLines(r, tFn = (_key, fallback) => fallback) {
   return lines;
 }
 
+// Daily flavor of receiptLines: the receipt's single `bonus` leg is really the flat daily
+// goody + the ÷9 speed gold (room.ts scorePlayer). Split it back into the two honest lines
+// the old cash-out list showed — dailyBonus is the client's mirror constant, speed is the
+// exact remainder. Pure, like receiptLines (settle-lines.test.js).
+export function dailyReceiptLines(r, dailyBonus, tFn = (_key, fallback) => fallback) {
+  const fmt = (n) => n.toLocaleString("en-US");
+  const lines = [
+    { key: "mint", text: `${fmt(r.points)} pts → ◆ ${fmt(r.minted)}`, tone: "gain" },
+  ];
+  const speed = Math.max(0, r.bonus - dailyBonus);
+  if (dailyBonus > 0) lines.push({ key: "daily", text: `${tFn("settle.dailyBonus", "daily bonus")} + ◆ ${fmt(dailyBonus)}`, tone: "gain" });
+  if (speed > 0) lines.push({ key: "speed", text: `${tFn("settle.speedBonus", "speed")} + ◆ ${fmt(speed)}`, tone: "gain" });
+  const netSign = r.net >= 0 ? "+" : "−";
+  lines.push({
+    key: "payout",
+    text: `◆ ${fmt(r.payout)} ${tFn("settle.toWallet", "to your wallet")} · ${tFn("settle.net", "net")} ${netSign}${fmt(Math.abs(r.net))}`,
+    tone: r.net >= 0 ? "gain" : "loss",
+  });
+  return lines;
+}
+
 // ── Renderer registry ─────────────────────────────────────────────────────────────────────
 const renderers = new Map();
 
@@ -50,7 +71,7 @@ export function registerSettleRenderer(name, fn) {
   renderers.set(name, fn);
 }
 
-// opts: { renderer?, reducedMotion, walletBefore, onWalletTick(value), playChime }
+// opts: { renderer?, reducedMotion, walletBefore, onWalletTick(value), playChime, lines?, bonusCaption? }
 // Returns a Promise that resolves when the show (or static fallback) is done.
 export function renderSettlement(receipt, opts = {}) {
   const name = opts.renderer || "supernova";
@@ -91,7 +112,7 @@ async function supernova(receipt, opts = {}) {
   const finalWallet = walletBefore + Math.max(0, receipt.payout);
   const onWalletTick = typeof opts.onWalletTick === "function" ? opts.onWalletTick : null;
   const playChime = typeof opts.playChime === "function" ? opts.playChime : null;
-  const lines = receiptLines(receipt, tFn);
+  const lines = Array.isArray(opts.lines) ? opts.lines : receiptLines(receipt, tFn);
 
   return new Promise((resolve) => {
     // ── static fallback (reduced motion) ─────────────────────────────────────────────────
@@ -519,7 +540,7 @@ async function supernova(receipt, opts = {}) {
       // Beat 4: bonus — shooting stars
       if (!skipFired && receipt.bonus) {
         await caption([
-          { text: `${tFn("settle.caption.winBonus", "win bonus")} ` },
+          { text: `${opts.bonusCaption || tFn("settle.caption.winBonus", "win bonus")} ` },
           { text: `+ ◆ ${receipt.bonus}`, color: "#f0c14b" },
         ]);
         // Fix 2: cap bonus star count at 12.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { receiptLines } from "../public/settle.js";
+import { receiptLines, dailyReceiptLines } from "../public/settle.js";
 
 const receipt = (over = {}) => ({
   buyIn: 0, points: 2150, minted: 22, mult: 1, earned: 22,
@@ -23,5 +23,23 @@ describe("receiptLines", () => {
   it("bust reads as the house floor", () => {
     const lines = receiptLines(receipt({ buyIn: 50, spends: 90, payout: 0, net: -50 }));
     expect(lines.find((l) => l.key === "payout").text).toContain("◆ 0");
+  });
+});
+
+describe("dailyReceiptLines", () => {
+  // Daily receipt: minted = ÷9 score gold; bonus = flat daily goody + ÷9 speed gold.
+  const daily = receipt({ points: 2300, minted: 256, earned: 256, bonus: 156, payout: 412, net: 412 });
+  it("splits the bonus into honest daily + speed legs", () => {
+    const lines = dailyReceiptLines(daily, 100);
+    expect(lines).toEqual([
+      { key: "mint", text: "2,300 pts → ◆ 256", tone: "gain" },
+      { key: "daily", text: "daily bonus + ◆ 100", tone: "gain" },
+      { key: "speed", text: "speed + ◆ 56", tone: "gain" },
+      { key: "payout", text: "◆ 412 to your wallet · net +412", tone: "gain" },
+    ]);
+  });
+  it("drops a zero speed leg", () => {
+    const lines = dailyReceiptLines(receipt({ minted: 256, bonus: 100, payout: 356, net: 356, points: 2300 }), 100);
+    expect(lines.map((l) => l.key)).toEqual(["mint", "daily", "payout"]);
   });
 });
