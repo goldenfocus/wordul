@@ -34,6 +34,7 @@ import { renderSettlement } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
 import { seatModel } from "/lobby-view.js";
+import { encodeLocalSolve, needsDailyRecovery, recoverDailyArtifacts } from "/daily-recover.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
 
@@ -56,19 +57,13 @@ const LS = {
                                // letter-boards. Worthless to a non-finisher, so no answer leak.
 };
 
-const SOLVE_CELL = { hot: "g", warm: "y", cold: "x" };
 // Stash this browser's own finished daily (letters + color grid) so the home recap can
-// draw a crystallized stamp with real letters. Never sent to the server.
+// draw a crystallized stamp with real letters. Never sent to the server. (Encoding
+// shared with daily-recover.js, which restores the same payload on another browser.)
 function captureDailySolve(date, me) {
   if (!date || !me || !Array.isArray(me.guesses)) return;
   try {
-    const solve = {
-      won: me.status === "won",
-      guesses: me.guesses.length,
-      words: me.guesses.map((g) => String(g.word || "").toUpperCase()),
-      grid: me.guesses.map((g) => (g.mask || []).map((c) => SOLVE_CELL[c] || "x").join("")),
-    };
-    localStorage.setItem(`${LS.dailySolve}:${date}`, JSON.stringify(solve));
+    localStorage.setItem(`${LS.dailySolve}:${date}`, JSON.stringify(encodeLocalSolve(me)));
   } catch { /* storage full / disabled — stamp falls back to the server color grid */ }
 }
 
@@ -313,6 +308,11 @@ function renderHomeIdentity() {
         cbs.dailyResult = dailyResultFor(profile);
         renderHub(profile, cbs);
         maybeOpenArena();
+        // Cross-browser self-heal: the server says you finished today (dailyResult), but
+        // this browser holds no local solve/finisher token — you solved elsewhere. Pull
+        // both off the room's own WS contract once, then re-render the recap with your
+        // real letters (and a token that unlocks everyone's letter-boards).
+        maybeRecoverDailySolve(u, profile, cbs);
       })
       .catch(() => { renderHub({}, cbs); maybeOpenArena(); });
   } else {
@@ -343,6 +343,43 @@ function dailyResultFor(profile) {
     }
   } catch { /* ignore */ }
   return { won: g.result === "won", guesses: g.guesses, solveGrid: grid, solveWords: words };
+}
+
+// "I solved it on my phone, why is this board blank?" — when the profile proves you
+// finished today but THIS browser lacks the client-only artifacts (letters + finisher
+// token), recover them over the daily room's own socket: a finished player's snapshot
+// already carries both (same payload a reload in the solving browser gets — no new
+// surface, no answer leak to anyone the server doesn't already consider done).
+// In-flight guard: home re-renders re-enter this; one recovery at a time is plenty.
+let dailyRecoveryInFlight = false;
+function maybeRecoverDailySolve(username, profile, cbs) {
+  const date = todayUTC();
+  if (dailyRecoveryInFlight || !cbs.dailyResult || !needsDailyRecovery(date, localStorage)) return;
+  if (game.ws) return; // a live game socket exists — the normal play flow owns the artifacts
+  dailyRecoveryInFlight = true;
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  recoverDailyArtifacts({
+    date,
+    username,
+    storage: localStorage,
+    makeSocket: () => new WebSocket(`${proto}//${location.host}/ws?room=${encodeURIComponent("daily/" + date)}`),
+    // Mirror openSocket's hello so the room treats this like any reconnect of you.
+    hello: {
+      type: "hello",
+      username,
+      wordLength: getPreferredLength(),
+      edition: getActiveEditionId(),
+      mode: "race",
+      scienceOptOut: !getSettings().communityScience,
+      sessionToken: getSessionToken() || undefined,
+    },
+  }).then((ok) => {
+    dailyRecoveryInFlight = false;
+    // Re-render only if the home recap is still on screen (don't yank a room view).
+    if (!ok || !document.getElementById("dailyFeatured")) return;
+    cbs.dailyResult = dailyResultFor(profile); // now reads the recovered letters
+    renderHub(profile, cbs);
+  }).catch(() => { dailyRecoveryInFlight = false; });
 }
 
 // Share today's result from the home — a spoiler-free line + the day's link (no board
