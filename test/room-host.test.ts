@@ -140,3 +140,26 @@ describe("host model", () => {
     expect(room.state.hostId).toBe(null);
   });
 });
+
+describe("challenge rooms pin the word — size is locked", () => {
+  it("rejects set_length and set_rows when challengeId is set", async () => {
+    const { room } = makeRoom();
+    const a = mockWs();
+    await join(room, a, "alice");
+    room.state.challengeId = "abc12";
+    const len = room.state.wordLength as number;
+    const rows = room.state.maxGuesses as number;
+    await room.webSocketMessage(a, JSON.stringify({ type: "set_length", wordLength: len === 5 ? 6 : 5 }));
+    await room.webSocketMessage(a, JSON.stringify({ type: "set_rows", rows: rows === 6 ? 7 : 6 }));
+    expect(room.state.wordLength).toBe(len);
+    expect(room.state.maxGuesses).toBe(rows);
+  });
+
+  it("still accepts them in a normal room", async () => {
+    const { room } = makeRoom();
+    const a = mockWs();
+    await join(room, a, "alice");
+    await room.webSocketMessage(a, JSON.stringify({ type: "set_rows", rows: 7 }));
+    expect(room.state.maxGuesses).toBe(7);
+  });
+});

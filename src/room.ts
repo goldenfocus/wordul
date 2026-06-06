@@ -769,6 +769,10 @@ export class Room extends DurableObject<Env> {
 
   private async onSetLength(ws: WebSocket, length: number): Promise<void> {
     if (this.state.isDaily) return; // daily word/theme are locked by the World
+    if (this.state.challengeId) {
+      this.send(ws, { type: "error", message: "challenge word is pinned" });
+      return;
+    }
     if (this.state.phase !== "lobby") {
       this.send(ws, { type: "error", message: "can't change length mid-game" });
       return;
@@ -790,6 +794,10 @@ export class Room extends DurableObject<Env> {
   // to [MIN_ROWS, MAX_ROWS]. Note: a later set_length resets maxGuesses to guessesFor(len).
   private async onSetRows(ws: WebSocket, rows: number): Promise<void> {
     if (this.state.isDaily) return; // daily word/theme are locked by the World
+    if (this.state.challengeId) {
+      this.send(ws, { type: "error", message: "challenge word is pinned" });
+      return;
+    }
     if (this.state.phase !== "lobby") {
       this.send(ws, { type: "error", message: "can't change rows mid-game" });
       return;
