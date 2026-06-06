@@ -22,6 +22,7 @@ const GOLD_WALLET = { get: getGold, add: addGold, drain: drainGold };
 export const GOLD = {
   hot: 100,             // each newly-revealed hot
   warm: 50,             // each newly-revealed warm
+  validWord: 25,        // flat per accepted non-winning guess (twin: POINTS.validWord)
   solve: 500,             // flat solve bonus
   speedPerGuessLeft: 300, // × unused guesses — solve fast, earn more
   revealCost: 4000,       // a letter is a splurge (gold is precious)

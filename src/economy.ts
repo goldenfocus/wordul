@@ -12,6 +12,7 @@ export type LedgerTx = { token: string; delta: number; reason: string; ts: numbe
 export const POINTS = {
   green: 100,
   yellow: 50,
+  validWord: 25,  // flat per accepted non-winning guess — a real word is never dead air
   solve: 500,
   speedPerGuessLeft: 300,
   revealCost: 4000,
@@ -134,6 +135,11 @@ export function pointsEarned(guesses: GuessRow[], maxGuesses: number): number {
     const disc = orderedDiscoveriesInLast(upto);
     const base = disc.reduce((s, d) => s + (d.kind === "hot" ? POINTS.green : POINTS.yellow), 0);
     pts += Math.round(base * comboMultiplier(disc.length));
+    // Valid-word bonus: every accepted NON-WINNING row pays a flat tick, outside the
+    // combo — the dictionary accepted it, so even a zero-discovery shot earns something.
+    // (An all-green row is the solve; POINTS.solve owns that moment.)
+    const rowMask = guesses[k].mask || [];
+    if (!(rowMask.length > 0 && rowMask.every((c) => c === "hot"))) pts += POINTS.validWord;
     const wasted = wastedDeadLettersInLast(upto);
     let pen = 0;
     for (const letter of wasted.letters) {

@@ -1,5 +1,18 @@
 import { describe, it, expect } from "vitest";
 import { GOLD, comboMultiplier, dailyCashOutReady } from "/gold.js";
+import { POINTS } from "../src/economy.ts";
+
+describe("GOLD ↔ POINTS twin contract", () => {
+  it("the client constants the payout animates match the server economy", () => {
+    expect(GOLD.hot).toBe(POINTS.green);
+    expect(GOLD.warm).toBe(POINTS.yellow);
+    expect(GOLD.validWord).toBe(POINTS.validWord);
+    expect(GOLD.solve).toBe(POINTS.solve);
+    expect(GOLD.speedPerGuessLeft).toBe(POINTS.speedPerGuessLeft);
+    expect(GOLD.wastedLetterPenalty).toBe(POINTS.wastedLetterPenalty);
+    expect(GOLD.wastedCapPerGuess).toBe(POINTS.wastedCapPerGuess);
+  });
+});
 
 describe("comboMultiplier", () => {
   it("is 1× for 0 or 1 discovery (no combo)", () => {

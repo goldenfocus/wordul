@@ -81,9 +81,31 @@ describe("pointsEarned", () => {
   });
   it("subtracts capped, escalating wasted-letter penalties", () => {
     // guess1 all cold (C,R,A,N,E dead), guess2 "CRUMB" reuses C and R (2 dead letters),
-    // no discoveries -> 50 + 50 = 100 penalty, total -100.
+    // no discoveries -> 50 + 50 = 100 penalty; +2× valid-word bonus (25 each) → -50.
     const guesses = [row("CRANE", "xxxxx"), row("CRUMB", "xxxxx")];
-    expect(pointsEarned(guesses, 6)).toBe(-100);
+    expect(pointsEarned(guesses, 6)).toBe(-100 + 2 * POINTS.validWord);
+  });
+});
+
+describe("valid-word bonus", () => {
+  it("a zero-discovery valid guess still earns the flat bonus (no more dead air)", () => {
+    const guesses = [row("CRANE", "xxxxx")]; // all cold, no prior guesses → no penalty
+    expect(pointsEarned(guesses, 6)).toBe(POINTS.validWord);
+  });
+  it("stacks flat with discovery points, OUTSIDE the combo multiplier", () => {
+    // C,R warm: base 100 × combo(2)=1.5 → 150, +25 flat (not 125×1.5).
+    const guesses = [row("CRANE", "yyxxx")];
+    expect(pointsEarned(guesses, 6)).toBe(150 + POINTS.validWord);
+  });
+  it("the winning (all-green) row earns NO valid-word bonus — solve bonus owns it", () => {
+    // Same as the headline solve case: 1500 combo + 500 solve + 1500 speed, no +25.
+    const guesses = [row("CRANE", "ggggg")];
+    expect(pointsEarned(guesses, 6)).toBe(1500 + 500 + 1500);
+  });
+  it("every non-winning row pays once: wrong guesses then a solve", () => {
+    // guess1 all cold (+25), guess2 solve: 5 hots combo 1500 + solve 500 + speed 300×4.
+    const guesses = [row("MUSTY", "xxxxx"), row("CRANE", "ggggg")];
+    expect(pointsEarned(guesses, 6)).toBe(POINTS.validWord + 1500 + 500 + 1200);
   });
 });
 
@@ -110,10 +132,10 @@ describe("CRANE → CRANK economy case", () => {
   });
 
   it("pointsEarned reflects the discoveries + solve, independent of the speed clock", () => {
-    // guess1: 4 new hots, combo(4)=2.5× → round(400*2.5)=1000.
+    // guess1: 4 new hots, combo(4)=2.5× → round(400*2.5)=1000, +25 valid-word bonus.
     // guess2: 1 new hot (K), combo(1)=1× → 100. Solve at guess2: +500 +300*guessesLeft(6-2=4)=1200.
     // pointsEarned uses the GUESS-count speed bonus (speedPerGuessLeft), not wall-clock speedBonusPoints.
-    expect(pointsEarned(guesses, 6)).toBe(1000 + 100 + 500 + 1200);
+    expect(pointsEarned(guesses, 6)).toBe(1000 + POINTS.validWord + 100 + 500 + 1200);
   });
 });
 

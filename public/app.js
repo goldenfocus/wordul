@@ -2150,6 +2150,17 @@ function onServerMessage(msg) {
           mistakeFx(activeMistakeFx(), wasted.letters); // sensory punishment for the sloppy reuse (room-themed)
           checkBankruptcy(powerupsCtx); // C4: a wasted-letter drain may bankrupt Hard Mode
         };
+        // Valid-word bonus: EVERY accepted guess pays a flat tick — even a zero-discovery
+        // shot in the dark — so a real word never lands as dead air. Deliberately quiet:
+        // no coin-rain (reducedMotion=true to awardGold), just the HUD tick + a log line.
+        // Twin contract: GOLD.validWord === POINTS.validWord; the server's pointsEarned
+        // pays the same flat bonus per accepted non-winning row. (The final LOSING row
+        // skips this branch — its +25 still lands server-side in the settlement mint.)
+        const runValidWordBonus = () => {
+          if (!game.snapshot || game.hasShownEndStats) return; // game ended / left room
+          awardGold(GOLD.validWord, true, payoutOpts);
+          getHacklog()?.logLine(`valid word  +${GOLD.validWord}`, { tone: "gain" });
+        };
 
         if (discoveries > 0) {
           // Replay tracks the running balance: the ROUND SCORE in every mode (the ◆ wallet is
@@ -2185,16 +2196,22 @@ function onServerMessage(msg) {
               reducedMotion,
             }).finally(() => {
               game.payingOut = false;
-              // Drain AFTER the award sequence resolves so the two HUD tweens never race
-              // on the same #goldHud (animateCount has no cancel guard). A short beat lets
-              // the win land before the loss bites.
-              if (penalty > 0) deferPayout(runDrain, 350);
-              if (log) deferPayout(() => log.collapse(), penalty > 0 ? 1100 : 700);
+              // The flat valid-word tick lands right after the discovery beats…
+              runValidWordBonus();
+              // …then the drain, spaced past the tick's 650ms tween so the HUD tweens
+              // never race on the same element (animateCount has no cancel guard). The
+              // win lands before the loss bites.
+              if (penalty > 0) deferPayout(runDrain, 700);
+              if (log) deferPayout(() => log.collapse(), penalty > 0 ? 1450 : 1050);
             });
           }, flipDoneMs);
-        } else if (penalty > 0) {
-          // No discoveries this guess — no payout to wait on; drain once the row flips.
-          deferPayout(runDrain, flipDoneMs);
+        } else {
+          // No discoveries this guess — the valid-word tick (and any drain, spaced past
+          // the tick's tween) land once the row finishes flipping.
+          deferPayout(() => {
+            runValidWordBonus();
+            if (penalty > 0) deferPayout(runDrain, 700);
+          }, flipDoneMs);
         }
         // Never silent: every accepted guess resolves to exactly ONE companion event,
         // on EVERY edition. Yang's green confetti stays Yang-only + cosmetic; voice is global.
