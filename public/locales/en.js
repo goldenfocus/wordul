@@ -52,6 +52,7 @@ export const en = {
   "daily.entryCta": "Play today →",
   "daily.boardTitle": "Wordul of the Day · {date}",
   "daily.roundScorePrefix": "Round",
+  "race.scorePrefix": "Score",
   "daily.cashoutScore": "Score → +{gold} gold",
   "daily.cashoutDaily": "Daily bonus +{gold}",
   "daily.cashoutSpeed": "Speed bonus +{gold}",

@@ -660,6 +660,7 @@ const game = {
 // Dependency bundle handed to the power-ups module (it must not import app.js — the
 // <script type="module"> entry — or the graph would cycle). All app-owned helpers it
 // reaches for, in one place. Function refs resolve lazily (hoisted declarations).
+const stakeGold = () => game.goldThisRound || 0;
 const powerupsCtx = {
   game,
   send: (msg) => send(msg),
@@ -667,8 +668,15 @@ const powerupsCtx = {
   toast: (text, opts) => toast(text, opts),
   renderGoldHud,
   getSettings,
-  getGold,
-  drainGold,                                       // C4: power-up spends can dip gold negative
+  // Settlement spec: races spend/check the STAKE (round score); the ◆ wallet never moves
+  // mid-game. Daily keeps the real wallet (§A: WOTD power-ups cost real gold) until Phase 2.
+  getGold: () => (game.isDaily ? getGold() : stakeGold()),
+  drainGold: (n) => {
+    if (game.isDaily) return drainGold(n);
+    game.goldThisRound = stakeGold() - n;
+    renderRoundScore?.();
+    return game.goldThisRound;
+  },
   getUsername,                                     // resolve "me" inside the module
   forfeit: (reason) => forfeit(reason),            // C4: give-up / bankruptcy — record loss + explode
 };
@@ -1823,15 +1831,15 @@ const roundScoreWallet = {
 // animated ticks share one format ("<label> <n>"). animateCount writes `${prefix}${n}`, so the
 // label lives in the prefix; keep the trailing space.
 const ROUND_SCORE_PREFIX = () => t("daily.roundScorePrefix") + " ";
+const SCORE_PREFIX = () => (game.isDaily ? t("daily.roundScorePrefix") : t("race.scorePrefix")) + " ";
 // Paint the round-score chip from the current tally. The payout animation tweens the number
 // itself (via the wallet adapter + #roundScore as its hud); this is the static render used
 // on mount / reveal so the chip is never blank or stale between animated ticks.
 function renderRoundScore() {
   const el = $("#roundScore");
   if (!el) return;
-  el.hidden = !game.isDaily;
-  if (!game.isDaily) return;
-  el.textContent = `${ROUND_SCORE_PREFIX()}${game.goldThisRound || 0}`;
+  el.hidden = false;
+  el.textContent = `${SCORE_PREFIX()}${game.goldThisRound || 0}`;
 }
 
 // In-room head-to-head record against the current opponent, shown beside the room name.
@@ -2007,15 +2015,10 @@ function onServerMessage(msg) {
           game.deadLetterReuse.set(letter, reuse + 1);
         }
         penalty = Math.min(penalty, GOLD.wastedCapPerGuess);
-        // §A: in a daily, the payout/drain choreography drives the EPHEMERAL #roundScore (via
-        // the round-score wallet adapter) — the sacred ◆ gold HUD must NOT move. The adapter
-        // itself mutates game.goldThisRound, so the manual ±game.goldThisRound bookkeeping below
-        // is RACE-ONLY (gated on !isDaily) to avoid double-counting. Race keeps live #goldHud.
-        const payoutOpts = game.isDaily
-          ? { wallet: roundScoreWallet, hud: $("#roundScore"), prefix: ROUND_SCORE_PREFIX() }
-          : { hud: $("#goldHud") };
+        // §A everywhere (settlement spec): in EVERY mode the payout/drain choreography
+        // drives the EPHEMERAL #roundScore — the sacred ◆ wallet moves only at settlement.
+        const payoutOpts = { wallet: roundScoreWallet, hud: $("#roundScore"), prefix: SCORE_PREFIX() };
         // Drain + red log lines. Caller owns the line text; goldDrain stays generic.
-        if (penalty > 0 && !game.isDaily) game.goldThisRound = (game.goldThisRound || 0) - penalty;
         const runDrain = () => {
           if (penalty <= 0) return;
           if (!game.snapshot || game.hasShownEndStats) return; // game ended / left room — don't drain off-screen
@@ -2031,7 +2034,7 @@ function onServerMessage(msg) {
           // Replay tracks the running balance: the ROUND SCORE in a daily (the ◆ wallet is
           // frozen until cash-out), the live ◆ balance in a race. Either way balanceAfter =
           // before + total, since the sequence awards exactly `total`.
-          const balanceBefore = game.isDaily ? (game.goldThisRound || 0) : getGold();
+          const balanceBefore = game.goldThisRound || 0;
           recordReplayEntry({
             guessIndex,
             events: discoveryList.map((d) => ({
@@ -2040,10 +2043,6 @@ function onServerMessage(msg) {
             combo: { discoveries, mult, bonus },
             balanceAfter: balanceBefore + total,
           });
-          // Race-only: bump the per-round tally here. In a daily the round-score wallet adapter
-          // (passed into playPayoutSequence below) owns game.goldThisRound, so adding here too
-          // would double-count.
-          if (!game.isDaily) game.goldThisRound = (game.goldThisRound || 0) + total;
           const reducedMotion = getSettings().reducedMotion;
           const log = getHacklog();
           // Start the payout after the row finishes flipping, so coins land as colors do.
@@ -2057,7 +2056,7 @@ function onServerMessage(msg) {
             playPayoutSequence({
               discoveries: discoveryList,
               mult,
-              ...payoutOpts, // §A: daily → round-score wallet + #roundScore; race → live #goldHud
+              ...payoutOpts, // §A: round-score wallet + #roundScore in every mode
               getTile: getMyFreshTile,
               log,
               playChime,
@@ -2144,17 +2143,11 @@ function onServerMessage(msg) {
     // game.pending still holds the rejected letters (we never cleared them above).
     const rejected = (game.pending || "").toUpperCase();
     const reducedMotion = getSettings().reducedMotion;
-    // §A: daily drains the ephemeral #roundScore (wallet frozen); race drains live #goldHud.
-    // The round-score adapter mutates game.goldThisRound itself, so the manual subtract below
-    // is race-only to avoid double-counting.
-    if (game.isDaily) {
-      goldDrain(GOLD.invalidPenalty, reducedMotion, playChime, {
-        wallet: roundScoreWallet, hud: $("#roundScore"), prefix: ROUND_SCORE_PREFIX(),
-      });
-    } else {
-      goldDrain(GOLD.invalidPenalty, reducedMotion, playChime, { hud: $("#goldHud") });
-      game.goldThisRound = (game.goldThisRound || 0) - GOLD.invalidPenalty;
-    }
+    // §A everywhere (settlement spec): drain the EPHEMERAL #roundScore in every mode —
+    // the sacred ◆ wallet never moves mid-game; it moves only at settlement.
+    goldDrain(GOLD.invalidPenalty, reducedMotion, playChime, {
+      wallet: roundScoreWallet, hud: $("#roundScore"), prefix: SCORE_PREFIX(),
+    });
     const log = getHacklog();
     log?.logLine(
       `rejected  ${rejected || reason}  −${GOLD.invalidPenalty}`,
@@ -2504,16 +2497,18 @@ function render() {
     // The lobby bar's controls (choose-mode / start / play-again) are all meaningless for
     // the daily (it auto-starts, never resets) — hide the otherwise-empty bar entirely.
     const lobbyBar = $(".lobby-bar"); if (lobbyBar) lobbyBar.hidden = true;
-    // §A: the ephemeral round-score chip rides ABOVE the board while you're still solving.
-    // The payout animation tweens its number; this paints/refreshes the static value and
-    // hides it once you're done (the goody + ◆ cash-out own the end screen).
+  }
+  if (game.isDaily) renderDailyUnlock(snap, me);
+  // §A: the ephemeral round-score chip rides ABOVE the board while you're still solving,
+  // in EVERY mode. The payout animation tweens its number; this paints/refreshes the
+  // static value and hides it once you're done (the settlement screen owns the end state).
+  {
     const rs = $("#roundScore");
     if (rs) {
       const playing = me && me.status === "playing";
       if (playing) renderRoundScore(); else rs.hidden = true;
     }
   }
-  if (game.isDaily) renderDailyUnlock(snap, me);
 
   // Keep the header name (and tab title) in sync with server renames.
   if (snap.name && snap.name !== game.name) {
@@ -3678,8 +3673,7 @@ function handleGameOver(snap) {
     const finalGreens = newGreensInLast(me.guesses);
     const speedBonus = GOLD.speedPerGuessLeft * Math.max(0, maxGuesses - guessCount);
     const winGold = GOLD.solve + speedBonus + finalGreens * GOLD.hot;
-    awardGold(winGold, getSettings().reducedMotion);
-    game.goldThisRound = (game.goldThisRound || 0) + winGold;
+    awardGold(winGold, getSettings().reducedMotion, { wallet: roundScoreWallet, hud: $("#roundScore"), prefix: SCORE_PREFIX() });
     // Clearer-wins: the solve is the climactic turn — capture it in the replay + hacker-log
     // so "your run, line by line" ends ON the win and its gold, not one guess short. The gold
     // was already awarded above; this only RECORDS it (shape matches the gated server viewer).
@@ -3689,7 +3683,7 @@ function handleGameOver(snap) {
     }
     winEvents.push({ kind: "solve", delta: GOLD.solve });
     if (speedBonus > 0) winEvents.push({ kind: "speed", delta: speedBonus });
-    recordReplayEntry({ guessIndex: guessCount - 1, events: winEvents, combo: null, balanceAfter: getGold() });
+    recordReplayEntry({ guessIndex: guessCount - 1, events: winEvents, combo: null, balanceAfter: game.goldThisRound || 0 });
     const winLog = getHacklog();
     if (winLog) for (const ev of winEvents) {
       winLog.logLine(`${ev.kind}${ev.letter ? " " + String(ev.letter).toUpperCase() : ""}  +${ev.delta}`, { tone: "gain" });
