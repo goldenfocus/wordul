@@ -4,7 +4,7 @@ import { scoreGuess, countVowels, revealUngreened, type Color } from "./color.ts
 import { computeNextGuess } from "./solver.ts";
 import { noobGuess, mistakeRateFor } from "./noob.ts";
 import { planKeystrokes, NOOB_HAND, SHARP_HAND, type KeyStep } from "./rhythm.ts";
-import { projectPlayerForClient } from "./bots.ts";
+import { projectPlayerForClient, dueWotdPersonas } from "./bots.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { everyoneReady, COUNTDOWN_MS } from "./duel.ts";
 import { nextSeatRole, applyKothRotation } from "./rotation.ts";
@@ -199,6 +199,20 @@ export class Room extends DurableObject<Env> {
         this.state.slug = this.state.path.split("/")[1] ?? "";
       }
       return this.handleUpgrade(req);
+    }
+    // Cron-driven: wordulers play the word of the day at "their hour". The worker's
+    // scheduled handler pokes this every tick; dueWotdPersonas is pure + idempotent
+    // (already-present personas are skipped), so re-pokes are harmless. `path` stamps
+    // identity on a cold DO — without it a fresh room has path "" and can't seed.
+    if (req.method === "POST" && url.pathname === "/bots/tick") {
+      const path = url.searchParams.get("path") ?? "";
+      if (this.state.path === "" && /^daily\/\d{4}-\d{2}-\d{2}$/.test(path)) {
+        this.state.path = path;
+        const [owner, slug] = path.split("/");
+        this.state.owner = owner ?? "";
+        this.state.slug = slug ?? "";
+      }
+      return this.handleWotdBotTick();
     }
     // Read-only daily leaderboard: top N by gold + the caller's own rank. No socket,
     // no mutation — just a sort over the players already persisted in state.
@@ -1151,11 +1165,45 @@ export class Room extends DurableObject<Env> {
     // The worduler joins like any other player — no "powered on" announcement (worduler cover rule).
   }
 
+  // Join every persona whose play time has passed and start the existing heartbeat.
+  // Bots walk the REAL paths — join, solver, applyGuess, scorePlayer, leaderboard —
+  // so every daily tick doubles as a beta test of the human pipeline.
+  private async handleWotdBotTick(): Promise<Response> {
+    await this.seedDailyIfNeeded();
+    if (!this.state.isDaily || !this.state.word) {
+      return Response.json({ ok: false, reason: "not seeded" }, { status: 409 });
+    }
+    const date = dailyDateOf(this.state.path) ?? "";
+    const present = new Set(this.state.players.map((p) => p.username));
+    const due = dueWotdPersonas(date, Date.now(), present);
+    for (const persona of due) {
+      this.state.players.push({
+        username: persona.id,
+        connected: true,
+        guesses: [],
+        status: "playing",
+        isBot: true,
+        ready: true,
+        role: "duelist",       // inert in daily rooms
+        scienceOptOut: true,   // bots stay out of the Science aggregates (spec)
+        revealHints: 0,
+        vowelHints: 0,
+        points: 0,
+        pointsSpent: 0,
+      });
+    }
+    if (due.length > 0) {
+      this.armBotHeartbeat(true); // arm nextGuessAt + the DO alarm → runBotPump plays them
+      await this.persistAndBroadcast();
+    }
+    return Response.json({ ok: true, joined: due.map((p) => p.id) });
+  }
+
   // Arm every playing bot's next guess time, then set the single DO alarm to the soonest.
   // One alarm drives N bots (min-heap on one timer). Seeded (Arena) bots read slow/beatable;
   // /robots keeps the snappier beat. `opening` = the round just started (slower first guess).
   private armBotHeartbeat(opening: boolean): void {
-    const seeded = !!this.state.seed;
+    const seeded = !!this.state.seed || !!this.state.isDaily;
     const now = Date.now();
     let any = false;
     for (const p of this.state.players) {
@@ -1240,11 +1288,11 @@ export class Room extends DurableObject<Env> {
   // Winner safety: applyGuess is synchronous up to its final await, so two turns finishing
   // near-simultaneously can't both claim state.winner.
   private async runBotTurn(b: PlayerState): Promise<void> {
-    const seeded = !!this.state.seed;
+    const seeded = !!this.state.seed || !!this.state.isDaily; // daily bots pace like people
     const opponents = this.state.players.length - 1;
     const view = { wordLength: this.state.wordLength, ownGuesses: b.guesses };
-    const word = this.state.seed
-      ? noobGuess(view, { mistakeRate: mistakeRateFor(this.state.wordLength, opponents) }, Math.random())
+    const word = seeded
+      ? noobGuess(view, { mistakeRate: mistakeRateFor(this.state.wordLength, this.state.seed ? opponents : 1) }, Math.random())
       : computeNextGuess(view);
     if (!word) { b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random()); return; }
     await this.typeOutBot(b.username, planKeystrokes(word, seeded ? NOOB_HAND : SHARP_HAND, Math.random));
@@ -1724,9 +1772,11 @@ export class Room extends DurableObject<Env> {
     } catch (e) {
       console.error("daily report failed", player.username, (e as Error).message);
     }
-    // Bots never mint; mark them scored so they don't retry forever.
+    // Bots never mint — no ledger write, zero economy impact — but they DO get the
+    // same computed gold number so rankedEntries ranks them like any finisher.
     if (player.isBot) {
       player.scored = true;
+      player.goldAwarded = gold;
       return;
     }
     // Resigners forfeit to 0 gold — skip the pointless 0-delta ledger write, but still
