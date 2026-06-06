@@ -2583,6 +2583,9 @@ function maybeRunSettlement(msg) {
         walletBefore: pre,
         onWalletTick: (v) => { setGold(v); renderGoldHud(); },
         playChime,
+        // The answer word fuels the supernova beat's randomized word reveal. A win's
+        // last guess IS the word, covering snapshots where room.word isn't revealed yet.
+        word: msg.room.word || (me.status === "won" ? me.guesses?.[me.guesses.length - 1]?.word : null),
       });
     })
     .catch(() => refreshGold());
@@ -2636,6 +2639,9 @@ function cashOutDaily(me) {
           playChime,
           lines: dailyReceiptLines(me.receipt, dailyBonus, t),
           bonusCaption: t("settle.caption.dailyBonus"),
+          // Daily word reveal: a solved daily's last guess IS the answer (the win beat
+          // only fires on payout > 0, which a daily only mints when solved).
+          word: me.status === "won" ? me.guesses?.[me.guesses.length - 1]?.word : null,
         });
         return;
       }

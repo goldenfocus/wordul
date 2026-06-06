@@ -4,8 +4,10 @@
 // they pin tiles/sounds. Default: "supernova" (design ritual winner, 2026-06-05).
 //
 // Decoupling note: this module NEVER imports app.js. App-owned hooks come in via opts:
-//   { renderer?, reducedMotion, walletBefore, onWalletTick(value), playChime, lines?, bonusCaption? }
-// Same pattern as gold.js.
+//   { renderer?, reducedMotion, walletBefore, onWalletTick(value), playChime, lines?, bonusCaption?, word? }
+// Same pattern as gold.js. `word` is the round's answer — when present, the win beat
+// reveals it letter-by-letter (random entrance each time) instead of the generic
+// "supernova" caption.
 
 // ── Pure: receipt → display lines ────────────────────────────────────────────────────────
 // tFn is optional — defaults to English identity so the pure function stays hermetic in
@@ -113,6 +115,9 @@ async function supernova(receipt, opts = {}) {
   const onWalletTick = typeof opts.onWalletTick === "function" ? opts.onWalletTick : null;
   const playChime = typeof opts.playChime === "function" ? opts.playChime : null;
   const lines = Array.isArray(opts.lines) ? opts.lines : receiptLines(receipt, tFn);
+  const answerWord = typeof opts.word === "string" && opts.word.trim()
+    ? opts.word.trim().toUpperCase()
+    : null;
 
   return new Promise((resolve) => {
     // ── static fallback (reduced motion) ─────────────────────────────────────────────────
@@ -412,6 +417,67 @@ async function supernova(receipt, opts = {}) {
       capLine.style.transform = "none";
     }
 
+    // Word reveal: the round's answer takes the supernova beat's stage. Every finish rolls
+    // a fresh combo of entrance animation × letter order × stagger/tilt, so no two reveals
+    // look alike. Same safe-DOM rules as caption(): textContent only, no innerHTML.
+    async function wordReveal(word) {
+      capLine.style.opacity = "0";
+      capLine.style.transform = "translateY(10px)";
+      await sleep(60);
+      while (capLine.firstChild) capLine.removeChild(capLine.firstChild);
+
+      const anims = ["rise", "drop", "flip", "zoom", "scatter"];
+      const anim = anims[Math.floor(Math.random() * anims.length)];
+      const n = word.length;
+      // Letter order: left→right, right→left, center-out, or shuffled.
+      const orders = [
+        (i) => i,
+        (i) => n - 1 - i,
+        (i) => Math.abs(i - (n - 1) / 2),
+        (() => {
+          const p = Array.from({ length: n }, (_, i) => i);
+          for (let i = n - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [p[i], p[j]] = [p[j], p[i]];
+          }
+          return (i) => p[i];
+        })(),
+      ];
+      const order = orders[Math.floor(Math.random() * orders.length)];
+      const stagger = 55 + Math.random() * 75;   // ms between letters
+      const dur = 520 + Math.random() * 280;     // per-letter animation length
+
+      // The answer earns headline size; capLine is rebuilt by teardown, so no restore needed.
+      capLine.style.fontSize = "clamp(30px,7vw,54px)";
+      capLine.style.letterSpacing = ".08em";
+      capLine.style.fontWeight = "900";
+
+      let maxDelay = 0;
+      for (let i = 0; i < n; i++) {
+        const delay = order(i) * stagger;
+        maxDelay = Math.max(maxDelay, delay);
+        const span = document.createElement("span");
+        span.textContent = word[i];
+        span.style.cssText = `
+          display:inline-block; color:#f0c14b;
+          text-shadow:0 0 28px rgba(240,193,75,.75),0 0 8px rgba(240,193,75,.9);
+          --wr-rot:${(Math.random() - 0.5) * 70}deg;
+          --wr-dx:${(Math.random() - 0.5) * 240}px;
+          --wr-dy:${(Math.random() - 0.5) * 180}px;
+          animation:settle-wr-${anim} ${dur}ms cubic-bezier(.2,.9,.3,1.2) ${delay}ms both;
+        `;
+        capLine.appendChild(span);
+        // Rising chime per letter, timed to its entrance.
+        setTimeout(() => {
+          if (running && !skipFired) playChime?.([[620 + order(i) * 55, 0]]);
+        }, delay);
+      }
+      capLine.style.opacity = "1";
+      capLine.style.transform = "none";
+      // Let the letters mostly land before the payout beat takes over.
+      await Promise.race([sleep(maxDelay + dur * 0.6), skipRace]);
+    }
+
     function countTo(from, to, ms) {
       const t0 = performance.now();
       function f(n) {
@@ -566,11 +632,16 @@ async function supernova(receipt, opts = {}) {
       const bustLabel = tFn("settle.bust", "buy-in was your max loss");
 
       if (!skipFired) {
-        await caption(
-          isWin
-            ? [{ text: tFn("settle.caption.supernova", "supernova"), color: "#f0c14b" }]
-            : [{ text: `${tFn("settle.caption.tableKeepsIt", "the table keeps it")} — ` }, { text: bustLabel, color: "#e0796b" }],
-        );
+        if (isWin && answerWord) {
+          // The actual word IS the supernova — randomized entrance every time.
+          await wordReveal(answerWord);
+        } else {
+          await caption(
+            isWin
+              ? [{ text: tFn("settle.caption.supernova", "supernova"), color: "#f0c14b" }]
+              : [{ text: `${tFn("settle.caption.tableKeepsIt", "the table keeps it")} — ` }, { text: bustLabel, color: "#e0796b" }],
+          );
+        }
       }
 
       payN.textContent = `◆ ${receipt.payout}`;
@@ -648,6 +719,30 @@ if (typeof document !== "undefined" && !document.getElementById("settle-styles")
       30%  { transform:translate(-50%,-50%) scale(1) }
       78%  { opacity:1 }
       100% { opacity:0; transform:translate(-50%,-50%) scale(1.3) }
+    }
+    /* Word-reveal entrances (settle.js wordReveal) — per-letter, randomized per finish. */
+    @keyframes settle-wr-rise {
+      0%   { opacity:0; transform:translateY(28px) scale(.6) }
+      60%  { opacity:1; transform:translateY(-7px) scale(1.1) }
+      100% { opacity:1; transform:none }
+    }
+    @keyframes settle-wr-drop {
+      0%   { opacity:0; transform:translateY(-70px) rotate(var(--wr-rot,0deg)) }
+      70%  { opacity:1; transform:translateY(7px) rotate(0deg) }
+      100% { opacity:1; transform:none }
+    }
+    @keyframes settle-wr-flip {
+      0%   { opacity:0; transform:perspective(420px) rotateX(95deg) scale(.8) }
+      55%  { opacity:1; transform:perspective(420px) rotateX(-18deg) }
+      100% { opacity:1; transform:none }
+    }
+    @keyframes settle-wr-zoom {
+      0%   { opacity:0; transform:scale(2.6) rotate(var(--wr-rot,0deg)) }
+      100% { opacity:1; transform:none }
+    }
+    @keyframes settle-wr-scatter {
+      0%   { opacity:0; transform:translate(var(--wr-dx,0px),var(--wr-dy,0px)) rotate(var(--wr-rot,0deg)) scale(.4) }
+      100% { opacity:1; transform:none }
     }
     #settleOverlay {
       position:fixed; inset:0; z-index:10000;
