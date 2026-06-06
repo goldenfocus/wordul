@@ -2964,6 +2964,15 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .stamp-cell.is-present .stamp-ch { color: #ede2b0; }
 .stamp-cell.is-absent .stamp-ch { color: #6f6e74; }
 
+/* ── Stamp replay (stamp-replay.js): tap any solve stamp to watch it play back. ── */
+.daily-stamp { cursor: pointer; }
+.stamp-cell.is-veiled { background: transparent; box-shadow: 0 0 0 1px rgba(255,255,255,.07) inset; }
+.stamp-cell.is-veiled::after { display: none; }
+.stamp-cell.is-veiled .stamp-ch { visibility: hidden; }
+.stamp-cell.is-veiled.is-typed .stamp-ch { visibility: visible; color: #cfd6e3; }
+.stamp-cell.stamp-pop { animation: stampPop .26s ease; }
+@keyframes stampPop { 0% { transform: scale(.55); } 60% { transform: scale(1.14); } 100% { transform: scale(1); } }
+
 /* Today's Top header: the day's "N played" stat (your own standing lives in the pinned row). */
 .daily-top-head { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; margin-bottom: .5rem; }
 .daily-top-head .section-label { display: inline; margin: 0; }

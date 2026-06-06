@@ -82,7 +82,7 @@ export function renderStamp(grid, words, minRows = 0) {
     const emptyRow = `<div class="stamp-row">${`<span class="stamp-cell is-empty"></span>`.repeat(cols)}</div>`;
     for (let i = 0; i < pad; i++) rows.push(emptyRow);
   }
-  return `<div class="daily-stamp${hasLetters ? " has-letters" : ""}">${rows.join("")}</div>`;
+  return `<div class="daily-stamp${hasLetters ? " has-letters" : ""}" role="button" tabindex="0" aria-label="Play replay" title="Play replay">${rows.join("")}</div>`;
 }
 
 // The featured card at the top of the post-play recap. For YOU, render your OWN board WITH

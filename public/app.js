@@ -31,8 +31,11 @@ import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
 import { pickInspire, pickForfeit } from "/inspire.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
+import { wireStampReplays } from "/stamp-replay.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
+
+wireStampReplays(); // tap any solve stamp (home recap / featured / profile) → replay
 
 // Apply the active edition at module load (before motion consts read WordulMotion).
 applyEdition(getActiveEditionId());
