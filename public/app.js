@@ -2588,7 +2588,7 @@ function maybeRunSettlement(msg) {
 //
 // Breakdown honesty: the client knows the total (goldAwarded), the player's final daily
 // points (me.points, spend-excluded — see Layer 1), and the flat daily bonus constant.
-// scoreGold = round(points/100) mirrors the server's goldFromPoints; the speed bonus is the
+// scoreGold = round(points/DAILY_GOLD_RATE) mirrors the server's ÷9 goldFromPoints; the speed bonus is the
 // honest REMAINDER (mint − scoreGold − dailyBonus, floored at 0), so the three lines always
 // sum to the server total without re-deriving the wall-clock speed curve on the client.
 const DAILY_GOLD_BONUS = 100; // mirrors src/room.ts DAILY_GOLD_BONUS
