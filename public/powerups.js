@@ -20,6 +20,7 @@
 // records the loss + runs the lose explosion (fire-once). Pure selectors
 // (affordablePowerups / cheapestAvailableCost / isStuck) are exported for unit tests.
 import { GOLD, isBankrupt } from "/gold.js";
+import { powerUpsOn } from "/lane.js";
 
 // The catalogue. `icon` is what the popover shows; `cost` comes from gold.js; the
 // `available` predicate decides whether the power-up still has anything to offer this
@@ -60,6 +61,7 @@ export function cheapestAvailableCost(state, snap) {
 // afford the cheapest one.
 export function shouldShowMagic(gold, state, snap, me) {
   if (!snap || snap.phase !== "playing" || !me || me.status !== "playing") return false;
+  if (!powerUpsOn(snap)) return false; // Gate A: no ✨ in the Vanilla lane
   const cheapest = cheapestAvailableCost(state, snap);
   return cheapest != null && gold >= cheapest;
 }

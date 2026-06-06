@@ -6,6 +6,7 @@ import type { RoomMode } from "./modes.ts";
 import type { LedgerTx, SettlementReceipt } from "./economy.ts";
 import type { AuthRecord, PendingClaim } from "./account-core.ts";
 import type { GhostTape } from "./ghost-core.ts";
+import type { Ruleset, LaneName } from "./lane.ts";
 
 export type OwnedRoom = { slug: string; name: string; lastPlayedAt: number };
 
@@ -98,6 +99,7 @@ export type RoomSnapshot = {
   scoreboard: RoomScore[];
   history: RoomGame[];     // finished games in this room, newest last (capped)
   edition: string;         // theme/edition id bound to the room — everyone in it sees this theme
+  ruleset: Ruleset;        // the room's lane (Vanilla = power-ups off / Wild = on). Stored AND broadcast (state === snapshot).
   // --- Duel (1v1 + king-of-the-hill). Present on every room; only meaningful in duel rooms. ---
   rotation: "koth" | "host"; // next-opponent model; "koth" = winner stays (default). "host" reserved for Plan 2b.
   queue: string[];         // duel: waiting challenger usernames, front = next to play
@@ -131,7 +133,7 @@ export type RoomSnapshot = {
 };
 
 export type ClientMessage =
-  | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string; scienceOptOut?: boolean; public?: boolean; sessionToken?: string }
+  | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string; lane?: LaneName; scienceOptOut?: boolean; public?: boolean; sessionToken?: string }
   | { type: "start" }
   | { type: "ready"; ready: boolean } // duel: toggle ready / "Challenge 👑"; gates the countdown
   | { type: "guess"; word: string }

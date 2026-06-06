@@ -12,7 +12,8 @@ import { buildGameRecords, summarizeRoomGame, encodeSolveGrid, encodeSolveWords 
 import { normalizeSlug } from "./identity.ts";
 import { pointsEarned, goldFromPoints, speedBonusPoints, POINTS, settle, settleParts } from "./economy.ts";
 import { topDaily, fullDaily } from "./leaderboard-core.ts";
-import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
+import { DEFAULT_MODE, isAvailableMode, initialRuleset, seededRuleset } from "./modes.ts";
+import { VANILLA, laneSig } from "./lane.ts";
 import { activeDate } from "./daily-core.ts";
 import { countMask, maskToPattern, type ScienceBaseEvent, type ScienceEvent, type ScienceOutcome, type ScienceRoomKind } from "./science.ts";
 import { makeChallengeId } from "./challenge-core.ts";
@@ -119,6 +120,7 @@ export class Room extends DurableObject<Env> {
       scoreboard: [],
       history: [],
       edition: "default",
+      ruleset: initialRuleset(false, DEFAULT_MODE),
       rotation: "koth",
       queue: [],
       throne: null,
@@ -140,6 +142,7 @@ export class Room extends DurableObject<Env> {
         if (!restored.edition) restored.edition = "default"; // pre-theme rooms
         if (restored.isDaily === undefined) restored.isDaily = false;
         if (restored.shareChallengeId === undefined) restored.shareChallengeId = null;
+        if (!restored.ruleset) restored.ruleset = initialRuleset(!!restored.isDaily, restored.mode);
         for (const p of restored.players) {
           if (typeof p.points !== "number") p.points = 0;
           if (typeof p.pointsSpent !== "number") p.pointsSpent = 0;
@@ -232,7 +235,7 @@ export class Room extends DurableObject<Env> {
         durationMs: durationOf(p),
       });
       if (full) {
-        return Response.json(fullDaily(this.state.players.map(toRankable), username));
+        return Response.json({ ...fullDaily(this.state.players.map(toRankable), username), lane: laneSig(this.state.ruleset ?? initialRuleset(!!this.state.isDaily, this.state.mode)) });
       }
       const n = Number(url.searchParams.get("n") ?? "3");
       // Proof-of-finish gate: a caller who presents today's finisher token (handed only to
@@ -246,7 +249,7 @@ export class Room extends DurableObject<Env> {
         grid: encodeSolveGrid(p.guesses),
         words: unlock ? encodeSolveWords(p.guesses) : undefined,
       }));
-      return Response.json(topDaily(players, username, n));
+      return Response.json({ ...topDaily(players, username, n), lane: laneSig(this.state.ruleset ?? initialRuleset(!!this.state.isDaily, this.state.mode)) });
     }
     return new Response("not found", { status: 404 });
   }
@@ -376,7 +379,7 @@ export class Room extends DurableObject<Env> {
   private async handle(ws: WebSocket, msg: ClientMessage): Promise<void> {
     switch (msg.type) {
       case "hello":
-        return this.onHello(ws, msg.username, msg.wordLength, msg.edition, msg.mode, msg.scienceOptOut, msg.public, msg.sessionToken);
+        return this.onHello(ws, msg.username, msg.wordLength, msg.edition, msg.mode, msg.scienceOptOut, msg.public, msg.sessionToken, msg.lane);
       case "start":
         return this.onStart(ws);
       case "ready":
@@ -426,6 +429,7 @@ export class Room extends DurableObject<Env> {
     scienceOptOut = false,
     isPublic = false,
     sessionToken?: string,
+    lane?: "vanilla" | "wild",
   ): Promise<void> {
     // Trust model is intentional: identity is passwordless by product decision (a casual
     // word game — "kindness model", see spec 2026-05-31-username-identity). The client-
@@ -524,6 +528,16 @@ export class Room extends DurableObject<Env> {
       ) {
         this.state.mode = mode;
       }
+      // The room's lane follows its (possibly just-seeded) mode default, with an optional
+      // explicit override — owner-only, pristine lobby. The override is dormant until a
+      // creation-toggle UI sends `lane`; today this keeps the lane consistent with the mode.
+      if (
+        username === this.state.owner &&
+        this.state.phase === "lobby" &&
+        this.state.round === 0
+      ) {
+        this.state.ruleset = seededRuleset(this.state.mode, lane);
+      }
       // A public Arena room opts into the open-games index at creation (owner, fresh lobby).
       if (
         isPublic &&
@@ -617,6 +631,7 @@ export class Room extends DurableObject<Env> {
       this.state.wordLength = word.length;
       this.state.maxGuesses = guessesFor(word.length);
       this.state.edition = world.edition || "default";
+      this.state.ruleset = { ...VANILLA }; // the global daily is the fair flagship board
       this.state.voice = world.voice || "yang";
       this.state.story = world.story ?? null;
       this.state.colorScheme = world.colorScheme ?? null;
@@ -1405,6 +1420,7 @@ export class Room extends DurableObject<Env> {
   // the hint goes only to the requester.
   private async onRevealLetter(ws: WebSocket, known?: number[]): Promise<void> {
     if (this.state.phase !== "playing" || !this.state.word) return;
+    if (!this.state.ruleset?.powerUps) { this.send(ws, { type: "error", message: "power-ups are off in this room" }); return; }
     const username = this.userFor(ws);
     const player = this.state.players.find((p) => p.username === username);
     if (!player || player.status !== "playing") return;
@@ -1422,6 +1438,7 @@ export class Room extends DurableObject<Env> {
   // EZ-mode power-up: how many vowels are in the answer. Requester-only.
   private async onVowelCount(ws: WebSocket): Promise<void> {
     if (this.state.phase !== "playing" || !this.state.word) return;
+    if (!this.state.ruleset?.powerUps) { this.send(ws, { type: "error", message: "power-ups are off in this room" }); return; }
     const username = this.userFor(ws);
     const player = this.state.players.find((p) => p.username === username);
     if (!player || player.status !== "playing") return;

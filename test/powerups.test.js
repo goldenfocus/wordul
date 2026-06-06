@@ -12,6 +12,7 @@ import {
   STUCK_ERROR_THRESHOLD,
   resetPowerHints,
 } from "../public/powerups.js";
+import { VANILLA, WILD } from "/lane.js";
 
 // A fresh round's power-up state: nothing revealed, vowel count unknown.
 const freshState = () => ({ revealed: [], vowels: null });
@@ -71,6 +72,13 @@ describe("shouldShowMagic (✨ hide-unaffordable gate)", () => {
     expect(shouldShowMagic(GOLD.revealCost, freshState(), snap(), me({ status: "won" }))).toBe(false);
     expect(shouldShowMagic(GOLD.revealCost, freshState(), null, me())).toBe(false);
     expect(shouldShowMagic(GOLD.revealCost, freshState(), snap(), null)).toBe(false);
+  });
+  it("hidden in the Vanilla lane even with plenty of gold (Gate A)", () => {
+    expect(shouldShowMagic(GOLD.revealCost, freshState(), snap({ ruleset: VANILLA }), me())).toBe(false);
+  });
+  it("shown in the Wild lane, and when ruleset is absent (legacy → Wild)", () => {
+    expect(shouldShowMagic(GOLD.revealCost, freshState(), snap({ ruleset: WILD }), me())).toBe(true);
+    expect(shouldShowMagic(GOLD.revealCost, freshState(), snap(), me())).toBe(true);
   });
 });
 
