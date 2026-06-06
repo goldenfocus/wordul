@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { WORLDS, type WorldDef } from "../src/worlds.ts";
-import { mergeWorlds, EMPTY_OVERRIDES, type WorldOverrides } from "../src/world-overrides.ts";
+import { mergeWorlds, EMPTY_OVERRIDES, type WorldOverrides, normalizeOverrides } from "../src/world-overrides.ts";
 
 const base: WorldDef[] = [
   { id: "a", slug: "a", name: "A", blurb: "ba", editionId: "default", featured: true,  order: 0 },
@@ -34,8 +34,6 @@ describe("mergeWorlds", () => {
     expect(mergeWorlds(WORLDS, EMPTY_OVERRIDES).length).toBe(WORLDS.length);
   });
 });
-
-import { normalizeOverrides } from "../src/world-overrides.ts";
 
 describe("normalizeOverrides", () => {
   const base: WorldDef[] = [
@@ -78,6 +76,29 @@ describe("normalizeOverrides", () => {
 
   it("rejects an empty name on an edited world", () => {
     const r = normalizeOverrides({ edits: { a: { name: "" } }, added: [], deleted: [] }, base);
+    expect(r.ok).toBe(false);
+  });
+
+  it("accepts a valid brand-new added world", () => {
+    const raw = { edits: {}, deleted: [],
+      added: [{ id: "x", slug: "x-world", name: "X World", blurb: "hi", editionId: "default", featured: false, order: 5 }] };
+    const r = normalizeOverrides(raw, base);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.added).toHaveLength(1);
+  });
+
+  it("rejects a non-finite order", () => {
+    const raw = { edits: { a: { order: Number.NaN } }, added: [], deleted: [] };
+    expect(normalizeOverrides(raw, base).ok).toBe(false);
+  });
+
+  it("rejects an edit whose key is not an existing world id", () => {
+    const r = normalizeOverrides({ edits: { nonexistent: { name: "X" } }, added: [], deleted: [] }, base);
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects a prototype-polluting edit key", () => {
+    const r = normalizeOverrides({ edits: { ["__proto__"]: { name: "X" } }, added: [], deleted: [] }, base);
     expect(r.ok).toBe(false);
   });
 });

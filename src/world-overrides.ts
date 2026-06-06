@@ -43,16 +43,20 @@ function asObj(v: unknown): Record<string, unknown> {
 export function normalizeOverrides(raw: unknown, base: WorldDef[]): NormResult {
   const o = asObj(raw);
   const edits = asObj(o.edits) as Record<string, Partial<WorldDef>>;
-  const added = Array.isArray(o.added) ? (o.added as WorldDef[]) : [];
+  const added = Array.isArray(o.added)
+    ? (o.added as unknown[]).filter((x) => x && typeof x === "object" && !Array.isArray(x)) as WorldDef[]
+    : [];
   const deleted = Array.isArray(o.deleted) ? (o.deleted as unknown[]).filter((x) => typeof x === "string") as string[] : [];
 
   const baseIds = new Set(base.map((w) => w.id));
   for (const id of Object.keys(edits)) {
+    if (!SLUG_RE.test(id)) return { ok: false, reason: `invalid edit key: ${id}` };
     if (!baseIds.has(id) && !added.some((a) => a && a.id === id)) {
       return { ok: false, reason: `edit references unknown world id: ${id}` };
     }
   }
 
+  // Valid edition ids come from the code base only — new worlds must reuse an existing edition (theme authoring is a later slice).
   const validEditions = new Set(base.map((w) => w.editionId));
   const clean: WorldOverrides = { edits, added, deleted };
   const effective = mergeWorlds(base, clean);
