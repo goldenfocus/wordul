@@ -156,6 +156,40 @@ export function goldFromPoints(points: number): number {
   return Math.max(0, Math.round(points / 100));
 }
 
+// --- Settlement (Phase 1 spec: docs/superpowers/specs/2026-06-05-gold-settlement-engine-design.md)
+// The Law: wallet moves only at game edges. This is the edge.
+//   minted = round(points/100) · earned = round(minted × mult)
+//   payout = buyIn + earned − spends + bonus, clamped ≥ 0 unless `signed` (hard-mode preset).
+export type SettlementInput = {
+  buyIn: number; points: number; mult: number; spends: number; bonus: number;
+  signed?: boolean;
+};
+export type SettlementReceipt = {
+  buyIn: number; points: number; minted: number; mult: number; earned: number;
+  spends: number; bonus: number; payout: number; net: number; signed: boolean;
+};
+export function settle(i: SettlementInput): SettlementReceipt {
+  const minted = Math.max(0, Math.round(i.points / 100));
+  const earned = Math.round(minted * i.mult);
+  const raw = i.buyIn + earned - i.spends + i.bonus;
+  const payout = i.signed ? raw : Math.max(0, raw);
+  return {
+    buyIn: i.buyIn, points: i.points, minted, mult: i.mult, earned,
+    spends: i.spends, bonus: i.bonus, payout, net: payout - i.buyIn, signed: !!i.signed,
+  };
+}
+// Ledger legs for the settle tx. Invariant: Σ parts.delta === payout − buyIn (the settle
+// delta when buy-in is its own tx — and equals payout while buyIn is 0 in Phase 1).
+export function settleParts(r: SettlementReceipt): LedgerPart[] {
+  const parts: LedgerPart[] = [];
+  if (r.earned) parts.push({ label: "score", delta: r.earned });
+  if (r.spends) parts.push({ label: "power-ups", delta: -r.spends });
+  if (r.bonus) parts.push({ label: "bonus", delta: r.bonus });
+  const floor = r.payout - (r.buyIn + r.earned - r.spends + r.bonus);
+  if (floor !== 0) parts.push({ label: "house floor", delta: floor });
+  return parts;
+}
+
 // Sum of signed deltas for one token. Allows negative (day-one credit card).
 export function balance(ledger: LedgerTx[], token: string): number {
   return (ledger || []).reduce((s, tx) => (tx.token === token ? s + tx.delta : s), 0);

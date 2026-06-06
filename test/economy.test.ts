@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   POINTS, SPEED_CAP, SPEED_WINDOW_MS, comboMultiplier, escalatedPenalty,
   orderedDiscoveriesInLast, deadLettersFrom, wastedDeadLettersInLast,
-  pointsEarned, speedBonusPoints, goldFromPoints, balance,
+  pointsEarned, speedBonusPoints, goldFromPoints, balance, settle, settleParts,
 } from "../src/economy.ts";
 import type { GuessRow } from "../src/economy.ts";
 
@@ -193,5 +193,50 @@ describe("balance", () => {
       { token: "other", delta: 999, reason: "x", ts: 3 },
     ];
     expect(balance(led, "gold")).toBe(-200);
+  });
+});
+
+describe("settle", () => {
+  it("mints points/100 at mult 1, no extras", () => {
+    const r = settle({ buyIn: 0, points: 2150, mult: 1, spends: 0, bonus: 0 });
+    expect(r.minted).toBe(22); // round(21.5) banker-free: Math.round
+    expect(r.earned).toBe(22);
+    expect(r.payout).toBe(22);
+    expect(r.net).toBe(22);
+  });
+  it("multiplies the minted gold (the ×N moment)", () => {
+    const r = settle({ buyIn: 50, points: 2850, mult: 3, spends: 0, bonus: 25 });
+    expect(r.minted).toBe(29);
+    expect(r.earned).toBe(87);
+    expect(r.payout).toBe(162); // 50 + 87 + 25
+    expect(r.net).toBe(112);
+  });
+  it("default mode clamps at the house floor — buy-in is max loss", () => {
+    const r = settle({ buyIn: 50, points: 720, mult: 1, spends: 70, bonus: 0 });
+    expect(r.payout).toBe(0);   // raw 50+7−70 = −13 → 0
+    expect(r.net).toBe(-50);
+  });
+  it("signed mode lets the table reach into your pocket", () => {
+    const r = settle({ buyIn: 50, points: 720, mult: 1, spends: 70, bonus: 0, signed: true });
+    expect(r.payout).toBe(-13);
+    expect(r.net).toBe(-63);
+  });
+  it("never mints from negative points", () => {
+    const r = settle({ buyIn: 0, points: -400, mult: 1, spends: 0, bonus: 0 });
+    expect(r.minted).toBe(0);
+    expect(r.payout).toBe(0);
+  });
+});
+
+describe("settleParts", () => {
+  it("Σparts === payout − buyIn, zero legs dropped, floor leg explains the clamp", () => {
+    const r = settle({ buyIn: 50, points: 720, mult: 1, spends: 70, bonus: 0 });
+    const parts = settleParts(r);
+    expect(parts.reduce((s, p) => s + p.delta, 0)).toBe(r.payout - r.buyIn);
+    expect(parts.map((p) => p.label)).toEqual(["score", "power-ups", "house floor"]);
+  });
+  it("plain phase-1 race: a single score leg", () => {
+    const r = settle({ buyIn: 0, points: 2150, mult: 1, spends: 0, bonus: 0 });
+    expect(settleParts(r)).toEqual([{ label: "score", delta: 22 }]);
   });
 });
