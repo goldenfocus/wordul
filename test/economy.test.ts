@@ -161,22 +161,23 @@ describe("daily mint formula (spec §B + §C)", () => {
   // (no DO harness for the RoomDO class in this suite).
   const DAILY_GOLD_BONUS = 100; // mirror of room.ts constant
   const mint = (points: number, elapsedMs: number | null) =>
-    goldFromPoints(points) + DAILY_GOLD_BONUS + (elapsedMs == null ? 0 : goldFromPoints(speedBonusPoints(elapsedMs)));
+    goldFromPoints(points, DAILY_GOLD_RATE) + DAILY_GOLD_BONUS +
+    (elapsedMs == null ? 0 : goldFromPoints(speedBonusPoints(elapsedMs), DAILY_GOLD_RATE));
 
   it("adds the score mint + flat daily goody + a wall-clock time bonus", () => {
-    // 3500 pts → 35 gold; +100 goody; instant solve (0ms) → speedBonus 500 → 5 gold = 140.
-    expect(mint(3500, 0)).toBe(35 + 100 + 5);
+    // 3500 pts ÷9 → 389; +100 goody; instant solve (0ms) → speedBonus 500 ÷9 → 56 = 545.
+    expect(mint(3500, 0)).toBe(389 + 100 + 56);
   });
   it("time bonus decays to 0 at the window edge (just score + goody)", () => {
-    expect(mint(3500, SPEED_WINDOW_MS)).toBe(35 + 100 + 0);
+    expect(mint(3500, SPEED_WINDOW_MS)).toBe(389 + 100 + 0);
   });
   it("a null solve clock (never stamped) contributes no time bonus", () => {
-    expect(mint(3500, null)).toBe(35 + 100);
+    expect(mint(3500, null)).toBe(389 + 100);
   });
   it("half-window solve earns half the speed bonus in gold", () => {
-    // speedBonusPoints(90000)=250 → goldFromPoints(250)=round(2.5)=2 (banker's: 3? round=3) gold.
-    expect(mint(0, 90000)).toBe(0 + 100 + goldFromPoints(speedBonusPoints(90000)));
-    expect(goldFromPoints(speedBonusPoints(90000))).toBe(3); // 250/100 → 2.5 → round → 3
+    // speedBonusPoints(90000)=250 → goldFromPoints(250, DAILY_GOLD_RATE) = round(250/9) = round(27.8) = 28.
+    expect(mint(0, 90000)).toBe(0 + 100 + goldFromPoints(speedBonusPoints(90000), DAILY_GOLD_RATE));
+    expect(goldFromPoints(speedBonusPoints(90000), DAILY_GOLD_RATE)).toBe(28); // 250/9 → 27.8 → 28
   });
 
   // §B CLIENT CASH-OUT breakdown honesty. app.js cashOutDaily reconstructs the goody breakdown
@@ -190,7 +191,7 @@ describe("daily mint formula (spec §B + §C)", () => {
   // own speed bonus exactly (since score+daily+speed === mint on the server too).
   const DAILY_GOLD_BONUS_CLIENT = 100; // mirror of app.js DAILY_GOLD_BONUS (= room.ts)
   const clientBreakdown = (goldAwarded: number, points: number) => {
-    const scoreGold = Math.max(0, Math.round(points / 100));
+    const scoreGold = Math.max(0, Math.round(points / DAILY_GOLD_RATE));
     const dailyBonus = goldAwarded > 0 ? DAILY_GOLD_BONUS_CLIENT : 0;
     const speedGold = Math.max(0, goldAwarded - scoreGold - dailyBonus);
     return { scoreGold, dailyBonus, speedGold };
@@ -201,9 +202,9 @@ describe("daily mint formula (spec §B + §C)", () => {
       const goldAwarded = mint(points, elapsedMs); // the server total the wire delivers
       const { scoreGold, dailyBonus, speedGold } = clientBreakdown(goldAwarded, points);
       expect(scoreGold + dailyBonus + speedGold).toBe(goldAwarded); // legs sum to the total
-      expect(scoreGold).toBe(goldFromPoints(points));               // score leg is honest
+      expect(scoreGold).toBe(goldFromPoints(points, DAILY_GOLD_RATE));               // score leg is honest
       // The remainder leg equals the server's own wall-clock speed bonus, exactly.
-      expect(speedGold).toBe(goldFromPoints(speedBonusPoints(elapsedMs)));
+      expect(speedGold).toBe(goldFromPoints(speedBonusPoints(elapsedMs), DAILY_GOLD_RATE));
     }
   });
 

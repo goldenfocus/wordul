@@ -10,7 +10,7 @@ import { everyoneReady, COUNTDOWN_MS } from "./duel.ts";
 import { nextSeatRole, applyKothRotation } from "./rotation.ts";
 import { buildGameRecords, summarizeRoomGame, encodeSolveGrid, encodeSolveWords } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
-import { pointsEarned, goldFromPoints, speedBonusPoints, POINTS, settle, settleParts } from "./economy.ts";
+import { pointsEarned, goldFromPoints, speedBonusPoints, POINTS, settle, settleParts, DAILY_GOLD_RATE } from "./economy.ts";
 import { topDaily, fullDaily } from "./leaderboard-core.ts";
 import { DEFAULT_MODE, isAvailableMode, initialRuleset, seededRuleset } from "./modes.ts";
 import { VANILLA, laneSig } from "./lane.ts";
@@ -1915,13 +1915,18 @@ export class Room extends DurableObject<Env> {
     // above still captures their solveGrid.
     const endMs = player.finishedAt ?? Date.now();
     const elapsedMs = player.firstGuessAt != null ? Math.max(0, endMs - player.firstGuessAt) : null;
-    const timeBonusGold = elapsedMs == null ? 0 : goldFromPoints(speedBonusPoints(elapsedMs));
-    const scoreGold = goldFromPoints(player.points);
-    const gold = player.resigned
-      ? 0
-      : scoreGold + DAILY_GOLD_BONUS + timeBonusGold;
-    // Granular breakdown for the gold history — the three components already computed above,
-    // zero legs dropped (Σ parts === gold by construction). Race cash-out stays single-total.
+    // The daily mints at the generous ÷9 rate (score AND speed legs) so combo play visibly
+    // pays — the flat goody stays 100. Built as a REAL SettlementReceipt (race parity): the
+    // same receipt that drives the supernova ritual client-side.
+    const timeBonusGold = elapsedMs == null ? 0 : goldFromPoints(speedBonusPoints(elapsedMs), DAILY_GOLD_RATE);
+    const receipt = settle({
+      buyIn: 0, points: player.points, mult: 1, spends: 0,
+      bonus: DAILY_GOLD_BONUS + timeBonusGold, rate: DAILY_GOLD_RATE,
+    });
+    const scoreGold = receipt.minted;
+    const gold = player.resigned ? 0 : receipt.payout;
+    // Granular breakdown for the gold history — the three components above, zero legs
+    // dropped (Σ parts === gold by construction). Race cash-out stays single-total.
     const parts = [
       { label: "score", delta: scoreGold },
       { label: "daily", delta: DAILY_GOLD_BONUS },
@@ -1971,6 +1976,9 @@ export class Room extends DurableObject<Env> {
       if (res.ok) {
         player.scored = true;
         player.goldAwarded = gold;
+        // The ritual key: receipt rides the post-mint snapshot (onGuess broadcasts after
+        // scorePlayer returns), ephemeral exactly like the race receipt (no storage.put).
+        player.receipt = receipt;
       } else {
         console.error("daily mint non-ok", player.username, res.status);
       }
