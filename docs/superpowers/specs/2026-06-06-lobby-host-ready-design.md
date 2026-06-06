@@ -1,94 +1,80 @@
-# Challenge lobby — compact layout, host model, ready check
+# Challenge lobby — compact layout, host model, truthful controls
 
-**Date:** 2026-06-06 · **Status:** approved by Yan (design conversation) · **Branch:** `lobby-host`
+**Date:** 2026-06-06 · **Status:** approved by Yan (re-aimed after code dive) · **Branch:** `lobby-host`
 
 ## Problem
 
 The invite/challenge lobby (single-row board teaser, 5×6 dimension control, 1/8 seat
 strip) has two issues:
 
-1. **Big dead gap** — `renderBoards()` draws only one row in the lobby, but the grid
-   still reserves all `--rows` tracks (so the start-of-game "bloom" expands to the right
-   height). Five empty full-height rows render as dead space between the teaser row and
-   the 5×6 control (`public/style.css` `.grid` `grid-template-rows: repeat(var(--rows), 1fr)`).
-2. **Shared settings confuse guests** — anyone in the room can change letters/rows
-   (`set_length`/`set_rows` in `src/room.ts` have no privilege check) and anyone can
-   start the game. Guests shouldn't be presented with the host's controls.
+1. **Big dead gap** — `renderBoards()` draws only one row in the lobby but still sets
+   `--rows` to the full count, so `.grid` (`grid-template-rows: repeat(var(--rows), 1fr)`,
+   style.css:899) reserves 5 empty full-height tracks between the teaser row and the 5×6
+   control.
+2. **Guests see host controls** — settings and start look shared/confusing.
+
+## Reality discovered in code (re-aims the original design)
+
+- The screenshot's "Challenge" lobby is **single-player**: `/c/<id>` routes each player to
+  their own DO (`c:<id>:<player>`, src/worker.ts:71). Invitees race the **ghost tape** of
+  the field — nobody else ever joins that room. The 1/8 seat strip is fiction (default
+  `MAX_PLAYERS = 8`), and the 5×6 control is a lie (the pinned challenge word overwrites
+  length at start, room.ts:790-804).
+- **Real multiplayer rooms** (`/@owner/slug` — duel rooms, KOTH) already have a
+  **ready-gated start**: all connected duelists ready → 3-2-1 countdown (`onReady`,
+  room.ts:885-896). What they lack is a host concept for settings.
 
 ## Decisions (locked with Yan)
 
-- Lobby keeps the **single-row teaser**; the phantom rows are collapsed (no full board).
-- **Host = room owner, with succession**: if the host disconnects, hostship passes to the
-  longest-present connected human. The original host does **not** reclaim on return.
-- **Guests can still change settings, but buried**: the in-lobby 5×6 control is read-only
-  for guests; Settings → Room keeps letters/rows steppers for everyone. The server stays
-  permissive for `set_length`/`set_rows`.
-- **Start is host-only and server-enforced**, gated on a new **ready check**: all
-  connected human guests must be ready.
+Split the work by room type:
 
-## 1. Compact lobby layout (client)
+### A. Challenge lobby (solo + ghosts)
+- Compact layout: lobby grid uses 1 row track (gap collapses). Bloom is a per-row
+  opacity stagger on re-render (style.css:3493) — unaffected.
+- 5×6 renders **read-only** (the word is pinned). Server also rejects
+  `set_length`/`set_rows` when `challengeId` is set (hardening; the values were
+  meaningless anyway).
+- Seat strip becomes **truthful**: you + the ghost field ("vs N ghosts"), not 1/8.
+  No ghost tape → strip hidden (plain challenges auto-start past the lobby anyway).
+- Start stays as-is: your personal "go".
 
-- In lobby (`phase === "lobby"`), `renderBoards()` sets `--rows: 1` on the grid/board
-  instead of the real row count. The 5×6 control, seat strip, and Setup·Invite pair rise
-  into a tight stack under the teaser row.
-- At game start, `--rows` flips to the real count and the existing `.blooming` animation
-  expands the board — same effect, starting from a compact lobby instead of a
-  pre-reserved hole. Verify the bloom still measures correctly now that the lobby grid
-  is 1 track tall (it may need to set `--rows` before the bloom class, in the same frame).
+### B. Multiplayer rooms (`/@owner/slug`)
+- Compact layout (same renderBoards change).
+- **Host = first connected human** (in practice the owner, who opens the room first),
+  persisted as new `hostId` in room state, sent in snapshots. Bots never host. Daily
+  rooms unaffected.
+- **Succession**: when the host disconnects, hostship passes to the next connected
+  human in join order. System line "<name> is now the host" (announced on *change*
+  only, not initial assignment). Room empties → `hostId` clears; next human to connect
+  becomes host. **No reclaim** — a returning ex-host is a guest.
+- **Settings gating (client-only)**: the in-lobby 5×6 popover is editable only for the
+  host (existing `.locked` rendering for guests). Guests keep a buried path:
+  **Settings → Room**, which gains a **Rows** select next to the existing Word-length
+  select. Server stays permissive for `set_length`/`set_rows` in non-challenge rooms.
+- **Ready-gated start already exists** (duelists ready → countdown) — no server change.
+  The seat strip gains **ready marks** so the lobby shows who's ready.
 
-## 2. Host model (server, `src/room.ts`)
+## Data flow
 
-- New `hostId: string | null` in persisted room state; included in every snapshot
-  (clients derive `isHost = snap.hostId === myId`).
-- **Assignment**: owner becomes host when they first join. If the owner never connects,
-  the first human to join becomes host. Bots are never host. Daily rooms unaffected
-  (no lobby settings there).
-- **Succession**: when the host's last socket closes (`webSocketClose`), host passes to
-  the longest-present *connected* human (roster join order). Push a system line
-  ("<name> is now the host"). If no humans remain connected, `hostId` clears; the next
-  human to connect becomes host.
-- **No reclaim**: a returning original owner joins as guest; current host keeps it.
-
-## 3. Settings gating (client-only)
-
-- **Host**: current tappable 5×6 popover with letters/rows steppers, unchanged.
-- **Guest**: 5×6 renders as a read-only label (existing `.locked` styling; no popover).
-- **Buried path**: Settings → Room section (already room-gated in `public/settings.js`)
-  keeps the letters control and gains a rows stepper — available to everyone.
-- Server keeps accepting `set_length`/`set_rows` from anyone (no enforcement; older
-  clients keep working). Rename/rematch stay shared as today.
-
-## 4. Ready check + host-only start (server-enforced)
-
-- New `ready: boolean` per player, new `set_ready` WS message (lobby-phase only).
-- **Guests** see a **Ready** toggle where the Start button used to be. Ready state shows
-  on the seat strip (e.g. filled vs hollow seat). Ready persists across settings changes
-  (changing letters/rows does *not* un-ready anyone).
-- **Host** sees Start, enabled only when all *connected* human guests are ready.
-  Host is implicitly ready; bots count as ready; disconnected roster players are ignored.
-  Solo lobby: host starts immediately.
-- **Server enforces `start`**: rejected unless sender is host AND the ready condition
-  holds. This is the one privileged action (unlike settings).
-- Ready flags reset when a game ends back into a lobby (rematch returns everyone to
-  not-ready).
-
-## Data-flow summary
-
-Client sends intents (`set_ready`, `start`, `set_length`, `set_rows`) → Room DO mutates →
-`persistAndBroadcast()` → per-viewer `snapshotFor()` now carries `hostId` and each
-player's `ready` → `render()` repaints (host vs guest controls, seat-strip ready marks,
-Start enablement).
+`hostId` lives on `RoomSnapshot` (the DO's `state` type), so it persists and rides
+`snapshotFor`'s `...this.state` spread to every client automatically (it is not in the
+outbound strip list). Per-player `ready` already reaches the client
+(`projectPlayerForClient` strips only `isBot`/`nextGuessAt`).
 
 ## Testing
 
-- **Room DO (vitest)**: host assignment (owner joins / owner never joins / bots skipped);
-  succession on disconnect (join-order, skips bots and disconnected); no reclaim;
-  `start` rejection (non-host sender; unready guest present); ready reset after game end.
-- **Client (vitest/jsdom)**: dim-control gating respects `isHost`; lobby grid uses
-  `--rows: 1`; seat model surfaces ready marks (pure functions in `public/lobby-view.js`).
+- **Room DO (vitest, `new Room()` harness from test/room-duel.test.ts)**: host
+  assignment on first hello; succession in join order on disconnect; clear-on-empty +
+  next-joiner-becomes-host; no reclaim; `set_length`/`set_rows` rejected in challenge
+  rooms.
+- **Pure client models (test/lobby-view.test.js)**: ghost seat model; ready marks in
+  `seatModel`.
+- **Source-wiring assertions** (pattern from room-core.test.ts:184-198) for the
+  renderBoards `--rows` collapse and `canEditLength` host gate (no jsdom harness for
+  app.js internals).
 
 ## Out of scope
 
-- Max-players (capacity) as a host setting — stays hardcoded at 8.
-- Host-only rename/rematch/edition changes.
-- Kick/transfer-host UI.
+- Shared multi-player challenge rooms (would replace async ghost racing).
+- Host-only rename/edition/mode; kick/transfer-host UI; capacity as a setting.
+- Spectator (queued) readiness in duel rooms — gate stays duelists-only.
