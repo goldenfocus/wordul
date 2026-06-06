@@ -1923,7 +1923,7 @@ export class Room extends DurableObject<Env> {
       buyIn: 0, points: player.points, mult: 1, spends: 0,
       bonus: DAILY_GOLD_BONUS + timeBonusGold, rate: DAILY_GOLD_RATE,
     });
-    const scoreGold = receipt.minted;
+    const scoreGold = receipt.earned; // === minted while mult is 1; tracks payout if a mult ever lands
     const gold = player.resigned ? 0 : receipt.payout;
     // Granular breakdown for the gold history — the three components above, zero legs
     // dropped (Σ parts === gold by construction). Race cash-out stays single-total.
@@ -1977,7 +1977,10 @@ export class Room extends DurableObject<Env> {
         player.scored = true;
         player.goldAwarded = gold;
         // The ritual key: receipt rides the post-mint snapshot (onGuess broadcasts after
-        // scorePlayer returns), ephemeral exactly like the race receipt (no storage.put).
+        // scorePlayer returns). NB: unlike the race receipt, this one IS persisted —
+        // persistAndBroadcast storage.puts state right after — so every later snapshot
+        // carries it too. The client must gate the ritual on its cash-out transition
+        // (cashedOut flag), never on "snapshot has a receipt", or reloads replay it.
         player.receipt = receipt;
       } else {
         console.error("daily mint non-ok", player.username, res.status);

@@ -63,7 +63,7 @@ export type PlayerState = {
   scored?: boolean;        // daily: this player's one result has been recorded (mint once)
   wordulCounted?: boolean; // wordul: this player's play has been counted (bump once per player)
   goldAwarded?: number;    // daily: gold actually minted on a confirmed (res.ok) ledger write
-  receipt?: SettlementReceipt; // race: settlement receipt, set ONLY after a confirmed (res.ok) mint
+  receipt?: SettlementReceipt; // race + daily: settlement receipt, set ONLY after a confirmed (res.ok) mint
   resigned?: boolean;      // gave up (vs ran out of guesses) — both land status "lost"
   firstGuessAt?: number;   // daily: epoch ms of this player's first guess (start of solve clock)
   finishedAt?: number;     // daily: epoch ms this player finished (won/lost/resigned) — solve clock end
