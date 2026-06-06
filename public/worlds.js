@@ -13,10 +13,30 @@ export const WORLDS = [
   { id: "yang",      slug: "yangs-table",  name: "Yang's Table", blurb: "A seat at Yang's table.",                  editionId: "yang",      featured: false, order: 6 },
 ];
 
-const BY_SLUG = new Map(WORLDS.map((w) => [w.slug, w]));
+// Runtime list: starts as the static base, replaced by hydrateWorlds() once the
+// effective registry (code + admin KV overrides) is fetched at boot.
+let CURRENT = [...WORLDS];
+let BY_SLUG = new Map(CURRENT.map((w) => [w.slug, w]));
+
+// Replace the runtime registry. Ignores non-arrays so a failed fetch is harmless.
+export function hydrateWorlds(list) {
+  if (!Array.isArray(list)) return;
+  CURRENT = list.slice().sort((a, b) => a.order - b.order);
+  BY_SLUG = new Map(CURRENT.map((w) => [w.slug, w]));
+}
+
+// Fetch the effective registry from the worker and hydrate. Safe to call once at boot.
+export async function loadWorlds() {
+  try {
+    const res = await fetch("/worlds.json", { cache: "no-store" });
+    if (res.ok) hydrateWorlds(await res.json());
+  } catch {
+    /* keep the static fallback */
+  }
+}
 
 export function listWorlds() {
-  return [...WORLDS].sort((a, b) => a.order - b.order);
+  return [...CURRENT].sort((a, b) => a.order - b.order);
 }
 
 export function featuredWorlds() {
