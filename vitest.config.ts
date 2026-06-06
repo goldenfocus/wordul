@@ -36,6 +36,7 @@ export default defineConfig({
       { find: /^\/world-card\.js$/, replacement: new URL("./public/world-card.js", import.meta.url).pathname },
       { find: /^\/endcard\.js$/, replacement: new URL("./public/endcard.js", import.meta.url).pathname },
       { find: /^\/i18n\.js$/, replacement: new URL("./public/i18n.js", import.meta.url).pathname },
+      { find: /^\/inspire\.js$/, replacement: new URL("./public/inspire.js", import.meta.url).pathname },
       { find: /^\/locales\/en\.js$/, replacement: new URL("./public/locales/en.js", import.meta.url).pathname },
       { find: /^\/drama\.js$/, replacement: new URL("./public/drama.js", import.meta.url).pathname },
     ],

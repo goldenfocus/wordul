@@ -367,3 +367,54 @@ export function pickInspire() {
   const q = INSPIRE[Math.floor(Math.random() * INSPIRE.length)];
   return `“${q.text}” — ${q.by}`;
 }
+
+// — The forfeit pool: spoken out loud when a round ends by give-up or bankruptcy. —
+// Unlike INSPIRE these are ORIGINAL lines with no attribution ("— Confucius" sounds
+// robotic aloud) in two flavors: empowerment for the quit, and evergreen "Tip:" lines
+// that send the player back sharper. Keep every line speakable in one breath.
+export const FORFEIT = [
+  // — Empowerment: quitting a round is a move, not a defeat —
+  "Retreat is just strategy wearing a disguise.",
+  "You quit the round, not the game. Big difference.",
+  "Folding a bad hand is a winning move.",
+  "A fresh board beats a sunk cost every time.",
+  "Even grandmasters resign. It's called respect for your own time.",
+  "The bravest word in any language is 'next'.",
+  "You didn't lose. You scheduled a rematch.",
+  "Strategic retreat: the move amateurs never learn.",
+  "Some words don't deserve you. On to the next.",
+  "Knowing when to stop is a superpower. You just used it.",
+  "The board resets. Your streak of showing up doesn't.",
+  "Live to guess another day.",
+  "Quitting a round takes more guts than grinding a lost cause.",
+  "That word will be back. And next time, you'll be ready.",
+  "You folded the hand, not the spirit.",
+  "Sometimes the smartest guess is no guess at all.",
+  "Every legend has a round they walked away from.",
+  "The house took this round. The next one's yours.",
+  "Gold comes back. Tilt is the only real bankruptcy.",
+  "Cash out, breathe, come back sharper.",
+  "An empty pocket and a clear head beat a full pocket and a fog.",
+  "Round over. Lesson banked. Interest compounds.",
+  "The word keeps its secret today. Tomorrow it won't stand a chance.",
+
+  // — Tips: evergreen tactics, each one usable on the very next round —
+  "Tip: open with a vowel-heavy word. Three vowels in row one changes everything.",
+  "Tip: hot letters are locked in. Warm letters demand a shuffle — move them around.",
+  "Tip: never spend a guess on a cold letter. The board remembers — so should you.",
+  "Tip: make your second guess test five brand-new letters. Cover the alphabet first.",
+  "Tip: think in sounds. T-H, C-H, S-T — letters love to travel in pairs.",
+  "Tip: an E hiding at the end of the word is the oldest trick in the book.",
+  "Tip: stuck? Say your warm letters out loud in different spots. Your ears know words your eyes miss.",
+  "Tip: save the rare letters for late. Let the easy letters speak first.",
+  "Tip: double letters are sneaky. If nothing fits your confirmed letters, try a twin.",
+  "Tip: S at the start, Y at the end. The bookends most players forget.",
+  "Tip: can't see the word? It probably starts with a blend. B-R, C-L, S-P — run them.",
+  "Tip: a warm letter banned from two spots can only live in three others. Count them down.",
+  "Tip: guess to learn, not to win — until row four. Then go for the kill.",
+  "Tip: vowels first, consonants close. A-E-I-O-U is your reconnaissance team.",
+];
+
+export function pickForfeit() {
+  return FORFEIT[Math.floor(Math.random() * FORFEIT.length)];
+}
