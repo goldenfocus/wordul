@@ -90,6 +90,33 @@ describe("tapeFromSolveGrid", () => {
     expect(json).not.toMatch(/"word"/);
     expect(json).not.toMatch(/[A-FH-VX-Z]{5}/); // no 5-letter uppercase payloads beyond color names
   });
+
+  it("honors exact guessAts when provided and length matches (no synthetic cadence)", () => {
+    const ats = [1200, 4800, 11100]; // real offsets; last also used for finish
+    const tape = tapeFromSolveGrid({
+      username: "yang", wordLength: 5, maxGuesses: 6,
+      solveGrid: ["xxyxx", "xygxx", "ggggg"], won: true,
+      guessAts: ats,
+    });
+    expect(tape).not.toBeNull();
+    const guesses = tape!.events.filter((e) => e.k === "guess");
+    expect(guesses.map((g) => g.t)).toEqual(ats);
+    const finish = tape!.events[tape!.events.length - 1];
+    expect(finish.t).toBe(11100);
+    expect(finish.k).toBe("finish");
+  });
+
+  it("falls back to cadence when guessAts length mismatches (legacy / partial records)", () => {
+    const tape = tapeFromSolveGrid({
+      username: "papa", wordLength: 5, maxGuesses: 6,
+      solveGrid: ["xxyxx", "xygxx", "ggggg"], won: true,
+      guessAts: [1000, 2000], // too short
+    });
+    const ts = tape!.events.filter((e) => e.k === "guess").map((e) => e.t);
+    // should be the synthetic 4500 + 7000 steps
+    expect(ts[0]).toBe(4500);
+    expect(ts[1] - ts[0]).toBe(7000);
+  });
 });
 
 describe("bestGameForWord", () => {

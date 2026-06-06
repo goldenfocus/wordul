@@ -791,6 +791,7 @@ export class Room extends DurableObject<Env> {
       p.vowelHints = 0;
       p.firstGuessAt = undefined;
       p.finishedAt = undefined;
+      p.guessAts = undefined;
     }
     this.pushSystem(`${who} started the race${this.state.round > 1 ? ` (round ${this.state.round})` : ""}`);
     this.emitRoundStarted();
@@ -1013,6 +1014,12 @@ export class Room extends DurableObject<Env> {
     // Per-player solve clock: stamp on the FIRST accepted guess (start of the daily
     // solve duration + the wall-clock time bonus at mint). Never overwrite once set.
     if (player.firstGuessAt == null) player.firstGuessAt = now;
+    // Capture real per-guess offset from round GO (startedAt). Stored on state.players so it
+    // survives to finish time and gets copied into the GameRecord (for exact ghost replay on
+    // future ?vs= / word challenges). Uses the same tapeT() helper the arena ghost tapes use.
+    if (!player.guessAts) player.guessAts = [];
+    const off = this.tapeT ? (this.tapeT(now) ?? 0) : 0;
+    player.guessAts.push(off);
     // Spend accounting (spec §A): in WOTD power-ups cost real gold only, NOT round score —
     // so the daily round score EXCLUDES pointsSpent. Race rooms still net out the spend.
     const earned = pointsEarned(player.guesses, this.state.maxGuesses);
@@ -1497,6 +1504,10 @@ export class Room extends DurableObject<Env> {
       if (rec) {
         rec.solveGrid = encodeSolveGrid(p.guesses);
         rec.words = encodeSolveWords(p.guesses);
+        // Attach real timing if we captured a full parallel array for this player's guesses.
+        if (Array.isArray(p.guessAts) && p.guessAts.length === p.guesses.length) {
+          rec.guessAts = p.guessAts.slice();
+        }
       }
     }
     // Report to every player's User DO in parallel — caps the wait at one round-trip

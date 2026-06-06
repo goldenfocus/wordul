@@ -3062,10 +3062,7 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .acct-ack { display: flex; gap: .5rem; align-items: center; font-size: .85rem; margin: .75rem 0; }
 .claimed-badge, .verified-badge { font-size: .8em; vertical-align: middle; }
 
-/* --- Ghost race (arena replay) --- */
-.ghost-ready-overlay {
-  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
-  background: color-mix(in srgb, var(--bg) 78%, transparent);
-  backdrop-filter: blur(6px);
-}
-.badge.ghost-badge { opacity: 0.8; }
+/* Ghost overlay + badge chip styles removed (ghost-disguise + exact replay spec).
+   Ghosts are now visually indistinguishable from live opponents during the race.
+   (WON/OUT status badges still land at the exact recorded finish times.)
+   The .ghost/.ghost-cursor tile rules for live typing pulses remain (earlier in file). */

@@ -50,6 +50,7 @@ export class User extends DurableObject<Env> {
         won: game.result === "won",
         guesses: game.guesses,
         solveGrid: game.solveGrid,
+        guessAts: game.guessAts,  // optional; present on post-change records for exact-time replay
         score: `${game.result === "won" ? game.guesses : "X"}/6`,
       });
     }

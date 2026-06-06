@@ -17,6 +17,10 @@ export type GameRecord = {
   words?: string[];       // the player's guessed words (uppercase), parallel to solveGrid —
                           // the LETTERS for a full card. STRIPPED for the live daily in
                           // toPublicGame() so today's answer can never be scraped.
+  guessAts?: number[];    // ms offsets from round startedAt (GO) for each guess row; parallel to solveGrid.
+                          // Enables exact-time ghost replay for ?vs= and word challenges. Absent on legacy
+                          // records → those fall back to synthetic cadence (honest; yang/papa runs etc. stay
+                          // on fixed pacing until they play new games after this change).
 };
 
 // The public projection of a finished game. Two things change vs the stored record:
@@ -31,7 +35,7 @@ export function toPublicGame(g: GameRecord, liveDailyPath = ""): PublicGameRecor
   const { word, words, ...rest } = g;
   void word;
   if (liveDailyPath && g.roomPath === liveDailyPath) return rest; // live daily: no letters
-  return { ...rest, words };
+  return { ...rest, words }; // guessAts (if present) rides along — not a spoiler (offsets only, no letters)
 }
 
 // Pure: encode a player's guess masks into compact row strings for the solve stamp.

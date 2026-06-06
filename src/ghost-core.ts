@@ -38,9 +38,12 @@ export function tapePush(tape: GhostTape, ev: GhostEvent): void {
 }
 
 // Re-cut a stored solveGrid ("g"/"y"/"x" rows, the profile's colors-only record) into a
-// cadence-paced ghost tape — the dual-replay half of a wiki word challenge. No commit
-// times survive in a GameRecord, so pacing is synthetic (same constants as the client's
-// owner-tape). Masks only, like every tape. Malformed rows → null, never a corrupt tape.
+// ghost tape for ?vs=/word challenge dual replay. When guessAts (ms offsets from the
+// original round's startedAt/GO) are present and cover every row, events use the *exact*
+// recorded times — a 10-minute run replays in 10 real minutes. No clamping, no fake cadence.
+// When absent or length-mismatched (legacy records, mid-game reloads, yang/papa's old runs),
+// fall back to synthetic cadence (only honest option; callers document the degradation).
+// Masks only, like every tape. Malformed rows → null, never a corrupt tape.
 const CELL_COLOR: Record<string, Color> = { g: "hot", y: "warm", x: "cold" };
 const FIRST_GUESS_MS = 4500;
 const GAP_MS = 7000;
@@ -51,9 +54,11 @@ export function tapeFromSolveGrid(args: {
   maxGuesses: number;
   solveGrid: string[];
   won: boolean;
+  guessAts?: number[];
 }): GhostTape | null {
-  const { username, wordLength, maxGuesses, solveGrid, won } = args;
+  const { username, wordLength, maxGuesses, solveGrid, won, guessAts } = args;
   if (!Array.isArray(solveGrid) || solveGrid.length === 0 || solveGrid.length > maxGuesses) return null;
+  const useExact = Array.isArray(guessAts) && guessAts.length === solveGrid.length;
   const tape = newTape(wordLength, maxGuesses, [{ username, host: true }]);
   let t = 0;
   for (let i = 0; i < solveGrid.length; i++) {
@@ -65,10 +70,16 @@ export function tapeFromSolveGrid(args: {
       if (!c) return null;
       mask.push(c);
     }
-    t += i === 0 ? FIRST_GUESS_MS : GAP_MS;
+    if (useExact) {
+      t = guessAts![i];
+    } else {
+      t += i === 0 ? FIRST_GUESS_MS : GAP_MS;
+    }
     const last = i === solveGrid.length - 1;
     tapePush(tape, { t, u: username, k: "guess", mask, status: last ? (won ? "won" : "lost") : "playing" });
   }
-  tapePush(tape, { t, u: username, k: "finish", status: won ? "won" : "lost", guesses: solveGrid.length });
+  // finish at the moment of the last (solving) guess, matching live tape behavior
+  const finishT = useExact ? guessAts![solveGrid.length - 1] : t;
+  tapePush(tape, { t: finishT, u: username, k: "finish", status: won ? "won" : "lost", guesses: solveGrid.length });
   return tape;
 }

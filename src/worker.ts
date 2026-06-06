@@ -250,10 +250,11 @@ export default {
           new Request(`https://do/game-for-word?username=${encodeURIComponent(vs)}&word=${encodeURIComponent(word)}`, { method: "GET" }),
         );
         if (!gr.ok) return Response.json({ ghosts: null });
-        const game = (await gr.json()) as { found: boolean; won: boolean; solveGrid: string[] };
+        const game = (await gr.json()) as { found: boolean; won: boolean; solveGrid: string[]; guessAts?: number[] };
         if (!game.found) return Response.json({ ghosts: null });
         const tape = tapeFromSolveGrid({
           username: vs, wordLength, maxGuesses: 6, solveGrid: game.solveGrid, won: game.won,
+          guessAts: game.guessAts,
         });
         return Response.json({ ghosts: tape });
       } catch {

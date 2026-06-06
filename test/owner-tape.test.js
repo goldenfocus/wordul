@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildOwnerTape, FIRST_GUESS_MS, MIN_GAP_MS, MAX_GAP_MS, DEFAULT_GAP_MS } from "/owner-tape.js";
+import { buildOwnerTape, FIRST_GUESS_MS, DEFAULT_GAP_MS } from "/owner-tape.js";
 
 // The owner's solo run, re-cut as a ghost tape at mint time so a /c/<id> visitor
 // races a replay instead of a static score. Masks only — same no-spoiler rule as
@@ -27,21 +27,19 @@ describe("buildOwnerTape", () => {
     expect(finish).toMatchObject({ k: "finish", u: "papa", status: "won", guesses: 3 });
   });
 
-  it("uses real inter-guess gaps when commit times are known", () => {
-    const times = [1000, 4000, 9000]; // gaps: 3s, 5s — both within clamp range
-    const tape = buildOwnerTape({ ...base, times });
+  it("uses exact real offsets (no clamping) when commit times + startAt are known", () => {
+    // startAt lets the first row land at its real offset from round GO (not a fixed 4.5s).
+    // Subsequent deltas are the true wall gaps — a 10-min run will take 10 real minutes to replay.
+    const startAt = 500;
+    const times = [1500, 4500, 9500]; // first offset 1000ms; gaps 3s, 5s (exact, even if "long")
+    const tape = buildOwnerTape({ ...base, times, startAt });
     const [g1, g2, g3] = tape.events.filter((e) => e.k === "guess");
-    expect(g1.t).toBe(FIRST_GUESS_MS);
+    expect(g1.t).toBe(1000); // real first = times[0] - startAt
     expect(g2.t - g1.t).toBe(3000);
     expect(g3.t - g2.t).toBe(5000);
-  });
-
-  it("clamps a marathon gap (daily left open for hours) so the replay stays watchable", () => {
-    const times = [1000, 1000 + 3 * 60 * 60 * 1000, 1000 + 3 * 60 * 60 * 1000 + 200];
-    const tape = buildOwnerTape({ ...base, times });
-    const [g1, g2, g3] = tape.events.filter((e) => e.k === "guess");
-    expect(g2.t - g1.t).toBe(MAX_GAP_MS);
-    expect(g3.t - g2.t).toBe(MIN_GAP_MS);
+    // finish t matches the last guess t (as with live tapes and server tapeFromSolveGrid)
+    const finish = tape.events[tape.events.length - 1];
+    expect(finish.t).toBe(9000); // 9500 - 500
   });
 
   it("falls back to a fixed cadence when times are missing or incomplete (mid-game reload)", () => {

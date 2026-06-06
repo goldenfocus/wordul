@@ -600,7 +600,8 @@ const game = {
   challengeId: null,   // /c/<id> solo-replay: the challenge being raced (null in normal rooms)
   challengeVs: "",     // ?vs=<username>: the named challenger — duel resolves on the END screen
   challengeMeta: null, // cached { owner, ownerScore, record, ... } from /api/challenge/<id>/meta
-  myGuessTimes: [],    // Date.now() per accepted guess of MINE — paces the owner tape at mint
+  myGuessTimes: [],    // Date.now() per accepted guess of MINE — paces the owner tape at mint (exact when myRoundStartAt also captured)
+  myRoundStartAt: null, // client wall time when *this* round went live (lobby→playing snapshot). Used with myGuessTimes for real first-row offset in buildOwnerTape for challenge ghosts.
   isDaily: false,      // /daily/<date>: async one-shot, gated "underneath"
   dailyDate: null,
   fromArena: false,    // reached through the Arena (open-games join or public host) → Arena end screen
@@ -757,6 +758,7 @@ function showRoom(owner, slug) {
   game.shareImage = null;
   game.replay = [];
   game.myGuessTimes = [];
+  game.myRoundStartAt = null;
   game.payingOut = false;
   // tpl-room mounts a FRESH #hacklog node, so drop any stale terminal bound to the
   // previous room's (now-detached) element — it's re-created lazily on first payout.
@@ -810,7 +812,12 @@ async function showChallenge(id) {
   const vs = normalizeVs(new URLSearchParams(location.search).get("vs"));
   let ghosts = null;
   try {
-    const gr = await fetch(`/api/challenge/${id}/ghosts`);
+    // Pass ?vs when present so the worker can synth a ghost tape from *that user's*
+    // bestGameForWord (via game-for-word + tapeFromSolveGrid). Real recorded arena tapes
+    // (filed on the Challenge DO) win over synth. This restores live ghost replay for
+    // ?vs= duels (reverting the stealth behavior).
+    const vsQ = vs ? `?vs=${encodeURIComponent(vs)}` : "";
+    const gr = await fetch(`/api/challenge/${id}/ghosts${vsQ}`);
     if (gr.ok) ghosts = (await gr.json()).ghosts;
   } catch { /* plain challenge — no ghosts */ }
   // Stand up the room view (same engine; challenge chrome instead of owner/slug).
@@ -844,6 +851,7 @@ async function showChallenge(id) {
   game.shareImage = null;
   game.replay = [];
   game.myGuessTimes = [];
+  game.myRoundStartAt = null;
   game.payingOut = false;
   hacklog = null;
   mount("tpl-room");
@@ -852,9 +860,10 @@ async function showChallenge(id) {
   wireRoomTabs();
   buildKeyboard($("#keyboard"), resolvedLayoutId(), keyboardHandlers);
 
-  if (game.ghostTape) {
-    showGhostReadyOverlay();
-  } else if (isWordChallenge) {
+  // No special ghost overlay. For ghostTape challenges we rely on autoStart=false
+  // (set above) so the normal lobby ready/start UI is shown; tapping it starts the
+  // race (and the snapshot handler will arm the replay clock + we have myRoundStartAt).
+  if (isWordChallenge) {
     // "@wordul is racing it right now" would be nonsense — the word's open challenge
     // speaks for its record (or dares you to set it).
     const target = meta.record
@@ -1927,6 +1936,11 @@ function onServerMessage(msg) {
       armGiveUpTimer(); // 💀 give-up only unlocks 3 min into the round
       // Ghost race: GO is t=0 — the original field starts typing beside you now.
       if (game.ghostTape && game.ghostT0 == null) startGhostReplay();
+      // Capture client round-start wall time for owner-mint tapes (buildOwnerTape) so the
+      // first ghost row can use a real offset instead of the old fixed 4.5s. Set once per round.
+      if (msg.room.phase === "playing" && game.myRoundStartAt == null) {
+        game.myRoundStartAt = Date.now();
+      }
     }
     const me = msg.room.players.find((p) => p.username === getUsername());
     const prevMe = prev?.players.find((p) => p.username === getUsername());
@@ -2620,6 +2634,7 @@ function resetRound(round) {
   // Clearer-wins: a fresh round starts an empty replay + a cleared hacker-log.
   game.replay = [];
   game.myGuessTimes = [];
+  game.myRoundStartAt = null;
   clearPayoutTimers(); // cancel any pending payout/drain from the prior round + reset payingOut
   // Loss penalties (C2): escalation is per-game, so a fresh round forgets old mistakes.
   game.deadLetterReuse = new Map();
@@ -2934,12 +2949,10 @@ function renderBoards(snap, me) {
       crown.textContent = `👑 ×${snap.throne.streak}`;
       name.appendChild(crown);
     }
-    if (p.ghost) {
-      const b = document.createElement("span");
-      b.className = "badge ghost-badge";
-      b.textContent = p.ghostHost ? "👑 ghost" : "👻";
-      name.appendChild(b);
-    }
+    // Ghost chip intentionally omitted (ghost disguise spec): ghosts render as ordinary
+    // opponents (WON/OUT badges still appear at their recorded finish moments via the tape).
+    // The internal p.ghost / p.ghostHost flags are kept for replay math (ghostPlayersAt,
+    // hostFinish, end-of-race freeze) and any future non-visual use.
     if (name.childNodes.length) board.appendChild(name); // daily + no badge ⇒ no empty row
 
     const grid = document.createElement("div");
@@ -3053,29 +3066,12 @@ function endGhostRaceOnMyWin() {
   }
 }
 
-// Tap-armed start for a ghost challenge: the field waits, dimmed, behind a single
-// floating button — no card, no explainer (the surreal beat IS the explanation).
-// On tap: local 3-2-1 (reuses the duel overlay), then the start message — the server
-// flips to playing and the snapshot transition starts the replay clock (onServerMessage).
-function showGhostReadyOverlay() {
-  const el = document.createElement("div");
-  el.id = "ghostReady";
-  el.className = "ghost-ready-overlay";
-  const btn = document.createElement("button");
-  btn.className = "hero-btn";
-  btn.id = "ghostGoBtn";
-  const label = document.createElement("span");
-  label.className = "hero-btn-label";
-  label.textContent = "I'm ready — GO";
-  btn.appendChild(label);
-  el.appendChild(btn);
-  document.body.appendChild(el);
-  btn.addEventListener("click", () => {
-    el.remove();
-    startCountdownOverlay(Date.now() + 3000);
-    setTimeout(() => { stopCountdownOverlay(); send({ type: "start" }); }, 3000);
-  });
-}
+// (showGhostReadyOverlay removed per ghost-disguise + exact-time spec.
+// Ghost challenges now use the regular lobby "I'm ready" / start flow. The tap on
+// that affordance serves as the iOS user-gesture for unlockAudio (global listeners
+// already cover pointerdown/touchend; the button is a real interactive element).
+// Replay clock is armed in the snapshot handler on phase "playing", exactly like
+// other ghost tapes.
 
 let ghostTimer = null;
 function startGhostReplay() {
@@ -4265,6 +4261,7 @@ async function prepareShareCard() {
         masks: (me.guesses || []).map((g) => g.mask),
         won,
         times: game.myGuessTimes,
+        startAt: game.myRoundStartAt ?? null,
       }) ?? undefined;
     } catch { /* malformed run data — mint without a replay */ }
     try {
@@ -4440,8 +4437,7 @@ function leaveRoom() {
   if (game.rematchSettleTimer) { clearTimeout(game.rematchSettleTimer); game.rematchSettleTimer = null; }
   stopCountdownOverlay(); // tear down a duel 3-2-1 overlay if we navigate away mid-countdown
   resetGhostReplay(); // stop a running tape + drop the ghost field
-  const ghostReady = document.getElementById("ghostReady");
-  if (ghostReady) ghostReady.remove(); // tear down a not-yet-tapped ghost gate too
+  // (ghostReady overlay removed; standard lobby start now gates ghost challenges)
   teardownLobbyRail(); // stop the open-games poll when leaving the room (incl. defection)
   stopHeartbeat();
   game.challengeId = null;
