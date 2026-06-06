@@ -39,7 +39,7 @@ const MEDAL_PAL = {
   2: { a: "#f4f7fb", b: "#c3ccd9", c: "#8b95a6", ink: "#2c313a" }, // silver
   3: { a: "#f6cda0", b: "#cf8a44", c: "#8a5320", ink: "#3a230c" }, // bronze
 };
-function medalGlyph(rank) {
+export function medalGlyph(rank) {
   const p = MEDAL_PAL[rank];
   if (!p) return `#${rank}`;
   return `<svg class="wmedal wmedal-${rank}" viewBox="0 0 24 24" aria-hidden="true">` +
@@ -124,7 +124,7 @@ function renderFeaturedCard(entry, { isYou, yourGrid, yourWords, rank }) {
 // Build the leaderboard HTML from a LeaderboardView ({ top, you, total }) and the
 // viewer's own username. Top-3 medal rows; your medal row gets .is-you; if you're
 // outside the top, a pinned row with your real rank — always shown ("celebrate you").
-function renderLeaderboard(view, me) {
+export function renderLeaderboard(view, me) {
   if (!view || !Array.isArray(view.top) || view.top.length === 0) return "";
   const row = (entry, rank, opts = {}) => {
     const u = escAttr(entry.username);

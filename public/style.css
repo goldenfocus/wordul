@@ -3540,3 +3540,30 @@ body.reduced-motion .boards.blooming .grid-row { opacity: 1 !important; transfor
 .wordul-card h3 em { font-size: .75em; color: var(--muted); font-style: normal; }
 .wordul-card .plays { font-size: .8rem; color: var(--muted); margin: 0; }
 .worduls-gallery-screen .empty { color: var(--muted); }
+
+/* ── Golden-card leaderboard (daily-lb.js) ─────────────────────────────────── */
+.daily-lb { margin-top: 18px; }
+.daily-lb .daily-top-row { cursor: pointer; }
+.daily-lb-roster.is-scroll { max-height: 50vh; overflow-y: auto; overscroll-behavior: contain; }
+.daily-lb-showall {
+  display: block; width: 100%; margin-top: 10px; padding: 10px 12px;
+  background: none; border: 1px solid rgba(240, 193, 75, 0.25); border-radius: 10px;
+  color: #f0c14b; font: inherit; font-size: 14px; letter-spacing: 0.04em; cursor: pointer;
+}
+.daily-lb-showall:hover { border-color: rgba(240, 193, 75, 0.55); }
+.daily-lb-modal {
+  position: fixed; inset: 0; z-index: 10001; /* above #settleOverlay's 10000 */
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(10, 10, 14, 0.78); backdrop-filter: blur(3px);
+}
+.daily-lb-modal-card {
+  background: #15151c; border: 1px solid rgba(240, 193, 75, 0.25); border-radius: 16px;
+  padding: 18px 20px 22px; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+  display: flex; flex-direction: column; gap: 12px; align-items: center;
+}
+.daily-lb-modal-head { display: flex; align-items: center; gap: 12px; width: 100%; }
+.daily-lb-modal-close {
+  margin-left: auto; background: none; border: 0; color: #8a8a8f;
+  font-size: 18px; line-height: 1; cursor: pointer; padding: 4px;
+}
+.daily-lb-modal-close:hover { color: #f4f2ec; }

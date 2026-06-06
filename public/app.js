@@ -20,6 +20,7 @@ import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
 import { mountArenaList, pickNextGame } from "/arena-panel.js";
 import { computeDailyStatsFromRoster, computeRosterView } from "/daily-stats.js";
 import { fmtDuration, goldValue } from "/daily-card.js";
+import { mountDailyLeaderboard } from "/daily-lb.js";
 import { computeFeedStreamView, computeFeedPostView } from "/feed.js";
 import { EDITIONS, getEdition } from "/editions/index.js";
 import { ghostPlayersAt, nextEventAfter, hostFinish } from "/ghost-replay.js";
@@ -2522,6 +2523,12 @@ function renderDailyUnlock(snap, me) {
   if (arch && !arch.dataset.wired) {
     arch.textContent = t("daily.browsePast");
     arch.addEventListener("click", (e) => { e.preventDefault(); navigate("/daily/archive"); }); arch.dataset.wired = "1";
+  }
+  // Today's winners board — mounted once the mint confirms (the finisher token from the
+  // same snapshot is already in localStorage by now; see wr.dailyToken storage above).
+  const lb = $("#dailyLeaderboard");
+  if (lb && confirmed && game.dailyDate && getUsername()) {
+    mountDailyLeaderboard({ mount: lb, date: game.dailyDate, username: getUsername(), t });
   }
 }
 

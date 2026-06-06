@@ -76,6 +76,7 @@ export const en = {
   "daily.storyKicker": "Why this word",
   "daily.keepPlaying": "Keep playing",
   "daily.browsePast": "Browse past days →",
+  "daily.lbShowAll": "Show all",
   "daily.archiveTitle": "Every Wordul of the Day",
 
   // Settlement screen (settle.js)
