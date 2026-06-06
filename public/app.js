@@ -3197,8 +3197,29 @@ function syncLengthSelect(snap) {
       }
     });
   }
-  sel.disabled = snap.phase !== "lobby"; // can't resize the words under a live/finished board
+  sel.disabled = snap.phase !== "lobby" || !!game.challengeId; // pinned word in challenges
   if (parseInt(sel.value, 10) !== snap.wordLength) sel.value = String(snap.wordLength);
+}
+
+// Rows twin of syncLengthSelect — the guest-reachable path for set_rows (the in-lobby
+// dim popover is host-only). Options mirror the server clamp [MIN_ROWS, MAX_ROWS].
+function syncRowsSelect(snap) {
+  const sel = $("#rowsSelect");
+  if (!sel || !snap) return;
+  if (sel.options.length === 0) {
+    for (let n = MIN_ROWS; n <= MAX_ROWS; n++) {
+      const opt = document.createElement("option");
+      opt.value = String(n);
+      opt.textContent = `${n} rows`;
+      sel.appendChild(opt);
+    }
+    sel.addEventListener("change", () => {
+      const n = parseInt(sel.value, 10);
+      if (n >= MIN_ROWS && n <= MAX_ROWS) send({ type: "set_rows", rows: n });
+    });
+  }
+  sel.disabled = snap.phase !== "lobby" || !!game.challengeId;
+  if (parseInt(sel.value, 10) !== snap.maxGuesses) sel.value = String(snap.maxGuesses);
 }
 
 // Length can only be changed while genuinely in a multiplayer lobby — and only by the
@@ -4878,7 +4899,7 @@ function showSettings() {
   openSettings({
     inRoom: !!snap,
     // Mount the room's word-length picker into the gear's "Room" section (in a room only).
-    mountRoomLength: snap ? () => syncLengthSelect(snap) : null,
+    mountRoomLength: snap ? () => { syncLengthSelect(snap); syncRowsSelect(snap); } : null,
     onChange: () => { if (game.snapshot) render(); },
     renderEditionPicker,
     // Theme is bound to the room: picking sends set_edition so the server rethemes
