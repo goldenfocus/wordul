@@ -4,7 +4,7 @@
 // between daily-card.js and stamp-replay.js fails here, not in prod.
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderStamp } from "../public/daily-card.js";
-import { wireStampReplays } from "../public/stamp-replay.js";
+import { wireStampReplays, autoPlayStampOnce } from "../public/stamp-replay.js";
 import { TIMING } from "../public/stamp-replay-core.js";
 
 let reduced = false;
@@ -57,5 +57,16 @@ describe("stamp replay driver", () => {
     reduced = true;
     click(stamp());
     expect(cells(".is-veiled")).toBe(0);
+  });
+
+  // Keep last: autoPlayStampOnce flips a module-level once-per-page-load flag, so
+  // any later test calling it would see a no-op.
+  it("auto-play fires exactly once per page load", () => {
+    autoPlayStampOnce(stamp());
+    expect(cells(".stamp-cell.is-veiled")).toBe(6);
+    vi.runAllTimers();
+    root.innerHTML = renderStamp(["ggg"], ["FOX"]);
+    autoPlayStampOnce(root.querySelector(".daily-stamp"));
+    expect(cells(".is-veiled")).toBe(0); // second auto-play is a no-op (manual taps still work)
   });
 });

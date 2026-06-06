@@ -6,6 +6,7 @@
 //     to the next word, and Share / Stats. No replay teleport.
 // The shell (hub.js) supplies the header + modes; this file owns the card.
 import { GLYPH } from "/hub-glyphs.js";
+import { autoPlayStampOnce } from "/stamp-replay.js";
 
 function escAttr(s) { return String(s).replace(/[^a-z0-9_-]/gi, ""); } // usernames are [a-z0-9_-]
 
@@ -253,6 +254,14 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
     if (seeAll && onStats) seeAll.addEventListener("click", () => onStats());
     startCountdown();
 
+    // Discovery: auto-play the recap stamp once per visit — most people never find
+    // tap-to-replay on their own. Deferred until after the leaderboard swap settles
+    // (setFeatured re-renders #dailyFeatured, which would cut a replay mid-flight).
+    const autoReplay = () => {
+      const s = document.querySelector("#dailyFeatured .daily-stamp");
+      if (s) autoPlayStampOnce(s);
+    };
+
     // Best-effort leaderboard: fills the gold line + the board once it resolves; a
     // failure or empty board just leaves them hidden (recap still renders).
     if (fetchLeaderboard && username) {
@@ -304,7 +313,9 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
             }).catch(() => {});
           }
         }
-      }).catch(() => {});
+      }).catch(() => {}).finally(() => setTimeout(autoReplay, 300));
+    } else {
+      setTimeout(autoReplay, 400); // no leaderboard to wait for — play on the initial stamp
     }
     return { onType: () => {} };
   }

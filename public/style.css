@@ -2870,9 +2870,9 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .daily-featured .daily-stamp .stamp-row { gap: clamp(4px, 1.2vw, 6px); }
 /* Same frame size whether it's your letter-board or another player's color preview, so
    tapping between players never shrinks the hero. */
-.daily-featured .daily-stamp .stamp-cell { width: clamp(28px, 8vw, 36px); height: clamp(28px, 8vw, 36px); border-radius: 6px; }
-.daily-featured .daily-stamp.has-letters .stamp-cell { border-radius: 6px; }
-.daily-featured .daily-stamp.has-letters .stamp-ch { font-size: clamp(15px, 4.2vw, 19px); }
+.daily-featured .daily-stamp .stamp-cell { width: clamp(34px, 10.5vw, 46px); height: clamp(34px, 10.5vw, 46px); border-radius: 7px; }
+.daily-featured .daily-stamp.has-letters .stamp-cell { border-radius: 7px; }
+.daily-featured .daily-stamp.has-letters .stamp-ch { font-size: clamp(18px, 5.5vw, 24px); }
 .daily-featured-cap { color: var(--muted); font-size: clamp(.85rem, 2.4vw, 1rem); text-align: center; letter-spacing: .01em; }
 .daily-featured-cap.is-other { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .5rem; }
 .daily-featured-name { color: var(--fg); text-decoration: none; font-weight: 600; }
@@ -2897,7 +2897,9 @@ body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 .daily-top-row.is-you { outline: 1px solid var(--accent); }
 .daily-top-row.is-selected { background: color-mix(in oklab, var(--accent) 14%, var(--bg-card)); }
 .daily-top-rank { display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; color: var(--muted); font-size: .9em; }
-.daily-top-name { color: var(--fg); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* justify-self:start keeps the tap target the text itself — the 1fr column otherwise
+   stretches the link across the row's empty middle, hijacking board-preview taps. */
+.daily-top-name { color: var(--fg); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; justify-self: start; max-width: 100%; }
 .daily-top-name:hover { text-decoration: underline; }
 .daily-top-gold { color: #f0c14b; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; justify-content: flex-end; font-weight: 600; }
 .daily-top-guesses { color: var(--muted); font-variant-numeric: tabular-nums; }

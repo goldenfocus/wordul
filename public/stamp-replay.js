@@ -32,7 +32,8 @@ function finish(stamp) {
 function play(stamp) {
   if (playing.has(stamp)) { finish(stamp); return; } // tap mid-replay → snap to final
   // Reduced motion: the final board is already on screen; don't animate it away.
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  // (typeof guard: jsdom has no matchMedia — tests stub it, but don't require it.)
+  if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const { grid, cells } = stampBoard(stamp);
   if (!grid.length) return;
   const { steps, total } = buildReplaySteps(grid, stamp.classList.contains("has-letters"));
@@ -45,6 +46,16 @@ function play(stamp) {
   }, s.t));
   timers.push(setTimeout(() => finish(stamp), total + 400)); // sweep pop classes
   playing.set(stamp, { timers, cells });
+}
+
+// Discovery: most people never find tap-to-replay on their own, so the home recap
+// plays itself ONCE per page load (never a loop, never twice — even across SPA
+// navigations back home). Manual taps stay unlimited.
+let autoPlayed = false;
+export function autoPlayStampOnce(stamp) {
+  if (autoPlayed) return;
+  autoPlayed = true;
+  play(stamp);
 }
 
 // One delegated listener covers every stamp the app ever renders (the featured
