@@ -2329,7 +2329,7 @@ function onServerMessage(msg) {
     // the cost (C2). The letters auto-clear once the shake lands (below).
     flashShake();
     const reason = msg.reason || "not a word";
-    toast(`${reason} — doesn't count, try again`, { error: true, duration: 2500 });
+    if (SHOW_REJECT_TOAST) toast(`${reason} — doesn't count, try again`, { error: true, duration: 2500 });
     showCompanion("invalid");
     // Only MY live turn is penalized: a late / duplicate / out-of-phase reject must not
     // silently subtract gold or inch me toward the 💀 offer with no visible cause.
@@ -3851,7 +3851,7 @@ function submitGuess() {
   // instant feedback, no server round trip, and crucially no second −50 drain.
   if (game.lastRejected && game.pending.toUpperCase() === game.lastRejected.word) {
     flashShake();
-    toast(`${game.lastRejected.reason} — doesn't count, try again`, { error: true, duration: 2500 });
+    if (SHOW_REJECT_TOAST) toast(`${game.lastRejected.reason} — doesn't count, try again`, { error: true, duration: 2500 });
     bumpErrorCount(powerupsCtx); // still counts toward the 💀 offer — they're stuck
     return;
   }
@@ -3905,6 +3905,12 @@ function flashShake() {
   void row.offsetWidth; // restart animation
   row.classList.add("shake");
 }
+
+// Invalid-guess red pills ("… — doesn't count, try again") are OFF by default: the row
+// shake, the companion, and the hacklog `rejected XXXXX −50` line already carry the news,
+// and the big red bubble over the board read as nagging. Kept as a flag (not deleted) so
+// worlds/rooms can later opt back in via their config with their own toast copy.
+const SHOW_REJECT_TOAST = false;
 
 function toast(text, opts = {}) {
   // Remove any existing toast so we never stack.
