@@ -71,6 +71,9 @@ export function renderSettlement(receipt, opts = {}) {
 registerSettleRenderer("supernova", supernova);
 
 async function supernova(receipt, opts = {}) {
+  // Fix 4: double-show guard — bail if an overlay is already in the DOM.
+  if (document.getElementById("settleOverlay")) return Promise.resolve();
+
   const prefersReduced = typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
   const reducedMotion = opts.reducedMotion || prefersReduced;
@@ -114,7 +117,7 @@ async function supernova(receipt, opts = {}) {
         margin-top:28px; font-size:13px; color:#8a8a8f; letter-spacing:.14em;
         text-transform:uppercase; cursor:pointer;
       `;
-      skip.textContent = "Tap to continue";
+      skip.textContent = tFn("settle.skip", "Tap to continue");
       inner.appendChild(skip);
       overlay.appendChild(inner);
       document.body.appendChild(overlay);
@@ -144,11 +147,14 @@ async function supernova(receipt, opts = {}) {
     overlay.style.position = "fixed";
 
     // Canvas sizing
-    const DPR = () => window.devicePixelRatio || 1;
+    // Fix 5: DPR read once per frame; fit() still uses it directly (called outside loop).
+    let currentDPR = window.devicePixelRatio || 1;
+    const DPR = () => currentDPR;
     let W, H;
     function fit() {
-      W = canvas.width = window.innerWidth * DPR();
-      H = canvas.height = window.innerHeight * DPR();
+      currentDPR = window.devicePixelRatio || 1;
+      W = canvas.width = window.innerWidth * currentDPR;
+      H = canvas.height = window.innerHeight * currentDPR;
       canvas.style.width = window.innerWidth + "px";
       canvas.style.height = window.innerHeight + "px";
     }
@@ -352,6 +358,8 @@ async function supernova(receipt, opts = {}) {
     let lastFrame = performance.now();
     function loop(now) {
       if (!running) return;
+      // Fix 5: snapshot DPR once per frame so stepPhysics/drawFrame don't re-query it.
+      currentDPR = window.devicePixelRatio || 1;
       stepPhysics(now - lastFrame);
       lastFrame = now;
       drawFrame();
@@ -456,20 +464,21 @@ async function supernova(receipt, opts = {}) {
       // Beat 2: multiplier (skipped when mult===1)
       if (!skipFired && receipt.mult > 1) {
         multEl.textContent = `×${receipt.mult}`;
-        // pop animation via direct style (no class toggle needed)
+        // Fix 6: use Object.assign instead of cssText += (avoids accumulation + reflow hack).
         multEl.style.animation = "none";
-        void multEl.offsetWidth;
-        multEl.style.cssText += `
-          opacity:1; transform:translate(-50%,-50%) scale(1); transition:none;
-          animation:settle-mf 1.1s cubic-bezier(.16,1.3,.3,1) forwards;
-        `;
+        Object.assign(multEl.style, {
+          opacity: "1",
+          transform: "translate(-50%,-50%) scale(1)",
+          transition: "none",
+          animation: "settle-mf 1.1s cubic-bezier(.16,1.3,.3,1) forwards",
+        });
 
         playChime?.([[262, 0], [330, 0.18]]);
         shake = 16;
         ringBurst("#f0c14b", 6);
         await caption([
           { text: `×${receipt.mult} STREAK`, color: "#f0c14b" },
-          { text: " — every coin splits" },
+          { text: ` — ${tFn("settle.caption.eachCoinSplits", "every coin splits")}` },
         ]);
         const parents = coins.slice();
         for (const p of parents) {
@@ -478,9 +487,10 @@ async function supernova(receipt, opts = {}) {
           playChime?.([[880 + Math.random() * 400, 0]]);
           await Promise.race([sleep(32), skipRace]);
         }
-        // Trim/pad to honest earned count
-        while (coins.length > receipt.earned) coins.pop();
-        while (coins.length < receipt.earned) mkCoin(c.x, c.y, 2);
+        // Fix 1: cap VISUAL coin count at 60; captions already show the honest number.
+        const earnedCap = Math.min(receipt.earned, 60);
+        while (coins.length > earnedCap) coins.pop();
+        while (coins.length < earnedCap) mkCoin(c.x, c.y, 2);
         playChime?.([[523, 0.05]]);
         shake = 10;
         if (!skipFired) await Promise.race([sleep(620), skipRace]);
@@ -489,7 +499,7 @@ async function supernova(receipt, opts = {}) {
       // Beat 3: spends — red coins ripped away
       if (!skipFired && receipt.spends) {
         await caption([
-          { text: "power-ups " },
+          { text: `${tFn("settle.caption.powerUps", "power-ups")} ` },
           { text: `− ◆ ${receipt.spends}`, color: "#e0796b" },
         ]);
         const n = Math.min(coins.length, Math.max(1, Math.round(receipt.spends / 5)));
@@ -509,10 +519,11 @@ async function supernova(receipt, opts = {}) {
       // Beat 4: bonus — shooting stars
       if (!skipFired && receipt.bonus) {
         await caption([
-          { text: "win bonus " },
+          { text: `${tFn("settle.caption.winBonus", "win bonus")} ` },
           { text: `+ ◆ ${receipt.bonus}`, color: "#f0c14b" },
         ]);
-        const n = Math.max(2, Math.round(receipt.bonus / 6));
+        // Fix 2: cap bonus star count at 12.
+        const n = Math.min(Math.max(2, Math.round(receipt.bonus / 6)), 12);
         for (let i = 0; i < n; i++) {
           if (!running || skipFired) break;
           coins.push({
@@ -536,8 +547,8 @@ async function supernova(receipt, opts = {}) {
       if (!skipFired) {
         await caption(
           isWin
-            ? [{ text: "supernova", color: "#f0c14b" }]
-            : [{ text: "the table keeps it — " }, { text: bustLabel, color: "#e0796b" }],
+            ? [{ text: tFn("settle.caption.supernova", "supernova"), color: "#f0c14b" }]
+            : [{ text: `${tFn("settle.caption.tableKeepsIt", "the table keeps it")} — ` }, { text: bustLabel, color: "#e0796b" }],
         );
       }
 
@@ -549,7 +560,7 @@ async function supernova(receipt, opts = {}) {
 
       const netSign = receipt.net >= 0 ? "+" : "−";
       const netAbs = Math.abs(receipt.net);
-      payS.textContent = `${payLabel} · net ${netSign}${netAbs}`;
+      payS.textContent = `${payLabel} · ${tFn("settle.net", "net")} ${netSign}${netAbs}`;
 
       if (!skipFired) await Promise.race([sleep(350), skipRace]);
 
@@ -618,7 +629,7 @@ if (typeof document !== "undefined" && !document.getElementById("settle-styles")
       100% { opacity:0; transform:translate(-50%,-50%) scale(1.3) }
     }
     #settleOverlay {
-      position:fixed; inset:0; z-index:9000;
+      position:fixed; inset:0; z-index:10000;
       background:#0a0a0e; overflow:hidden;
     }
   `;

@@ -82,4 +82,11 @@ export const en = {
   "settle.toWallet": "to your wallet",
   "settle.net": "net",
   "settle.bust": "buy-in was your max loss",
+  "settle.skip": "Tap to continue",
+  // Animation beat captions
+  "settle.caption.eachCoinSplits": "every coin splits",
+  "settle.caption.powerUps": "power-ups",
+  "settle.caption.winBonus": "win bonus",
+  "settle.caption.supernova": "supernova",
+  "settle.caption.tableKeepsIt": "the table keeps it",
 };
