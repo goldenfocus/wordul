@@ -11,7 +11,8 @@ import { extractBearer, isOwner, wordulsStub } from "./worduls-routes.ts";
 import type { Env } from "./types.ts";
 import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts";
 import { isWordPage, slugFor, wordOfTheDay, ANSWER_WORDS } from "./words.ts";
-import { getWorld, listWorlds } from "./worlds.ts";
+import { getEffectiveWorlds, getEffectiveWorld, WORLDS, WORLD_OVERRIDES_KEY } from "./worlds.ts";
+import { normalizeOverrides } from "./world-overrides.ts";
 import { WordStats } from "./wordstats-do.ts";
 import { activeDate } from "./daily-core.ts";
 import type { World } from "./daily-core.ts";
@@ -341,6 +342,46 @@ export default {
       }));
     }
 
+    // Public effective Worlds registry (code base + admin KV overrides). Powers the
+    // live client strip, the /w/<slug> page, and the sitemap.
+    if (url.pathname === "/worlds.json" && req.method === "GET") {
+      const list = await getEffectiveWorlds(env);
+      return new Response(JSON.stringify(list), {
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
+      });
+    }
+
+    // Admin: read effective list + base (for the manager editor).
+    if (url.pathname === "/admin/worlds" && req.method === "GET") {
+      const auth = req.headers.get("Authorization") ?? "";
+      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+      if (!env.DAILY_ADMIN_TOKEN || token !== env.DAILY_ADMIN_TOKEN) {
+        return new Response("unauthorized", { status: 401 });
+      }
+      const effective = await getEffectiveWorlds(env);
+      return new Response(JSON.stringify({ base: WORLDS, effective }), {
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
+      });
+    }
+
+    // Admin: write the override doc.
+    if (url.pathname === "/admin/worlds" && req.method === "POST") {
+      const auth = req.headers.get("Authorization") ?? "";
+      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+      if (!env.DAILY_ADMIN_TOKEN || token !== env.DAILY_ADMIN_TOKEN) {
+        return new Response("unauthorized", { status: 401 });
+      }
+      let raw: unknown;
+      try { raw = await req.json(); }
+      catch { return new Response(JSON.stringify({ error: "bad_json" }), { status: 400, headers: { "content-type": "application/json" } }); }
+      const result = normalizeOverrides(raw, WORLDS);
+      if (!result.ok) {
+        return new Response(JSON.stringify({ error: result.reason }), { status: 400, headers: { "content-type": "application/json" } });
+      }
+      await env.DIRECTORY.put(WORLD_OVERRIDES_KEY, JSON.stringify(result.value));
+      return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+    }
+
     // Vibe Studio "✨ tune" — rewrite a curator's "why this word" note via Workers AI.
     // POST /vibe-studio/tune  { story, prompt? } -> { text }. Open for now (the whole
     // studio is an un-launched, un-auth'd seam; real auth + rate-limit land with the
@@ -564,7 +605,7 @@ export default {
     const worldMatch = url.pathname.match(WORLD_RE);
     if (worldMatch) {
       const shell = await env.ASSETS.fetch(new Request(url.origin + "/index.html"));
-      const world = getWorld(worldMatch[1]);
+      const world = getEffectiveWorld(await getEffectiveWorlds(env), worldMatch[1]);
       const canonical = `${url.origin}/w/${worldMatch[1]}`;
       const title = world ? `${world.name} — Wordul` : "Worlds — Wordul";
       const desc = world ? world.blurb : "Browse themed Worlds on Wordul.";
@@ -651,7 +692,7 @@ async function sitemap(env: Env, origin: string): Promise<Response> {
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
 
-  for (const w of listWorlds()) urls.push(`${origin}/w/${w.slug}`);
+  for (const w of await getEffectiveWorlds(env)) urls.push(`${origin}/w/${w.slug}`);
   urls.push(origin + "/worlds");
   urls.push(origin + "/words");
   // Word-wiki pages. Emit ALPHABETICALLY — iterating ANSWER_WORDS in pool order would
