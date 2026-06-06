@@ -36,6 +36,14 @@ export type ChallengeMeta = {
   attempts: number;    // scored attempts so far (one per username) — the wiki "N raced it"
 };
 
+// Death is final: a challenge room plays exactly ONE round per player. Scoring was
+// always one-shot (addAttempt), but the room used to allow unscored replays of the
+// same pinned word that *rendered* as real wins — a loss must end the run for good,
+// like dying in a live race. round >= 1 ⇒ this room already played its round.
+export function challengeRoundLocked(challengeId: string | null, round: number): boolean {
+  return !!challengeId && round >= 1;
+}
+
 const B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 export function makeChallengeId(rng: () => number = Math.random): string {

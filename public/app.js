@@ -2818,7 +2818,8 @@ function render() {
     // Duel: the between-rounds intermission reuses the rematch button as the ready toggle
     // (KOTH replaces the rematch handshake); queued spectators just watch the queue advance.
     if (snap.isDuel) applyDuelReadyButton(rematchBtn, snap, me);
-    else rematchBtn.hidden = false;
+    // Death is final: a finished challenge offers no rematch — one run per player.
+    else rematchBtn.hidden = !!game.challengeId;
   }
 
   syncModeChip(snap);
@@ -4610,7 +4611,10 @@ function openStats(opts = {}) {
   if (actions) actions.classList.toggle("is-arena", arena);
 
   const playAgain = $("#modalPlayAgain");
-  if (finished) {
+  // Death is final: a challenge is one run per player — no Play Again on the same pinned
+  // word (it never scored anyway; the server now refuses the restart too). Hiding the
+  // button also disarms the Enter shortcut that silently "continued" a lost challenge.
+  if (finished && !game.challengeId) {
     playAgain.hidden = false;
     playAgain.onclick = proposeRematch;
     // Reset to the plain idle state; hide any stale decline button from a prior prompt.

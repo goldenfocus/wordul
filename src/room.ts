@@ -16,7 +16,7 @@ import { DEFAULT_MODE, isAvailableMode, initialRuleset, seededRuleset } from "./
 import { VANILLA, laneSig } from "./lane.ts";
 import { activeDate } from "./daily-core.ts";
 import { countMask, maskToPattern, type ScienceBaseEvent, type ScienceEvent, type ScienceOutcome, type ScienceRoomKind } from "./science.ts";
-import { makeChallengeId } from "./challenge-core.ts";
+import { makeChallengeId, challengeRoundLocked } from "./challenge-core.ts";
 import { newTape, tapePush, type GhostTape } from "./ghost-core.ts";
 import {
   outpacedLosers,
@@ -779,6 +779,12 @@ export class Room extends DurableObject<Env> {
   private async runStart(who: string, ws?: WebSocket): Promise<boolean> {
     if (this.state.phase === "playing") return false;
     if (this.state.isDaily) return false; // daily auto-starts on seed; no manual start
+    // Death is final: a challenge is ONE run per player (the /attempt scoring was always
+    // one-shot — a replay of the same pinned word rendered as a real win but never counted).
+    if (challengeRoundLocked(this.state.challengeId ?? null, this.state.round)) {
+      if (ws) this.send(ws, { type: "error", message: "One run per challenge — your score is locked." });
+      return false;
+    }
     this.ensureBots();
     if (this.state.players.length < 1) return false;
     const pool = WORDS_BY_SIZE[this.state.wordLength];
