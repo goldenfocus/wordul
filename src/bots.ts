@@ -1,8 +1,10 @@
 // Pure persona roster + deterministic picker + the SINGLE outbound disguise helper.
-// No solver/wordsbysize/room runtime imports — only a type-import of PlayerState. The
-// disguise (projectPlayerForClient) is the one enforcement point that makes live seeding
-// (Slice D) safe: isBot is kept server-side and stripped on every outbound projection.
+// No solver/wordsbysize/room runtime imports — only a type-import of PlayerState + the
+// pure fnv1a hash. The disguise (projectPlayerForClient) is the one enforcement point
+// that makes live seeding (Slice D) safe: isBot is kept server-side and stripped on
+// every outbound projection.
 import type { PlayerState } from "./types.ts";
+import { fnv1a } from "./daily-core.ts";
 
 export type BotPersona = {
   id: string;
@@ -73,4 +75,35 @@ export function pickPersonas(
 export function projectPlayerForClient(p: PlayerState): Omit<PlayerState, "isBot" | "nextGuessAt"> {
   const { isBot: _isBot, nextGuessAt: _nextGuessAt, ...rest } = p;
   return rest;
+}
+
+/**
+ * "Their hour": when this persona plays the word of the day. Deterministic per
+ * (persona, date) — no Math.random (hibernation/replay-safe) — but different every
+ * day, so the cast reads as people with routines, not cron jobs. UTC, matching
+ * activeDate()'s day boundary.
+ */
+export function wotdPlayTime(personaId: string, date: string): { hour: number; minute: number } {
+  const h = fnv1a(`wotd:${personaId}:${date}`);
+  return { hour: h % 24, minute: (h >>> 5) % 60 };
+}
+
+/**
+ * Which personas are due to play `date`'s word at `nowMs` and aren't already in the
+ * room. Pure — the Room DO's /bots/tick is a thin caller, so idempotence is tested
+ * here, not in DO glue. Catch-up by design: a room poked late joins every overdue
+ * persona at once.
+ */
+export function dueWotdPersonas(
+  date: string,
+  nowMs: number,
+  present: ReadonlySet<string>,
+): BotPersona[] {
+  const dayStart = Date.parse(`${date}T00:00:00Z`);
+  if (!Number.isFinite(dayStart) || nowMs < dayStart) return [];
+  return PERSONAS.filter((p) => {
+    if (present.has(p.id)) return false;
+    const t = wotdPlayTime(p.id, date);
+    return nowMs >= dayStart + (t.hour * 60 + t.minute) * 60_000;
+  });
 }

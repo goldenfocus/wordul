@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { PERSONAS, pickPersona, pickPersonas, projectPlayerForClient } from "../src/bots.ts";
+import { PERSONAS, pickPersona, pickPersonas, projectPlayerForClient, wotdPlayTime, dueWotdPersonas } from "../src/bots.ts";
 import type { PlayerState } from "../src/types.ts";
 
 const KNOWN_EDITIONS = ["default", "yang", "jackpot", "arcade", "editorial", "tactile", "robot"];
@@ -134,5 +134,57 @@ describe("bots.ts blindness", () => {
     expect(code).not.toMatch(/from\s+["']\.\/solver/);
     expect(code).not.toMatch(/from\s+["']\.\/wordsbysize/);
     expect(code).not.toMatch(/from\s+["']\.\/room/);
+  });
+});
+
+describe("wotdPlayTime", () => {
+  it("is stable for the same persona+date", () => {
+    expect(wotdPlayTime("maya", "2026-06-06")).toEqual(wotdPlayTime("maya", "2026-06-06"));
+  });
+
+  it("yields a valid UTC hour/minute", () => {
+    for (const p of PERSONAS) {
+      const t = wotdPlayTime(p.id, "2026-06-06");
+      expect(t.hour).toBeGreaterThanOrEqual(0);
+      expect(t.hour).toBeLessThanOrEqual(23);
+      expect(t.minute).toBeGreaterThanOrEqual(0);
+      expect(t.minute).toBeLessThanOrEqual(59);
+    }
+  });
+
+  it("varies across dates and across personas (not all identical)", () => {
+    const acrossDates = new Set(
+      ["2026-06-06", "2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10"]
+        .map((d) => wotdPlayTime("maya", d).hour),
+    );
+    expect(acrossDates.size).toBeGreaterThan(1);
+    const acrossBots = new Set(PERSONAS.map((p) => wotdPlayTime(p.id, "2026-06-06").hour));
+    expect(acrossBots.size).toBeGreaterThan(1);
+  });
+});
+
+describe("dueWotdPersonas", () => {
+  const date = "2026-06-06";
+  const dayStart = Date.UTC(2026, 5, 6); // 2026-06-06T00:00:00Z
+  const endOfDay = dayStart + 24 * 3600_000 - 1;
+
+  it("returns every persona by end of day, none before day start", () => {
+    expect(dueWotdPersonas(date, dayStart - 1, new Set()).length).toBe(0);
+    expect(dueWotdPersonas(date, endOfDay, new Set()).map((p) => p.id).sort())
+      .toEqual(PERSONAS.map((p) => p.id).sort());
+  });
+
+  it("is monotonic: later in the day is a superset", () => {
+    const atNoon = dueWotdPersonas(date, dayStart + 12 * 3600_000, new Set()).map((p) => p.id);
+    const atEnd = dueWotdPersonas(date, endOfDay, new Set()).map((p) => p.id);
+    for (const id of atNoon) expect(atEnd).toContain(id);
+  });
+
+  it("skips personas already present (idempotent re-poke)", () => {
+    const all = dueWotdPersonas(date, endOfDay, new Set()).map((p) => p.id);
+    const present = new Set(all.slice(0, 3));
+    const again = dueWotdPersonas(date, endOfDay, present).map((p) => p.id);
+    expect(again).toEqual(all.filter((id) => !present.has(id)));
+    expect(dueWotdPersonas(date, endOfDay, new Set(all)).length).toBe(0);
   });
 });
