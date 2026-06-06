@@ -17,9 +17,12 @@ export const DEFAULT_SETTINGS = {
   colorBlind: false,
   reducedMotion: false,
   communityScience: true,
-  // Companion's written reaction toasts (win/loss/wrong/idle/wipe). On by default;
-  // independent of the 🔊 sound mute, which governs companion VOICE + chimes.
-  companionComments: true,
+  // Companion's written reaction toasts (win/loss/wrong/idle/wipe). OFF by default:
+  // the raw toast clashes with the floating-hacklog design (Jun 6) — voice carries
+  // the moment until the written channel gets its own redesign. An explicit opt-in
+  // in Settings persists and wins. Independent of the 🔊 sound mute, which governs
+  // companion VOICE + chimes.
+  companionComments: false,
   // "auto" = detect from browser/OS locale (fr-* → AZERTY) until the player picks
   // explicitly in settings; an explicit pick is persisted and always wins.
   keyboardLayout: "auto",

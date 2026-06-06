@@ -18,12 +18,12 @@ describe("getSettings", () => {
     expect(s.colorBlind).toBe(false); // default preserved
     expect(s.keyboardLayout).toBe("auto"); // default preserved
   });
-  it("defaults companionComments to true (companion text reactions on)", () => {
-    expect(getSettings().companionComments).toBe(true);
-  });
-  it("lets a stored companionComments=false override the default", () => {
-    localStorage.setItem("wr.settings", JSON.stringify({ companionComments: false }));
+  it("defaults companionComments to false (the speech toast clashes with the new design)", () => {
     expect(getSettings().companionComments).toBe(false);
+  });
+  it("lets a stored companionComments=true override the off default", () => {
+    localStorage.setItem("wr.settings", JSON.stringify({ companionComments: true }));
+    expect(getSettings().companionComments).toBe(true);
     expect(getSettings().hardMode).toBe(false); // other defaults preserved
   });
   it("tolerates corrupt JSON by falling back to defaults", () => {
