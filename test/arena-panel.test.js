@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { arenaRowProps, arenaEmptyState, pickNextGame, seatLabel, isHot, nextPollMs } from "../public/arena-panel.js";
-import { arenaRowProps, arenaEmptyState, pickNextGame, seatLabel, isHot } from "../public/arena-panel.js";
 import { compactRowProps } from "../public/lobby-view.js";
 
 const game = {
@@ -106,6 +105,9 @@ describe("nextPollMs (F6) — adaptive poll while the list is empty", () => {
   it("the in-room lobby rail never fast-polls (it lives for minutes)", () => {
     expect(nextPollMs("empty", true)).toBe(8000);
     expect(nextPollMs("error", true)).toBe(8000);
+  });
+});
+
 describe("compact floor row", () => {
   it("row props carry a letters×rows board dimension (rows = smart default tries)", () => {
     const p = compactRowProps({ routePath: "/@m/x", personaIcon: "🦊", host: "maya", wordLength: 6, seats: "2/4", edition: "default" });

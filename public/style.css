@@ -411,24 +411,6 @@ body.reduced-motion .tile.ghost-cursor {
 }
 .avatar-name[hidden] { display: none; }
 
-/* 2-line identity chip (prototype .idchip): username over gold, right-aligned, sitting
-   just left of the avatar. Scoped to in-room — #goldHud is only appended into .room-header
-   inside a room, so :has(#goldHud) gates the vertical stack and leaves the home header
-   (where .room-header is empty) untouched. The #goldHud internals are NOT modified. */
-.topbar-actions { align-items: center; }
-.room-header:has(#goldHud) {
-  flex-direction: column; align-items: flex-end; gap: 1px; line-height: 1.15;
-}
-.room-header:has(#goldHud) .header-name {
-  font-family: var(--font-display, inherit); font-weight: 700;
-  font-size: 14px; color: var(--fg); max-width: 38vw;
-}
-.room-header:has(#goldHud) .gold-hud {
-  font-size: 12.5px; padding: 0; border: 0; background: none;
-  box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
-  color: var(--warm);
-}
-
 /* Header room copy-link (prototype .rn): @owner/slug + chain-link icon, copies on tap. */
 .room-link {
   display: inline-flex; align-items: center; gap: 8px;
