@@ -1821,7 +1821,7 @@ function refreshGold() {
 // ◆ gold wallet — that mint is server-authoritative and cashed out ONCE at the end. So in a
 // daily we route the payout/drain choreography through this ephemeral counter instead. It's
 // backed by game.goldThisRound (the same running per-round tally the end screen reads), and
-// it paints #roundScore. Race rooms keep the default wallet adapter (live #goldHud ticks).
+// it paints #roundScore. Both daily and race rooms route through this adapter; the ◆ wallet only moves at settlement.
 const roundScoreWallet = {
   get: () => game.goldThisRound || 0,
   add: (d) => { game.goldThisRound = (game.goldThisRound || 0) + d; },
@@ -1830,7 +1830,6 @@ const roundScoreWallet = {
 // The chip prefix the count-up animation prepends to the number, so the static render and the
 // animated ticks share one format ("<label> <n>"). animateCount writes `${prefix}${n}`, so the
 // label lives in the prefix; keep the trailing space.
-const ROUND_SCORE_PREFIX = () => t("daily.roundScorePrefix") + " ";
 const SCORE_PREFIX = () => (game.isDaily ? t("daily.roundScorePrefix") : t("race.scorePrefix")) + " ";
 // Paint the round-score chip from the current tally. The payout animation tweens the number
 // itself (via the wallet adapter + #roundScore as its hud); this is the static render used
@@ -2031,8 +2030,8 @@ function onServerMessage(msg) {
         };
 
         if (discoveries > 0) {
-          // Replay tracks the running balance: the ROUND SCORE in a daily (the ◆ wallet is
-          // frozen until cash-out), the live ◆ balance in a race. Either way balanceAfter =
+          // Replay tracks the running balance: the ROUND SCORE in every mode (the ◆ wallet is
+          // frozen until settlement). Either way balanceAfter =
           // before + total, since the sequence awards exactly `total`.
           const balanceBefore = game.goldThisRound || 0;
           recordReplayEntry({
