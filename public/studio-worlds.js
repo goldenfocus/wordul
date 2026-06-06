@@ -22,7 +22,10 @@ function setStatus(msg, ok = true) {
 }
 
 function editionOptions(selected) {
-  return EDITIONS.map((e) => `<option value="${e.id}" ${e.id === selected ? "selected" : ""}>${e.id}</option>`).join("");
+  return EDITIONS.map((e) => {
+    const id = escapeAttr(e.id);
+    return `<option value="${id}" ${e.id === selected ? "selected" : ""}>${id}</option>`;
+  }).join("");
 }
 
 function render() {
@@ -35,6 +38,7 @@ function render() {
     row.innerHTML = `
       <input data-id="${w.id}" data-k="slug"  value="${escapeAttr(w.slug)}"  placeholder="slug" />
       <input data-id="${w.id}" data-k="name"  value="${escapeAttr(w.name)}"  placeholder="name" />
+      <input data-id="${w.id}" data-k="blurb" value="${escapeAttr(w.blurb)}" placeholder="blurb" />
       <select data-id="${w.id}" data-k="editionId">${editionOptions(w.editionId)}</select>
       <label><input data-id="${w.id}" data-k="featured" type="checkbox" ${w.featured ? "checked" : ""}/> ★</label>
       <span class="wm-actions">
@@ -46,7 +50,10 @@ function render() {
   }
 }
 
-function escapeAttr(s) { return String(s ?? "").replace(/"/g, "&quot;"); }
+function escapeAttr(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 $("rows").addEventListener("input", (e) => {
   const t = e.target;
@@ -108,4 +115,7 @@ async function load() {
 }
 
 if (tokenInput.value) load(); else setStatus("Enter the admin token to load worlds.", false);
-tokenInput.addEventListener("change", () => { if (tokenInput.value) load(); });
+tokenInput.addEventListener("change", () => {
+  if (tokenInput.value.trim()) load();
+  else setStatus("Enter the admin token to load worlds.", false);
+});
