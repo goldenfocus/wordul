@@ -30,7 +30,7 @@ import { renderWorldCard, pushRecentWorld, getRecentWorldSlugs } from "/world-ca
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
 import { pickInspire, pickForfeit } from "/inspire.js";
-import { renderSettlement } from "/settle.js";
+import { renderSettlement, dailyReceiptLines } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
 import { seatModel, ghostSeatModel } from "/lobby-view.js";
@@ -2592,19 +2592,22 @@ function maybeRunSettlement(msg) {
 // honest REMAINDER (mint − scoreGold − dailyBonus, floored at 0), so the three lines always
 // sum to the server total without re-deriving the wall-clock speed curve on the client.
 const DAILY_GOLD_BONUS = 100; // mirrors src/room.ts DAILY_GOLD_BONUS
+const DAILY_GOLD_RATE = 9;    // mirrors src/economy.ts DAILY_GOLD_RATE (daily mints at ÷9)
 function cashOutDaily(me) {
   if (game.cashedOut) return;
   game.cashedOut = true;
   const mint = (me && typeof me.goldAwarded === "number") ? Math.max(0, me.goldAwarded) : 0;
   // Honest breakdown components (sum === mint).
-  const scoreGold = Math.max(0, Math.round((me?.points || 0) / 100));
+  const scoreGold = Math.max(0, Math.round((me?.points || 0) / DAILY_GOLD_RATE));
   const dailyBonus = mint > 0 ? DAILY_GOLD_BONUS : 0;
   const speedGold = Math.max(0, mint - scoreGold - dailyBonus);
   renderCashoutBreakdown({ scoreGold, dailyBonus, speedGold });
   const reducedMotion = getSettings().reducedMotion;
-  // Reconcile from the server (source of truth), then count UP by the mint. Reduced motion:
-  // a silent snap (renderGold inside refreshGold), exactly the old behavior. Full motion:
-  // pin the HUD to (balance − mint) so awardGold tweens old → balance and coins land.
+  // Reconcile from the server (source of truth), then run the ritual. The receipt
+  // (server-confirmed, attached only after the mint ledger write) drives the same
+  // supernova settlement Duel/Arena get — daily-flavored lines. No receipt (old
+  // server / mint raced the snapshot)? The legacy coin-rain still fires, so the
+  // moment is never silent. ONLY-UP either way: pin HUD to (balance − mint) first.
   const name = getUsername();
   if (!name) { refreshGold(); return; }
   fetch(`/api/user/${encodeURIComponent(name)}`)
@@ -2612,9 +2615,23 @@ function cashOutDaily(me) {
     .then((p) => {
       const balance = p && typeof p.gold === "number" ? p.gold : null;
       if (balance == null) { refreshGold(); return; }
-      if (reducedMotion || mint <= 0) { setGold(balance); renderGoldHud(); return; }
-      setGold(Math.max(0, balance - mint)); renderGoldHud(); // pre-mint floor
-      awardGold(mint, false); // ONLY-UP: tweens (balance − mint) → balance, coins fly to the pile
+      if (mint <= 0) { setGold(balance); renderGoldHud(); return; }
+      const pre = Math.max(0, balance - mint);
+      if (me.receipt) {
+        setGold(pre); renderGoldHud();
+        renderSettlement(me.receipt, {
+          reducedMotion, // supernova handles reduced motion with its static lines path
+          walletBefore: pre,
+          onWalletTick: (v) => { setGold(v); renderGoldHud(); },
+          playChime,
+          lines: dailyReceiptLines(me.receipt, dailyBonus, t),
+          bonusCaption: t("settle.caption.dailyBonus"),
+        });
+        return;
+      }
+      if (reducedMotion) { setGold(balance); renderGoldHud(); return; }
+      setGold(pre); renderGoldHud();
+      awardGold(mint, false); // legacy fallback: tween (balance − mint) → balance, coins fly
     })
     .catch(() => refreshGold());
 }

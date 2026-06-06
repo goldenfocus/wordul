@@ -79,6 +79,9 @@ export const en = {
   "daily.archiveTitle": "Every Wordul of the Day",
 
   // Settlement screen (settle.js)
+  "settle.dailyBonus": "daily bonus",
+  "settle.speedBonus": "speed",
+  "settle.caption.dailyBonus": "daily goody + speed",
   "settle.toWallet": "to your wallet",
   "settle.net": "net",
   "settle.bust": "buy-in was your max loss",
