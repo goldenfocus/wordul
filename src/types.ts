@@ -85,6 +85,7 @@ export type SeedMarker = { profile: "noob"; personaIds: string[]; capacity: numb
 export type RoomSnapshot = {
   path: string;            // "<owner>/<slug>" — immutable canonical DO key
   owner: string;           // owner username
+  hostId?: string | null;  // settings authority: first connected human; succession on disconnect, no reclaim
   slug: string;            // current URL slug (renameable; old slugs alias to canonical path)
   name: string;            // display name (renameable)
   phase: RoomPhase;

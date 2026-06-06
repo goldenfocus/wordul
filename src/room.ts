@@ -102,6 +102,7 @@ export class Room extends DurableObject<Env> {
     this.state = {
       path: "",
       owner: "",
+      hostId: null,
       slug: "",
       name: "",
       phase: "lobby",
@@ -156,6 +157,7 @@ export class Room extends DurableObject<Env> {
         if (!restored.rotation) restored.rotation = "koth";
         if (!Array.isArray(restored.queue)) restored.queue = [];
         if (restored.throne === undefined) restored.throne = null;
+        if (restored.hostId === undefined) restored.hostId = null;
         if (restored.players.some((p) => p.role === undefined)) {
           // First two players are duelists, the rest queue (preserve array order).
           let seated = 0;
@@ -322,6 +324,7 @@ export class Room extends DurableObject<Env> {
         // "left/reconnected" noise and real chat fell out. Race lobbies keep them (useful).
         if (!this.state.isDaily) this.pushSystem(`${p.username} left`);
       }
+      this.assignHost();
       // A pending rematch dies if either participant drops; the survivor (the
       // proposer, if it was the recipient who left) is settled Home via cancelled{left}.
       if (this.state.rematch && this.state.phase === "finished") {
@@ -372,6 +375,22 @@ export class Room extends DurableObject<Env> {
 
   async webSocketError(ws: WebSocket): Promise<void> {
     await this.webSocketClose(ws);
+  }
+
+  // --- Host: settings authority in multiplayer lobbies --------------------------
+  // First connected human holds the host seat; when they disconnect it passes to the
+  // next connected human in join order. No reclaim — a returning ex-host is a guest.
+  // Bots never host; daily rooms have no host. Announce changes, not the first seat.
+  private assignHost(): void {
+    if (this.state.isDaily) return;
+    const cur = this.state.players.find((p) => p.username === this.state.hostId);
+    if (cur && cur.connected && !cur.isBot) return; // host still seated
+    const prev = this.state.hostId ?? null;
+    const next = this.state.players.find((p) => p.connected && !p.isBot) ?? null;
+    this.state.hostId = next ? next.username : null;
+    if (this.state.hostId && prev && this.state.hostId !== prev) {
+      this.pushSystem(`${this.state.hostId} is now the host`);
+    }
   }
 
   // --- handlers ---
@@ -549,6 +568,8 @@ export class Room extends DurableObject<Env> {
       }
       if (!this.state.isDaily) this.pushSystem(`${username} joined`);
     }
+
+    this.assignHost();
 
     // Register this player in the directory so profiles are discoverable (sitemap). Best-effort.
     try {
