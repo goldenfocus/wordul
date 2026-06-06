@@ -116,6 +116,9 @@ function wireDaily() {
   const strip = document.getElementById("worldsStrip");
   if (strip) {
     strip.textContent = "";
+    // Registry hydration (admin KV overrides) is driven by app.js boot: loadWorlds() runs
+    // after first paint, then re-calls route() → showHome() → renderHub(), so this loop
+    // automatically sees the updated registry. No loadWorlds() call needed here.
     for (const w of featuredWorlds()) {
       const card = renderWorldCard(w);
       if (!card) continue;

@@ -25,7 +25,7 @@ import { EDITIONS, getEdition } from "/editions/index.js";
 import { ghostPlayersAt, nextEventAfter, hostFinish } from "/ghost-replay.js";
 import { dramaUpdate, dramaStop } from "/drama.js";
 import { MODES, isAvailableMode } from "/modes.js";
-import { getWorld, worldSlugFromPath, listWorlds, featuredWorlds } from "/worlds.js";
+import { getWorld, worldSlugFromPath, listWorlds, featuredWorlds, loadWorlds } from "/worlds.js";
 import { renderWorldCard, pushRecentWorld, getRecentWorldSlugs } from "/world-card.js";
 import { t, initLang } from "/i18n.js";
 import { wordIntel } from "/data/word-intel.js";
@@ -4848,6 +4848,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // Global physical-keyboard handler — drives type-to-start on home/lobby and typing in-game.
   document.addEventListener("keydown", onPhysicalKey);
   route();
+  // Hydrate the effective Worlds registry (code defaults + admin KV overrides) without
+  // blocking first paint. Once it arrives, re-render only the worlds-bearing views so
+  // admin edits show up; other routes (in-game, profiles, etc.) are left untouched.
+  loadWorlds().then(() => {
+    const p = location.pathname;
+    if (p === "/" || p === "/worlds") route();
+  });
 });
 
 // Paint the avatar glyph from the username's first letter (a generic ◆ before the
