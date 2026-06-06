@@ -217,6 +217,7 @@ export class Room extends DurableObject<Env> {
         resigned: p.resigned,
         isBot: p.isBot,
         goldAwarded: p.goldAwarded,
+        score: p.points,
         durationMs: durationOf(p),
       });
       if (full) {
