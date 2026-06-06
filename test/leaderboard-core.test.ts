@@ -14,15 +14,15 @@ describe("topDaily", () => {
     // bao vs dot tie on gold+guesses → username asc puts bao before dot (dot is 4th)
   });
 
-  it("excludes bots and unscored (still-playing / failed-mint) players", () => {
+  it("ranks bots inline and excludes only unscored (still-playing / failed-mint) players", () => {
     const players: RankablePlayer[] = [
       p("ava", 1240, 2),
       { username: "clanker", guessCount: 2, won: true, goldAwarded: 9999, isBot: true },
       { username: "still", guessCount: 1, won: false, goldAwarded: undefined },
     ];
     const { top, total } = topDaily(players, "ava", 3);
-    expect(top.map((e) => e.username)).toEqual(["ava"]);
-    expect(total).toBe(1);
+    expect(top.map((e) => e.username)).toEqual(["clanker", "ava"]);
+    expect(total).toBe(2);
   });
 
   it("returns you=null when the caller is inside the top N", () => {
@@ -98,15 +98,15 @@ describe("fullDaily", () => {
     expect(view.youRank).toBe(5);
   });
 
-  it("excludes bots and unscored players, and reports youRank null when unranked", () => {
+  it("ranks bots inline, excludes only unscored players, and reports youRank null when unranked", () => {
     const players: RankablePlayer[] = [
       p("ava", 1240, 2),
       { username: "clanker", guessCount: 2, won: true, goldAwarded: 9999, isBot: true },
       { username: "still", guessCount: 1, won: false, goldAwarded: undefined },
     ];
     const view = fullDaily(players, "ghost");
-    expect(view.players.map((e) => e.username)).toEqual(["ava"]);
-    expect(view.total).toBe(1);
+    expect(view.players.map((e) => e.username)).toEqual(["clanker", "ava"]);
+    expect(view.total).toBe(2);
     expect(view.youRank).toBeNull();
   });
 
@@ -121,5 +121,38 @@ describe("fullDaily", () => {
 
   it("reports youRank null for an anonymous viewer (empty username)", () => {
     expect(fullDaily([p("ava", 1240, 2)], "").youRank).toBeNull();
+  });
+});
+
+describe("score + bots on the board", () => {
+  const players = [
+    { username: "yan", guessCount: 4, won: true, goldAwarded: 119, score: 1900 },
+    { username: "maya", guessCount: 3, won: true, isBot: true, goldAwarded: 125, score: 2100 },
+    { username: "mid-game", guessCount: 2, won: false, score: 800 }, // no goldAwarded → unranked
+  ];
+
+  it("ranks bots inline by the same gold-desc sort", () => {
+    const view = fullDaily(players, "yan");
+    expect(view.players.map((p) => p.username)).toEqual(["maya", "yan"]);
+    expect(view.players[0].rank).toBe(1);
+    expect(view.total).toBe(2);
+  });
+
+  it("passes score through to entries", () => {
+    const view = fullDaily(players, "yan");
+    expect(view.players.map((p) => p.score)).toEqual([2100, 1900]);
+  });
+
+  it("never leaks isBot on output rows (worduler cover rule)", () => {
+    for (const row of fullDaily(players, "yan").players) {
+      expect("isBot" in row).toBe(false);
+    }
+    for (const row of topDaily(players, "yan", 3).top) {
+      expect("isBot" in row).toBe(false);
+    }
+  });
+
+  it("still requires a confirmed goldAwarded to rank", () => {
+    expect(fullDaily(players, "mid-game").youRank).toBe(null);
   });
 });

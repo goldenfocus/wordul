@@ -3,8 +3,8 @@
 // state.players; this turns that into a top-N board + the caller's own rank.
 
 // Decoupled input shape: the Room maps its PlayerState[] into this so the module
-// stays dependency-free. A player is RANKED iff they have a confirmed mint
-// (goldAwarded is a number) and are not a bot.
+// stays dependency-free. A player is RANKED iff they have a confirmed goldAwarded
+// number; bots carry a computed (never minted) one and rank inline with humans.
 export type RankablePlayer = {
   username: string;
   guessCount: number;
@@ -12,6 +12,7 @@ export type RankablePlayer = {
   resigned?: boolean;   // gave up (vs ran out of guesses) — drives the 💀 board marker
   isBot?: boolean;
   goldAwarded?: number | null;
+  score?: number;       // server-side game points at finish (gold derives from this)
   grid?: string[];      // letterless color rows ("g"/"y"/"x") — home card's swappable card
   words?: string[];     // real guessed words, parallel to grid — supplied ONLY for a confirmed
                         // finisher (token-gated upstream); never present on the public payload
@@ -19,7 +20,7 @@ export type RankablePlayer = {
 };
 
 export type LeaderEntry = {
-  username: string; gold: number; guesses: number; won: boolean;
+  username: string; gold: number; guesses: number; won: boolean; score?: number;
   resigned?: boolean; grid?: string[]; words?: string[]; durationMs?: number;
 };
 export type LeaderboardView = {
@@ -34,14 +35,16 @@ function clampN(n: number): number {
   return Math.min(10, v);
 }
 
-// Shared filter + sort + map. A player is RANKED iff non-bot with a confirmed mint
-// (goldAwarded is a number). Sort: gold desc → fewer guesses → username asc.
+// Shared filter + sort + map. A player is RANKED iff they have a confirmed goldAwarded
+// number; bots carry a computed (never minted) one and rank inline. Sort: gold desc →
+// fewer guesses → username asc.
 function rankedEntries(players: RankablePlayer[]): LeaderEntry[] {
   return (players ?? [])
-    .filter((pl) => pl && !pl.isBot && typeof pl.goldAwarded === "number")
+    .filter((pl) => pl && typeof pl.goldAwarded === "number")
     .map((pl) => ({
       username: pl.username, gold: pl.goldAwarded as number, guesses: pl.guessCount,
-      won: pl.won, resigned: pl.resigned, grid: pl.grid, words: pl.words, durationMs: pl.durationMs,
+      won: pl.won, score: pl.score, resigned: pl.resigned, grid: pl.grid, words: pl.words,
+      durationMs: pl.durationMs,
     }))
     .sort((a, b) =>
       b.gold - a.gold ||
