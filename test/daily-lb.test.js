@@ -111,3 +111,47 @@ describe("openReplayModal — no orphaned keydown listeners on replace", () => {
     expect(document.activeElement).not.toBe(adaRow);
   });
 });
+
+describe("replay popup", () => {
+  beforeEach(() => {
+    // jsdom has no matchMedia; stub it so playStampReplay doesn't bail on the guard.
+    globalThis.matchMedia = () => ({ matches: false });
+  });
+
+  it("tapping a row opens an auto-playing modal with that player's board", async () => {
+    const mount = document.getElementById("dailyLeaderboard");
+    mountDailyLeaderboard({ mount, date: "2026-06-06", username: "yan" });
+    await flush();
+    mount.querySelector('.daily-top-row[data-user="ada"]').click();
+    const modal = document.getElementById("dailyLbModal");
+    expect(modal).toBeTruthy();
+    expect(modal.querySelector('[role="dialog"]').getAttribute("aria-label")).toContain("ada");
+    const stamp = modal.querySelector(".daily-stamp");
+    expect(stamp).toBeTruthy();
+    expect(stamp.classList.contains("has-letters")).toBe(true);   // finisher → real letters
+    expect(stamp.querySelectorAll(".is-veiled").length).toBeGreaterThan(0); // replay started
+  });
+
+  it("Esc closes and focus returns to the opener row", async () => {
+    const mount = document.getElementById("dailyLeaderboard");
+    mountDailyLeaderboard({ mount, date: "2026-06-06", username: "yan" });
+    await flush();
+    const row = mount.querySelector('.daily-top-row[data-user="ada"]');
+    row.click();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(document.getElementById("dailyLbModal")).toBeNull();
+    expect(document.activeElement).toBe(row);
+  });
+
+  it("scrim tap closes; a second row tap replaces the modal", async () => {
+    const mount = document.getElementById("dailyLeaderboard");
+    mountDailyLeaderboard({ mount, date: "2026-06-06", username: "yan" });
+    await flush();
+    mount.querySelector('.daily-top-row[data-user="ada"]').click();
+    mount.querySelector('.daily-top-row[data-user="bob"]').click();
+    const modals = document.querySelectorAll(".daily-lb-modal");
+    expect(modals.length).toBe(1); // never stacks
+    modals[0].click(); // scrim
+    expect(document.getElementById("dailyLbModal")).toBeNull();
+  });
+});
