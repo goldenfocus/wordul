@@ -188,10 +188,10 @@
     </nav>
 
     <div id="tabPlay" class="room-tab-panel">
-      <!-- Top cluster: one-line hacker-log ticker + the ✨/💀 affordances, kept ABOVE the
-           board. Nothing ever sits between the board and the keyboard — on mobile that gap
-           gets eaten by the on-screen keyboard / forces a scroll. -->
-      <div id="hacklog" class="hacklog" hidden></div>
+      <!-- Top cluster: the ✨/💀 affordances, kept ABOVE the board. The hacker-log lives
+           BELOW the board as a zero-height float anchor (see #hacklog next to #boards) so
+           nothing ever PUSHES layout between the board and the keyboard — on mobile that
+           gap gets eaten by the on-screen keyboard / forces a scroll. -->
       <div class="magic-bar">
         <button id="magicBtn" class="magic-icon" type="button" title="Power-ups" aria-label="Power-ups" aria-haspopup="true" hidden>✨</button>
         <button id="giveUpBtn" class="give-up-icon" type="button" title="Give up" aria-label="Give up" hidden><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 11a6 6 0 0 1 12 0c0 2.2-1 3.6-2.2 4.4v2.2a1.4 1.4 0 0 1-1.4 1.4H9.6a1.4 1.4 0 0 1-1.4-1.4v-2.2C7 14.6 6 13.2 6 11Z"/><circle cx="9.5" cy="11" r="1.6"/><circle cx="14.5" cy="11" r="1.6"/><path d="M12 13.4l-.9 1.5h1.8z"/><path d="M10.5 19v-1.3M12 19v-1.3M13.5 19v-1.3"/></svg></button>
@@ -214,6 +214,10 @@
           <!-- #boards (the player board grid) is relocated here so the single-row lobby board
                sits in the left zone; the tries badge + your-table sit beneath it. -->
           <div id="boards" class="boards"></div>
+          <!-- The hacker-log: a ZERO-HEIGHT anchor directly below the board frames. The
+               floating event line + the ▸ tap target render out of it without pushing the
+               board↔keyboard column; the expanded scrollback overlays UPWARD over the board. -->
+          <div id="hacklog" class="hacklog" hidden></div>
           <!-- Dimension control: letters × rows. Tap the 5 × 6 to open a popover with two
                steppers (Letters → set_length, Rows → set_rows). Lobby-only; hidden elsewhere. -->
           <div class="dimwrap" id="dimWrap" hidden>

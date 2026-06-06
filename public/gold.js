@@ -205,7 +205,7 @@ export function playPayoutSequence(opts = {}) {
     awardGold(total, true, { wallet, hud, prefix }); // coin-rain already suppressed under reducedMotion
     for (const d of discoveries) {
       log?.addInstant(`> ${d.kind} ${String(d.letter || "").toUpperCase()} pos ${d.index + 1}  +${d.value}`, {
-        tone: "gain",
+        tone: d.kind, // hacklog tones mirror the tile palette: hot → --hot, warm → --warm
       });
     }
     // GOLD-SUM (F5): the per-discovery lines already show +base; the combo line shows ONLY
@@ -242,7 +242,7 @@ export function playPayoutSequence(opts = {}) {
       playChime?.([[C5 * Math.pow(2, i / 12), 0]]);
       log?.logLine(
         `${d.kind} ${String(d.letter || "").toUpperCase()} pos ${d.index + 1}  +${d.value}`,
-        { tone: "gain" },
+        { tone: d.kind }, // tile-palette tone: hot → --hot, warm → --warm
       );
       i++;
       setTimeout(beat, PAYOUT_BEAT_MS);

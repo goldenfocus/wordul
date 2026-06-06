@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from "vitest";
-import { createHacklog } from "/hacklog.js";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { createHacklog, TYPE_CHAR_MS, HOLD_MS, FADE_MS, GHOST_MS } from "/hacklog.js";
 
 function mount() {
   const el = document.createElement("div");
@@ -61,7 +61,9 @@ describe("createHacklog", () => {
     expect(log.getEntries()).toEqual([{ text: "✦ 1.5× COMBO  +125", tone: "combo" }]);
   });
 
-  it("collapse() shows the ticker with the last line; expand() restores scrollback", () => {
+  it("collapse() shows only the bare ▸ affordance (no last-line text); expand() restores scrollback", () => {
+    // The floating line is the visible play surface now — the rest ticker is a dim
+    // tap target, NOT a persistent copy of the last event (that was the old design).
     const el = mount();
     const log = createHacklog(el, { reducedMotion: true });
     log.logLine("first");
@@ -69,8 +71,7 @@ describe("createHacklog", () => {
     log.collapse();
     expect(el.classList.contains("collapsed")).toBe(true);
     const ticker = el.querySelector(".hacklog-ticker");
-    expect(ticker.textContent).toContain("> last");
-    expect(ticker.textContent).toContain("▸");
+    expect(ticker.textContent).toBe("▸");
     log.expand();
     expect(el.classList.contains("collapsed")).toBe(false);
   });
@@ -109,17 +110,131 @@ describe("createHacklog", () => {
     expect(log.getEntries().length).toBe(1);
   });
 
-  it("types lines sequentially (no interleaving) — final text matches the queued order", async () => {
+  it("scrollback body receives the full text instantly even when motion is on", () => {
+    // The body is the audit log: it never types. The typewriter lives on the
+    // floating play-surface line only.
     const el = mount();
     const log = createHacklog(el, { reducedMotion: false });
     log.logLine("alpha");
     log.logLine("beta");
-    // Wait for both lines to finish typing. TYPE_CHAR_MS=22; ~7 chars each => well under 1s.
-    await new Promise((r) => setTimeout(r, 600));
     const lines = el.querySelectorAll(".hacklog-body .hacklog-line");
     expect(lines.length).toBe(2);
     expect(lines[0].textContent).toBe("> alpha");
     expect(lines[1].textContent).toBe("> beta");
     expect(log.getEntries().map((e) => e.text)).toEqual(["> alpha", "> beta"]);
+  });
+});
+
+describe("floating line — the vanish ritual (collapsed play surface)", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function mountLog(opts = { reducedMotion: false }) {
+    const el = mount();
+    return { el, log: createHacklog(el, opts) };
+  }
+
+  it("logLine surfaces a tone-classed float line that types in, holds, then vanishes", () => {
+    const { el, log } = mountLog();
+    log.logLine("hot N pos 4  +100", { tone: "hot" });
+    const fl = el.querySelector(".hacklog-float .hacklog-fline");
+    expect(fl).toBeTruthy();
+    expect(fl.classList.contains("hot")).toBe(true);
+    // typewriter finishes
+    vi.advanceTimersByTime(TYPE_CHAR_MS * 25);
+    expect(fl.textContent).toBe("> hot N pos 4  +100");
+    // hold elapses → fading out
+    vi.advanceTimersByTime(HOLD_MS);
+    expect(fl.classList.contains("vanishing")).toBe(true);
+    // fade elapses → gone
+    vi.advanceTimersByTime(FADE_MS + 50);
+    expect(el.querySelector(".hacklog-float .hacklog-fline")).toBeNull();
+  });
+
+  it("a new line preempts the current one: it ghosts immediately, then dissolves", () => {
+    const { el, log } = mountLog();
+    log.logLine("warm E pos 3  +50", { tone: "warm" });
+    vi.advanceTimersByTime(TYPE_CHAR_MS * 25); // typed, mid-hold
+    log.logLine("hot N pos 4  +100", { tone: "hot" });
+    const all = el.querySelectorAll(".hacklog-float .hacklog-fline");
+    expect(all.length).toBe(2);
+    expect(all[0].classList.contains("ghost")).toBe(true);
+    const active = el.querySelectorAll(".hacklog-float .hacklog-fline:not(.ghost)");
+    expect(active.length).toBe(1);
+    expect(active[0].classList.contains("hot")).toBe(true);
+    // the ghost dissolves on its own
+    vi.advanceTimersByTime(GHOST_MS + 50);
+    expect(el.querySelectorAll(".hacklog-float .ghost").length).toBe(0);
+  });
+
+  it("a line preempted mid-typewriter ghosts with its FULL text (true after-image)", () => {
+    const { el, log } = mountLog();
+    log.logLine("warm E pos 3  +50", { tone: "warm" });
+    vi.advanceTimersByTime(TYPE_CHAR_MS * 2); // barely started typing
+    log.logLine("hot N pos 4  +100", { tone: "hot" });
+    const ghost = el.querySelector(".hacklog-float .ghost");
+    expect(ghost.textContent).toBe("> warm E pos 3  +50");
+  });
+
+  it("burst of three: never more than one active line + one ghost at a time", () => {
+    const { el, log } = mountLog();
+    log.logLine("a", { tone: "warm" });
+    log.logLine("b", { tone: "hot" });
+    log.logLine("c", { tone: "combo" });
+    const all = el.querySelectorAll(".hacklog-float .hacklog-fline");
+    expect(all.length).toBeLessThanOrEqual(2);
+    expect(el.querySelectorAll(".hacklog-float .hacklog-fline:not(.ghost)").length).toBe(1);
+  });
+
+  it("reducedMotion: float line renders instantly and still auto-hides after the hold", () => {
+    const { el, log } = mountLog({ reducedMotion: true });
+    log.logLine("hot N pos 4  +100", { tone: "hot" });
+    const fl = el.querySelector(".hacklog-float .hacklog-fline");
+    expect(fl.textContent).toBe("> hot N pos 4  +100"); // no typewriter
+    vi.advanceTimersByTime(HOLD_MS + FADE_MS + 50);
+    expect(el.querySelector(".hacklog-float .hacklog-fline")).toBeNull();
+  });
+
+  it("addInstant surfaces a float line with no typewriter even with motion on", () => {
+    const { el, log } = mountLog();
+    log.addInstant("> ↳ ×1.5 combo  +75  (=225)", { tone: "combo" });
+    const fl = el.querySelector(".hacklog-float .hacklog-fline");
+    expect(fl.textContent).toBe("> ↳ ×1.5 combo  +75  (=225)");
+    expect(fl.classList.contains("combo")).toBe(true);
+  });
+
+  it("clear() removes float DOM and cancels timers (no late mutations)", () => {
+    const { el, log } = mountLog();
+    log.logLine("doomed", { tone: "hot" });
+    log.clear();
+    expect(el.querySelector(".hacklog-float .hacklog-fline")).toBeNull();
+    // advancing past every lifecycle stage must not throw or resurrect DOM
+    vi.advanceTimersByTime(TYPE_CHAR_MS * 50 + HOLD_MS + FADE_MS + GHOST_MS + 100);
+    expect(el.querySelector(".hacklog-float .hacklog-fline")).toBeNull();
+  });
+
+  it("getEntries keeps every entry with its tone regardless of vanish state", () => {
+    const { log } = mountLog();
+    log.logLine("warm E pos 3  +50", { tone: "warm" });
+    log.logLine("hot N pos 4  +100", { tone: "hot" });
+    vi.advanceTimersByTime(TYPE_CHAR_MS * 60 + HOLD_MS + FADE_MS + 100); // all vanished
+    expect(log.getEntries()).toEqual([
+      { text: "> warm E pos 3  +50", tone: "warm" },
+      { text: "> hot N pos 4  +100", tone: "hot" },
+    ]);
+  });
+
+  it("scrollback lines carry the new tones (hot/warm) as classes", () => {
+    const { el, log } = mountLog({ reducedMotion: true });
+    log.logLine("warm E pos 3  +50", { tone: "warm" });
+    log.logLine("hot N pos 4  +100", { tone: "hot" });
+    const lines = el.querySelectorAll(".hacklog-body .hacklog-line");
+    expect(lines[0].classList.contains("warm")).toBe(true);
+    expect(lines[1].classList.contains("hot")).toBe(true);
   });
 });

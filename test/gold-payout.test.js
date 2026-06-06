@@ -167,4 +167,22 @@ describe("playPayoutSequence — gold-sum invariant (no double-award, no drift)"
     expect(lines[lines.length - 1].o.tone).toBe("combo");
     expect(seen).toEqual([0, 0]); // one getTile call per discovery (warm idx0, hot idx0)
   });
+
+  it("discovery lines carry the discovery's kind as tone (warm/hot), both paths", async () => {
+    // The hacklog colors lines from the tile palette: hot → --hot, warm → --warm.
+    // The generic "gain" tone is reserved for neutral/system lines.
+    for (const reducedMotion of [true, false]) {
+      const lines = [];
+      const log = { logLine: (t, o) => lines.push({ t, o }), addInstant: (t, o) => lines.push({ t, o }) };
+      setGold(0);
+      await playPayoutSequence({
+        discoveries: discoveries(1, 1), // warm then hot
+        mult: comboMultiplier(2),
+        log,
+        reducedMotion,
+      });
+      const tones = lines.map((l) => l.o.tone);
+      expect(tones).toEqual(["warm", "hot", "combo"]);
+    }
+  });
 });

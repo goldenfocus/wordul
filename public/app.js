@@ -4131,7 +4131,8 @@ function handleGameOver(snap) {
     recordReplayEntry({ guessIndex: guessCount - 1, events: winEvents, combo: null, balanceAfter: game.goldThisRound || 0 });
     const winLog = getHacklog();
     if (winLog) for (const ev of winEvents) {
-      winLog.logLine(`${ev.kind}${ev.letter ? " " + String(ev.letter).toUpperCase() : ""}  +${ev.delta}`, { tone: "gain" });
+      // Tile-palette tones: hot discoveries light --hot; solve/speed stay neutral "gain".
+      winLog.logLine(`${ev.kind}${ev.letter ? " " + String(ev.letter).toUpperCase() : ""}  +${ev.delta}`, { tone: ev.kind === "hot" ? "hot" : "gain" });
     }
     triggerWinCelebration();
     // "Congratulations — you found the word… [beat] {answer}". snap.word can be absent
