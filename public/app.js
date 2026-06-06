@@ -2105,8 +2105,10 @@ function onServerMessage(msg) {
       // on a FOLLOW-UP snapshot (the confirmed re-broadcast), so run on whichever snapshot
       // first carries it — once. No receipt (mint failed / old server)? The plain
       // refreshGold reconcile below still keeps the wallet true.
-      maybeRunSettlement(msg);
-      refreshGold(); // safe either way: wallet was never inflated mid-game anymore
+      // First receipt-bearing snapshot fires the show, which owns the wallet HUD until it
+      // lands on server truth — a concurrent refreshGold could yank the count-up around.
+      // Every other finished snapshot (no receipt yet / already shown / daily) reconciles plainly.
+      if (!maybeRunSettlement(msg)) refreshGold();
     }
     // Daily rooms never globally "finish" (per-player async scoring) — so once YOU are
     // personally done, run the honest §B CASH-OUT: a single ONLY-UP animation that counts
@@ -2359,23 +2361,18 @@ function celebrateDailyUnlock() {
   }
 }
 
-// §B CASH-OUT — the honest, ONLY-UP gold reveal at the end of a daily. During play the
-// sacred ◆ wallet never moved (discoveries pumped the ephemeral #roundScore instead); the
-// server minted the real gold once, server-authoritatively. So at finish we count the ◆ HUD
-// UP from its pre-mint value to pre-mint + mint, fly coins onto the pile, and lay out an
-// honest breakdown. The displayed mint is the SERVER's confirmed me.goldAwarded — never
 // Race settlement show (§C): fires exactly once per round on the first snapshot that carries
 // my receipt (server-confirmed mint). The receipt may arrive on a FOLLOW-UP snapshot (the
 // re-broadcast after the ledger write), so we poll every finished-phase snapshot.
 // Daily flow is completely unaffected (game.isDaily guard).
 let settlementShown = false; // reset in resetRound() alongside cashedOut
 function maybeRunSettlement(msg) {
-  if (settlementShown || game.isDaily) return;
+  if (settlementShown || game.isDaily) return false;
   const me = (msg.room.players || []).find((p) => p.username === getUsername());
-  if (!me || !me.receipt) return;
+  if (!me || !me.receipt) return false;
   settlementShown = true;
   const name = getUsername();
-  if (!name) return;
+  if (!name) return true;
   // ONLY-UP: fetch truth, pin HUD to (balance − payout), let the show count it up.
   fetch(`/api/user/${encodeURIComponent(name)}`)
     .then((r) => (r.ok ? r.json() : null))
@@ -2392,8 +2389,14 @@ function maybeRunSettlement(msg) {
       });
     })
     .catch(() => refreshGold());
+  return true;
 }
 
+// §B CASH-OUT — the honest, ONLY-UP gold reveal at the end of a daily. During play the
+// sacred ◆ wallet never moved (discoveries pumped the ephemeral #roundScore instead); the
+// server minted the real gold once, server-authoritatively. So at finish we count the ◆ HUD
+// UP from its pre-mint value to pre-mint + mint, fly coins onto the pile, and lay out an
+// honest breakdown. The displayed mint is the SERVER's confirmed me.goldAwarded — never
 // fabricated. Idempotent per solve (guarded by game.cashedOut).
 //
 // Breakdown honesty: the client knows the total (goldAwarded), the player's final daily
@@ -4496,6 +4499,7 @@ function leaveRoom() {
   document.body.classList.remove("playing"); // restore full chrome outside a room
   document.body.classList.remove("daily");
   game.isDaily = false; game.dailyDate = null;
+  settlementShown = false; // discard stale latch so a different already-finished room can show
 }
 
 // The archive: every past day as a clickable list (data from /api/daily/dates).
