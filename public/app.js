@@ -3426,20 +3426,19 @@ function renderBoards(snap, me) {
     grid.className = "grid";
     const cols = snap.wordLength;
     const rows = snap.maxGuesses;
+    // Lobby: a single teaser row — and only ONE grid track, so no phantom-rows gap.
+    // The full grid re-renders on leaving lobby; the bloom stagger (style.css §7) is a
+    // per-row opacity animation on that re-render, so it needs no pre-reserved tracks.
+    const isLobby = snap.phase === "lobby";
+    const rowsToDraw = isLobby ? 1 : rows;
     // CSS vars drive grid-template + tile sizing.
     board.style.setProperty("--cols", String(cols));
-    board.style.setProperty("--rows", String(rows));
-    grid.style.setProperty("--rows", String(rows));
+    board.style.setProperty("--rows", String(rowsToDraw));
+    grid.style.setProperty("--rows", String(rowsToDraw));
     const isMe = p.username === getUsername();
     const pending = (isMe && snap.phase === "playing" && p.status === "playing") ? game.pending : "";
     const prevCount = game.lastGuessCounts.get(p.username) ?? 0;
     const freshRowIdx = p.guesses.length > prevCount ? p.guesses.length - 1 : -1;
-
-    // Lobby: collapse the board to a SINGLE row (the "word to fill") to free vertical
-    // space; it blooms to its full `rows` height when the game starts (see render()).
-    // The grid still carries --rows so the bloom expands to the right height.
-    const isLobby = snap.phase === "lobby";
-    const rowsToDraw = isLobby ? 1 : rows;
 
     for (let r = 0; r < rowsToDraw; r++) {
       const row = document.createElement("div");
