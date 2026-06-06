@@ -61,6 +61,17 @@ async function rateLimit(env: Env, key: string, limit: number, windowSec: number
   }
 }
 
+// Returns null when the caller holds the admin bearer token; otherwise a 401 Response.
+// Closed (401) when DAILY_ADMIN_TOKEN is unset.
+function requireAdmin(req: Request, env: Env): Response | null {
+  const auth = req.headers.get("Authorization") ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!env.DAILY_ADMIN_TOKEN || token !== env.DAILY_ADMIN_TOKEN) {
+    return new Response("unauthorized", { status: 401 });
+  }
+  return null;
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
@@ -329,11 +340,8 @@ export default {
 
     // Admin seed: POST /daily/schedule (Bearer token; closed/401 when DAILY_ADMIN_TOKEN unset).
     if (url.pathname === "/daily/schedule" && req.method === "POST") {
-      const auth = req.headers.get("Authorization") ?? "";
-      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-      if (!env.DAILY_ADMIN_TOKEN || token !== env.DAILY_ADMIN_TOKEN) {
-        return new Response("unauthorized", { status: 401 });
-      }
+      const denied = requireAdmin(req, env);
+      if (denied) return denied;
       const stub = env.DAILY.get(env.DAILY.idFromName("daily"));
       return stub.fetch(new Request("https://do/schedule", {
         method: "POST",
@@ -353,11 +361,8 @@ export default {
 
     // Admin: read effective list + base (for the manager editor).
     if (url.pathname === "/admin/worlds" && req.method === "GET") {
-      const auth = req.headers.get("Authorization") ?? "";
-      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-      if (!env.DAILY_ADMIN_TOKEN || token !== env.DAILY_ADMIN_TOKEN) {
-        return new Response("unauthorized", { status: 401 });
-      }
+      const denied = requireAdmin(req, env);
+      if (denied) return denied;
       const effective = await getEffectiveWorlds(env);
       return new Response(JSON.stringify({ base: WORLDS, effective }), {
         headers: { "content-type": "application/json", "cache-control": "no-store" },
@@ -366,10 +371,11 @@ export default {
 
     // Admin: write the override doc.
     if (url.pathname === "/admin/worlds" && req.method === "POST") {
-      const auth = req.headers.get("Authorization") ?? "";
-      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-      if (!env.DAILY_ADMIN_TOKEN || token !== env.DAILY_ADMIN_TOKEN) {
-        return new Response("unauthorized", { status: 401 });
+      const denied = requireAdmin(req, env);
+      if (denied) return denied;
+      const len = Number(req.headers.get("content-length") ?? "0");
+      if (len > 64 * 1024) {
+        return new Response(JSON.stringify({ error: "payload_too_large" }), { status: 413, headers: { "content-type": "application/json" } });
       }
       let raw: unknown;
       try { raw = await req.json(); }
