@@ -3,7 +3,7 @@ import type { UserStats } from "./stats.ts";
 import type { GameRecord, RoomGame } from "./records.ts";
 import type { RoomScore } from "./scoreboard.ts";
 import type { RoomMode } from "./modes.ts";
-import type { LedgerTx } from "./economy.ts";
+import type { LedgerTx, SettlementReceipt } from "./economy.ts";
 import type { AuthRecord, PendingClaim } from "./account-core.ts";
 import type { GhostTape } from "./ghost-core.ts";
 
@@ -58,6 +58,7 @@ export type PlayerState = {
   pointsSpent: number;   // running power-up spend this round (internal accumulator)
   scored?: boolean;        // daily: this player's one result has been recorded (mint once)
   goldAwarded?: number;    // daily: gold actually minted on a confirmed (res.ok) ledger write
+  receipt?: SettlementReceipt; // race: settlement receipt, set ONLY after a confirmed (res.ok) mint
   resigned?: boolean;      // gave up (vs ran out of guesses) — both land status "lost"
   firstGuessAt?: number;   // daily: epoch ms of this player's first guess (start of solve clock)
   finishedAt?: number;     // daily: epoch ms this player finished (won/lost/resigned) — solve clock end

@@ -10,7 +10,7 @@ import { everyoneReady, COUNTDOWN_MS } from "./duel.ts";
 import { nextSeatRole, applyKothRotation } from "./rotation.ts";
 import { buildGameRecords, summarizeRoomGame, encodeSolveGrid, encodeSolveWords } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
-import { pointsEarned, goldFromPoints, speedBonusPoints, POINTS } from "./economy.ts";
+import { pointsEarned, goldFromPoints, speedBonusPoints, POINTS, settle, settleParts } from "./economy.ts";
 import { topDaily, fullDaily } from "./leaderboard-core.ts";
 import { DEFAULT_MODE, isAvailableMode } from "./modes.ts";
 import { activeDate } from "./daily-core.ts";
@@ -1570,17 +1570,41 @@ export class Room extends DurableObject<Env> {
       Promise.allSettled(
         Object.entries(records).flatMap(([username, record]) => {
         const player = this.state.players.find((p) => p.username === username);
-        const gold = goldFromPoints(player ? player.points : 0);
+        const receipt = settle({
+          buyIn: 0,                       // Phase 2 turns buy-ins on
+          points: player ? player.points : 0,
+          mult: 1,                        // Phase 1: no multiplier sources yet
+          spends: 0,
+          bonus: 0,
+        });
         const stub = this.env.USER.get(this.env.USER.idFromName(username));
         const calls = [
           stub.fetch(`https://do/append?username=${encodeURIComponent(username)}`, { method: "POST", body: JSON.stringify(record) })
             .catch((e) => console.error("report failed", username, (e as Error).message)),
         ];
-        if (gold > 0 && !player?.isBot) {
+        if (receipt.payout > 0 && !player?.isBot) {
           calls.push(
             stub.fetch(`https://do/ledger/append?username=${encodeURIComponent(username)}`, {
               method: "POST",
-              body: JSON.stringify({ token: "gold", delta: gold, reason: "mint:cashout", ref: `${this.state.path}#${this.state.round}` }),
+              body: JSON.stringify({
+                token: "gold", delta: receipt.payout, reason: "mint:cashout",
+                ref: `${this.state.path}#${this.state.round}`, parts: settleParts(receipt),
+              }),
+            }).then((res) => {
+              // HONEST RECEIPT: attach only on a confirmed write, then tell everyone.
+              // (Same rule as the daily's goldAwarded — never celebrate an unconfirmed mint.)
+              if (res.ok && player) {
+                player.receipt = receipt;
+                // Per-socket: each viewer gets a snapshot whose `word`/`players` are
+                // projected specifically for them (same loop as persistAndBroadcast).
+                for (const ws of this.ctx.getWebSockets()) {
+                  try {
+                    ws.send(JSON.stringify({ type: "snapshot", room: this.snapshotFor(this.userFor(ws)) }));
+                  } catch { /* socket closing; ignore */ }
+                }
+              } else if (!res.ok) {
+                console.error("race mint non-ok", username, res.status);
+              }
             }).catch((e) => console.error("mint failed", username, (e as Error).message)),
           );
         }
