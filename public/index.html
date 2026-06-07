@@ -320,6 +320,12 @@
 
     <div id="chatBackdrop" class="chat-backdrop" hidden></div>
     <section id="chatPanel" class="chat-panel" aria-label="Chat" hidden>
+      <!-- Lobby-only chevron row (CSS-gated to body.lobby): chat stays this one quiet
+           line until there's actual conversation — see chat-pill.js. -->
+      <button type="button" id="chatPill" class="chat-pill" aria-expanded="false">
+        <span class="chat-pill-arrow" aria-hidden="true">▸</span>
+        <span>Chat</span>
+      </button>
       <button id="chatToggle" class="chat-toggle" type="button" aria-expanded="true">
         <span class="chat-toggle-label">Chat</span>
         <span id="chatBadge" class="chat-badge" hidden>0</span>

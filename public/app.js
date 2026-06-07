@@ -37,6 +37,7 @@ import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
 import { autoPlayBoardOnce, playBoardReplay, boardReplayActive } from "/board-replay.js";
 import { seatModel, ghostSeatModel, railPillLabel } from "/lobby-view.js";
+import { createChatPill, chatHasUserText } from "/chat-pill.js";
 import { encodeLocalSolve, needsDailyRecovery, recoverDailyArtifacts } from "/daily-recover.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
@@ -1733,12 +1734,27 @@ function userLink(username, { at = false, suffix = "" } = {}) {
   return a;
 }
 
+// The lobby chat pill: chat collapses to a "▸ Chat" row until real conversation
+// exists (chat-pill.js owns the model; this sync owns the DOM).
+const chatPill = createChatPill((open) => {
+  $("#chatPanel")?.classList.toggle("chat-open", open);
+  $("#chatPill")?.setAttribute("aria-expanded", String(open));
+  if (open) scrollChatToBottom();
+});
+
 function wireChat() {
   const form = $("#chatForm");
   const input = $("#chatInput");
   const toggle = $("#chatToggle");
   const backdrop = $("#chatBackdrop");
   const topBtn = $("#chatTopBtn");
+
+  chatPill.reset(); // new room = quiet room
+  const pillBtn = $("#chatPill");
+  if (pillBtn && !pillBtn.dataset.wired) {
+    pillBtn.dataset.wired = "1";
+    pillBtn.addEventListener("click", () => chatPill.toggle());
+  }
 
   if (form) {
     form.addEventListener("submit", (e) => {
@@ -3246,6 +3262,8 @@ function renderChat(snap) {
   const isInitialSeed = game.lastChatLen === 0 && appended > 0;
   const hadNewTableMsg = notifyCount > 0;
   game.lastChatLen = chat.length;
+  // Lobby pill: real conversation (incl. seeded history) expands the chat box.
+  chatPill.setHasText(chatHasUserText(chat));
   if (appended > 0) {
     const panel = $("#chatPanel");
     const sheetOpen = panel?.classList.contains("sheet-open");

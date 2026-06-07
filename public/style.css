@@ -1548,6 +1548,9 @@ html[data-edition="default"] .key.pressed {
 /* The lobby is quiet chrome — no floating speaker there ("looks off" feedback, Jun 7).
    Sound still toggles in the avatar hub; the icon returns for play, where audio lives. */
 body.lobby .mute-icon { display: none; }
+/* …and with the mute gone the gap row is empty air in the lobby — collapse it
+   ("wasting a lot of space" feedback, Jun 7). It returns for play (hacklog + mute). */
+body.lobby .board-gap { display: none; }
 .magic-popover {
   /* The magic-bar now sits ABOVE the board, so the popover opens DOWNWARD. */
   position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
@@ -3285,9 +3288,12 @@ body.lobby .lobby-grid {
   margin: 0 auto;
 }
 body.lobby .lobby-left {
-  display: flex; flex-direction: column; align-items: center; gap: var(--space-4);
+  /* Tight cluster: board → 5×6 → seats read as one unit (8px rhythm); READY gets
+     its own breathing room back via margin below. */
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
   min-width: 0;
 }
+body.lobby .lobby-left .lobby-controls { margin-top: var(--space-3); }
 body.lobby .lobby-right {
   display: flex; flex-direction: column; gap: var(--space-4);
   min-width: 0;
@@ -3412,7 +3418,7 @@ body.lobby .lobby-left .lobby-controls { order: 4; }
 body.playing .room-icon-btn { display: none; }
 
 /* 2 ── Dimension control = letters × rows (tap 5 × 6 → steppers) ─────────────*/
-.dimwrap { position: relative; padding-top: 6px; }
+.dimwrap { position: relative; }
 .dim {
   display: flex; align-items: baseline; gap: 5px;
   background: none; border: 1px solid transparent; border-radius: var(--r-sm);
@@ -3469,7 +3475,6 @@ body.playing .room-icon-btn { display: none; }
 .mytable {
   width: 100%; max-width: 430px;
   display: flex; align-items: center; gap: var(--space-3);
-  border-top: 1px solid var(--border); padding-top: var(--space-4);
 }
 /* Label trimmed to glyphs+count (aria-label="Your table" carries the meaning). */
 .mytable-lab { display: none; }
@@ -3614,9 +3619,24 @@ body.lobby #chatPanel {
    grows as messages arrive (it scrolls internally) and the send button never clips. */
 body.lobby .chat-toggle { display: none; }
 body.lobby .chat-body { border-top: none; }
-/* With no header there is no collapse affordance — the lobby chat is always open. */
-body.lobby #chatPanel.collapsed .chat-body { display: flex; }
 body.lobby #chatLog { height: 150px; min-height: 0; max-height: none; flex: none; }
+/* Chevron pill (chat-pill.js): in the lobby the chat is this one quiet row until
+   real conversation exists — .chat-open (set by app.js) reveals the body. The pill
+   owns lobby visibility outright, so the legacy .collapsed toggle state is moot here.
+   Same control language as the "▸ N tables open" rail pill. */
+.chat-pill { display: none; }
+body.lobby .chat-pill {
+  display: flex; align-items: center; gap: var(--space-2);
+  width: 100%; padding: var(--space-2) var(--space-3);
+  border: none; background: none;
+  color: var(--muted); font-family: var(--font-body);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  text-align: left;
+}
+body.lobby .chat-pill-arrow { transition: transform 0.16s ease; }
+body.lobby #chatPanel.chat-open .chat-pill-arrow { transform: rotate(90deg); }
+body.lobby #chatPanel .chat-body { display: none; }
+body.lobby #chatPanel.chat-open .chat-body { display: flex; }
 
 /* 7 ── Bloom-on-start: stagger the full grid's rows in when leaving lobby. */
 .boards.blooming .grid-row {
