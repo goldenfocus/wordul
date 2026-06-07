@@ -16,7 +16,7 @@
 // Like gold.js, this module avoids importing app.js (which is the <script
 // type="module"> entry — importing it would cycle). The wiring instead receives a
 // `ctx` of app-owned callbacks: { game, send, render, toast, renderGoldHud,
-// getSettings, getGold, drainGold, getUsername, forfeit }. forfeit(reason)
+// getGold, drainGold, getUsername, forfeit }. forfeit(reason)
 // records the loss + runs the lose explosion (fire-once). Pure selectors
 // (affordablePowerups / cheapestAvailableCost / isStuck) are exported for unit tests.
 import { GOLD, isBankrupt } from "/gold.js";

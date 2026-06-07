@@ -728,7 +728,6 @@ const powerupsCtx = {
   render: () => render(),
   toast: (text, opts) => toast(text, opts),
   renderGoldHud,
-  getSettings,
   // Settlement spec: races spend/check the STAKE (round score); the ◆ wallet never moves
   // mid-game. Daily keeps the real wallet (§A: WOTD power-ups cost real gold) until Phase 2.
   getGold: () => (game.isDaily ? getGold() : stakeGold()),
@@ -2297,7 +2296,7 @@ function onServerMessage(msg) {
           const log = getHacklog();
           for (const line of penaltyLines) log?.logLine(line, { tone: "loss" });
           mistakeFx(activeMistakeFx(), wasted.letters); // sensory punishment for the sloppy reuse (room-themed)
-          checkBankruptcy(powerupsCtx); // C4: a wasted-letter drain may bankrupt Hard Mode
+          checkBankruptcy(powerupsCtx); // C4: a wasted-letter drain may bankrupt Hard difficulty
         };
         // Valid-word bonus: EVERY accepted guess pays a flat tick — even a zero-discovery
         // shot in the dark — so a real word never lands as dead air. Deliberately quiet:
@@ -2459,7 +2458,7 @@ function onServerMessage(msg) {
       { tone: "loss" },
     );
     // C4: a rejected submit is an error (surfaces 💀 after enough) and a drain (may
-    // tip Hard Mode into bankruptcy).
+    // tip Hard difficulty into bankruptcy).
     bumpErrorCount(powerupsCtx);
     checkBankruptcy(powerupsCtx);
     // Remember the dud: re-submitting the identical word is handled locally by

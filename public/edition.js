@@ -54,7 +54,7 @@ export function addGold(delta) {
 }
 // Drain gold WITHOUT clamping at 0 — the C4 bankruptcy primitive. Unlike spendGold
 // (affordability-gated) and addGold/setGold (clamped non-negative), this lets the
-// balance dip below zero so Hard Mode can run you into bankruptcy. `amount` is the
+// balance dip below zero so Hard difficulty can run you into bankruptcy. `amount` is the
 // positive drain; returns the new (possibly negative) balance.
 export function drainGold(amount) {
   return setGoldSigned(getGold() - amount);

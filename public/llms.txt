@@ -11,7 +11,7 @@
 ## Rules in brief
 - 6 guesses; words are 4–12 letters. Tiles light up Hot (right letter & spot — glows gold), Warm (right letter, wrong spot), or Cold (not in the word).
 - It's a live race: everyone in a room solves the same secret word at once. First to solve wins the round; everyone else finishes for their own gold.
-- Gold is the universal score: earn for each green (+100), yellow (+50), and solve (+500, plus a speed bonus), with combo multipliers; lose a little for non-words and repeated dead letters. In Hard Mode, going bankrupt ends the game.
+- Gold is the universal score: earn for each green (+100), yellow (+50), and solve (+500, plus a speed bonus), with combo multipliers; lose a little for non-words and repeated dead letters. On Hard difficulty, going bankrupt ends the game.
 - Power-ups (tap ✨): reveal a letter (4000 gold) or count the vowels (200 gold). 💀 gives up.
 - Editions reskin the game (Wordul, Editorial, Yang's Table, Tactile, Arcade, Jackpot, Tin Bot); rules are the same across all.
 - Full guide: https://wordul.com/how-to-play
