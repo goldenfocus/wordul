@@ -18,6 +18,19 @@
   --error: #e0796b;
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Instrument Sans', -apple-system, system-ui, sans-serif;
+  /* Lobby v2 structural tokens (spec 2026-06-07): a 4pt spacing scale + ONE radius
+     family. Components consume these so rhythm/rounding are decided once, not per card.
+     Radius roles: cards (rail, chat, dimpop, seats) = --r-md; small controls (buttons,
+     steppers) = --r-sm; large surfaces = --r-lg. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 14px;
 }
 
 * { box-sizing: border-box; }
@@ -1159,7 +1172,7 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
   max-width: 520px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -3271,18 +3284,18 @@ body.reduced-motion .lobby-aura .lobby-aura-b { animation: none !important; }
 body.lobby .lobby-grid {
   display: grid;
   grid-template-columns: 1.06fr 0.94fr;
-  gap: 14px;
+  gap: var(--space-4);
   align-items: start;
   width: 100%;
   max-width: 920px;
   margin: 0 auto;
 }
 body.lobby .lobby-left {
-  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-4);
   min-width: 0;
 }
 body.lobby .lobby-right {
-  display: flex; flex-direction: column; gap: 14px;
+  display: flex; flex-direction: column; gap: var(--space-4);
   min-width: 0;
 }
 @media (max-width: 880px) {
@@ -3303,12 +3316,12 @@ body.lobby .lobby-bar {
    button the prototype's full-width "deal" feel. Scoped to body.lobby so the
    global .btn.primary is untouched everywhere else. */
 body.lobby .lobby-left .lobby-controls {
-  flex-direction: column; align-items: center; gap: 10px;
+  flex-direction: column; align-items: center; gap: var(--space-2);
   width: 100%; max-width: 320px;
 }
 body.lobby .lobby-left .lobby-controls .btn.primary {
   width: 100%; height: 50px; font-size: 16px;
-  border: none; border-radius: 5px; color: var(--bg);
+  border: none; border-radius: var(--r-sm); color: var(--bg);
   font-family: var(--font-display); font-weight: 700;
   background: linear-gradient(135deg, var(--accent),
     color-mix(in oklab, var(--warm) 45%, var(--accent)));
@@ -3328,17 +3341,17 @@ body.lobby .lobby-left .lobby-controls .btn.primary:disabled {
 .lobby-pair { display: none; }
 .lobby-pair[hidden] { display: none; }
 body.lobby .lobby-left .lobby-pair {
-  display: flex; gap: 8px;
+  display: flex; gap: var(--space-2);
   width: 100%; max-width: 320px;
   order: 5; /* #lobbyControls is appended last in lobby (DOM order ~4); keep pair after it */
 }
 body.lobby .lobby-left .lobby-controls { order: 4; }
 .lobby-pair-btn {
   flex: 1; height: 42px;
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
   border: 1px solid color-mix(in oklab, var(--fg) 9%, var(--border));
   background: color-mix(in oklab, var(--bg-card) 40%, transparent);
-  color: var(--fg); border-radius: 6px; cursor: pointer;
+  color: var(--fg); border-radius: var(--r-sm); cursor: pointer;
   font-family: var(--font-body); font-weight: 600; font-size: 13px;
   transition: border-color 0.16s ease, color 0.16s ease;
 }
@@ -3366,7 +3379,7 @@ body.playing .room-icon-btn { display: none; }
 .dimwrap { position: relative; padding-top: 6px; }
 .dim {
   display: flex; align-items: baseline; gap: 5px;
-  background: none; border: 1px solid transparent; border-radius: 6px;
+  background: none; border: 1px solid transparent; border-radius: var(--r-sm);
   padding: 6px 10px; cursor: pointer; transition: 0.16s;
   font-family: var(--font-display);
 }
@@ -3387,7 +3400,7 @@ body.playing .room-icon-btn { display: none; }
   width: 188px; z-index: 5;
   background: color-mix(in oklab, var(--bg-card) 92%, transparent);
   border: 1px solid color-mix(in oklab, var(--accent) 22%, var(--border));
-  border-radius: 8px; padding: 10px; display: none;
+  border-radius: var(--r-md); padding: var(--space-2); display: none;
   box-shadow: 0 24px 60px -24px #000; backdrop-filter: blur(16px);
 }
 .dimpop.open { display: block; animation: dim-rise 0.16s ease; }
@@ -3403,7 +3416,7 @@ body.playing .room-icon-btn { display: none; }
 .drow .lbl { font-family: var(--font-body); font-size: 12px; color: var(--muted); font-weight: 600; }
 .step { display: flex; align-items: center; gap: 9px; }
 .step button {
-  width: 24px; height: 24px; border-radius: 5px;
+  width: 24px; height: 24px; border-radius: var(--r-sm);
   border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--border));
   background: color-mix(in oklab, var(--bg-card) 60%, transparent);
   color: var(--accent); font-size: 14px; cursor: pointer;
@@ -3419,16 +3432,16 @@ body.playing .room-icon-btn { display: none; }
 /* 3 ── Your table seat strip ───────────────────────────────────────────────*/
 .mytable {
   width: 100%; max-width: 340px;
-  display: flex; align-items: center; gap: 12px;
-  border-top: 1px solid var(--border); padding-top: 16px;
+  display: flex; align-items: center; gap: var(--space-3);
+  border-top: 1px solid var(--border); padding-top: var(--space-4);
 }
 /* Label trimmed to glyphs+count (aria-label="Your table" carries the meaning). */
 .mytable-lab { display: none; }
 /* Capacity is up to 8 — wrap so seats never overflow on mobile. */
-.mytable-seats { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+.mytable-seats { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: 1; }
 .seat {
   width: 44px; height: 44px; flex: none;
-  border-radius: 8px; display: grid; place-items: center; font-size: 21px;
+  border-radius: var(--r-md); display: grid; place-items: center; font-size: 21px;
 }
 .seat.you {
   background: linear-gradient(135deg, var(--accent), var(--warm));
@@ -3463,17 +3476,17 @@ body.lobby .lobby-rail {
   position: relative; z-index: 1;
   margin: 0; max-width: none;
   border: 1px solid color-mix(in oklab, var(--fg) 7%, var(--border));
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: color-mix(in oklab, var(--bg-card) 60%, transparent);
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-  padding: 14px 12px 12px;
+  padding: var(--space-3);
 }
 /* Cap the floor's scroll height so a busy arena scrolls instead of growing. */
 body.lobby .lobby-rail .lobby-rail-list,
 body.lobby #lobbyRailList { max-height: 248px; overflow: auto; }
 /* Floor rows: small radius + soft hover glow (prototype .t / .t.hot) instead of
    the heavy neon outline. The .is-hot pulse is softened to a single warm glow. */
-body.lobby .arena-row { border-radius: 5px; }
+body.lobby .arena-row { border-radius: var(--r-sm); }
 body.lobby .arena-row.is-hot {
   border-color: color-mix(in oklab, var(--warm) 50%, transparent);
   box-shadow: 0 0 30px -16px var(--warm);
