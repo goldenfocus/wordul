@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeDailyStatsFromRoster, computeRosterView } from "../public/daily-stats.js";
+import { computeDailyStatsFromRoster, computeRosterView, buildDayShareLine } from "../public/daily-stats.js";
 
 describe("computeDailyStatsFromRoster", () => {
   // Mirrors the Jun 6 screenshot bug: tiles must agree with the player list, always.
@@ -69,5 +69,37 @@ describe("computeRosterView", () => {
 
   it("handles an empty/absent roster", () => {
     expect(computeRosterView(null, "me")).toEqual({ rows: [], total: 0 });
+  });
+
+  // The recap rows are the golden card's rows: skull vs cross needs `resigned`, and
+  // tap-to-replay needs grid/words/durationMs — none of these may be dropped again.
+  it("keeps resigned, grid, words and durationMs for replays", () => {
+    const full = { players: [
+      { rank: 1, username: "ava", gold: 1240, guesses: 2, won: true, grid: ["ggggg"], words: ["TUBER"], durationMs: 95000 },
+      { rank: 2, username: "quit", gold: 0, guesses: 2, won: false, resigned: true, grid: ["xxxxx", "yyxxg"] },
+    ], total: 2 };
+    const v = computeRosterView(full, "me");
+    expect(v.rows[0]).toMatchObject({ grid: ["ggggg"], words: ["TUBER"], durationMs: 95000, resigned: false });
+    expect(v.rows[1]).toMatchObject({ resigned: true, grid: ["xxxxx", "yyxxg"] });
+  });
+});
+
+describe("buildDayShareLine", () => {
+  const rows = (mine) => [
+    { rank: 1, username: "remy", won: true, guesses: 5, isYou: false },
+    ...(mine ? [{ ...mine, isYou: true }] : []),
+  ];
+
+  it("a solver brags rank + guesses — never the word", () => {
+    const line = buildDayShareLine(rows({ rank: 2, username: "yan", won: true, guesses: 5 }), 6);
+    expect(line).toBe("I'm #2 of 6 on today's Wordul — solved in 5. Your turn.");
+  });
+
+  it("a non-solver asks to be avenged", () => {
+    expect(buildDayShareLine(rows({ rank: 5, username: "yan", won: false, guesses: 8 }), 6)).toContain("Avenge");
+  });
+
+  it("a spectator gets the plain invitation", () => {
+    expect(buildDayShareLine(rows(null), 6)).toContain("waiting");
   });
 });

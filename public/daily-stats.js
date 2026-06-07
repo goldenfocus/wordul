@@ -32,8 +32,10 @@ export function computeDailyStatsFromRoster(full) {
   return { played, wins, losses, winRate, avgGuesses, avgScore, distRows, maxCount };
 }
 
-// Shape the full-roster API response ({ players:[{rank,username,gold,guesses,won,resigned,durationMs}], youRank, total })
-// into rows ready to render, marking the viewer's own row. Pure — no DOM.
+// Shape the full-roster API response ({ players:[{rank,username,gold,guesses,won,resigned,durationMs,grid,words?}], youRank, total })
+// into rows ready to render, marking the viewer's own row. Pure — no DOM. Keeps
+// resigned (skull vs cross), grid/words (tap-to-replay; words only arrive finisher-
+// gated) and durationMs (shown in the replay modal, never inline in the row).
 export function computeRosterView(full, me) {
   const players = (full && Array.isArray(full.players)) ? full.players : [];
   const rows = players.map((e) => ({
@@ -42,8 +44,23 @@ export function computeRosterView(full, me) {
     gold: e.gold,
     guesses: e.guesses,
     won: !!e.won,
+    resigned: !!e.resigned,
+    grid: e.grid,
+    words: e.words,
     durationMs: e.durationMs,
     isYou: e.username === me,
   }));
   return { rows, total: (full && typeof full.total === "number") ? full.total : rows.length };
+}
+
+// The share line for a day's recap — spoiler-free, written to make a friend want to
+// try (never the answer, never the stats URL — the caller pairs it with the PLAY link).
+// Pure for tests: rows are computeRosterView rows; the viewer's row keys the message.
+export function buildDayShareLine(rows, total) {
+  const mine = Array.isArray(rows) ? rows.find((r) => r.isYou) : null;
+  if (mine && mine.won) {
+    return `I'm #${mine.rank} of ${total} on today's Wordul — solved in ${mine.guesses}. Your turn.`;
+  }
+  if (mine) return `Today's Wordul got me. Avenge me?`;
+  return `One word a day. Today's Wordul is waiting.`;
 }

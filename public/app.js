@@ -19,9 +19,9 @@ import { shareTargetUrl } from "/share-links.js";
 import { buildOwnerTape } from "/owner-tape.js";
 import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
 import { mountArenaList, pickNextGame } from "/arena-panel.js";
-import { computeDailyStatsFromRoster, computeRosterView } from "/daily-stats.js";
-import { fmtDuration, goldValue } from "/daily-card.js";
-import { mountDailyLeaderboard } from "/daily-lb.js";
+import { computeDailyStatsFromRoster, computeRosterView, buildDayShareLine } from "/daily-stats.js";
+import { rosterRow } from "/daily-card.js";
+import { mountDailyLeaderboard, wireReplayRows } from "/daily-lb.js";
 import { computeFeedStreamView, computeFeedPostView } from "/feed.js";
 import { EDITIONS, getEdition } from "/editions/index.js";
 import { ghostPlayersAt, nextEventAfter, hostFinish } from "/ghost-replay.js";
@@ -1071,10 +1071,15 @@ async function showDailyStats(date) {
     <div class="daily-stats-body" id="dailyStatsBody"><p class="muted small">Loading today's numbers…</p></div>
     <h2 class="daily-stats-sub">Players</h2>
     <div class="daily-roster" id="dailyRoster"><p class="muted small">Loading players…</p></div>
+    <div class="daily-stats-actions">
+      <button type="button" class="btn primary small" id="dailyStatsShare">Share</button>
+      <a href="/" class="btn ghost small" id="dailyStatsHome">Home</a>
+    </div>
     <a href="/feed" class="link lab-entry" id="dailyLabLink">🧠 See what the lab learned →</a>`;
   app.appendChild(screen);
   $("#dailyStatsBack").addEventListener("click", (e) => { e.preventDefault(); navigate("/"); });
   $("#dailyLabLink").addEventListener("click", (e) => { e.preventDefault(); navigate("/feed"); });
+  $("#dailyStatsHome").addEventListener("click", (e) => { e.preventDefault(); navigate("/"); });
   let full = null;
   try {
     const me = getUsername();
@@ -1089,6 +1094,20 @@ async function showDailyStats(date) {
   renderDailyStatsReveal(full);
   renderDailyStatsBody(full);
   renderDailyRoster(full);
+  // Share brags spoiler-free and hands out the day's PLAY link — a friend should land
+  // on the puzzle, never on a page of answers. Native sheet on mobile, else clipboard.
+  $("#dailyStatsShare")?.addEventListener("click", () => {
+    const view = computeRosterView(full, getUsername());
+    const line = buildDayShareLine(view.rows, view.total);
+    const url = `${location.origin}/daily/${date}`;
+    if (typeof navigator.share === "function") {
+      navigator.share({ title: "Wordul of the Day", text: line, url }).catch(() => {});
+    } else if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(`${line} ${url}`).then(() => toast("Copied — share it anywhere")).catch(() => {});
+    } else {
+      toast("Sharing isn't supported on this browser");
+    }
+  });
 }
 
 // The word's wiki info atop the stats — rendered ONLY when the server echoed the answer
@@ -1127,8 +1146,10 @@ function renderDailyStatsReveal(full) {
   box.hidden = false;
 }
 
-// Paint the full ranked roster (names, gold, guesses, duration) below the aggregates.
-// Same payload as the tiles — one source, no disagreement possible.
+// Paint the full ranked roster below the aggregates — the SAME rows as the golden
+// card (medal/#N · @name · gold · in N / ✗ / 💀), tap-to-replay included. No inline
+// time (it lives in the replay modal), so a row can never wrap. Same payload as the
+// tiles — one source, no disagreement possible.
 function renderDailyRoster(full) {
   const me = getUsername();
   const host = $("#dailyRoster");
@@ -1138,20 +1159,18 @@ function renderDailyRoster(full) {
     host.innerHTML = `<p class="muted small">No finishers recorded.</p>`;
     return;
   }
-  host.innerHTML = `<ul class="daily-roster-list">${view.rows.map((r) => {
-    const u = String(r.username).replace(/[^a-z0-9_-]/gi, "");
-    const dur = fmtDuration(r.durationMs);
-    return `<li class="daily-roster-row${r.isYou ? " is-you" : ""}">
-      <span class="daily-roster-rank">${r.rank}</span>
-      <a class="daily-roster-name" href="/@${u}" data-profile="${u}">${r.isYou ? `you (@${u})` : `@${u}`}</a>
-      <span class="daily-roster-gold">${goldValue(r.gold)}</span>
-      <span class="daily-roster-guesses">${r.won ? `in ${r.guesses}` : "missed"}</span>
-      ${dur ? `<span class="daily-roster-time">${dur}</span>` : ""}
-    </li>`;
-  }).join("")}</ul>`;
+  host.innerHTML = `<ul class="daily-top-list">${view.rows.map((r) => rosterRow(r, me)).join("")}</ul>`;
   host.querySelectorAll("a[data-profile]").forEach((a) => {
-    a.addEventListener("click", (e) => { e.preventDefault(); navigate("/@" + a.getAttribute("data-profile")); });
+    a.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      navigate("/@" + a.getAttribute("data-profile"));
+    });
   });
+  // Tap a row → that player's board replays (colors for everyone; letters arrive only
+  // finisher-gated from the server). Keyed by data-user = escaped username.
+  const entries = new Map();
+  view.rows.forEach((r) => entries.set(String(r.username).replace(/[^a-z0-9_-]/gi, ""), r));
+  wireReplayRows(host, entries);
 }
 
 function renderDailyStatsBody(full) {

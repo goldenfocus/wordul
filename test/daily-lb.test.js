@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mountDailyLeaderboard } from "../public/daily-lb.js";
 
 const entry = (username, gold, over = {}) => ({
-  username, gold, guesses: 3, won: true, grid: ["xxxxx", "ggggg"], words: ["SLOTH", "PENNE"], ...over,
+  username, gold, guesses: 3, won: true, grid: ["xxxxx", "ggggg"], words: ["SLOTH", "PENNE"], durationMs: 171000, ...over,
 });
 const topView = {
   top: [entry("ada", 400), entry("bob", 300), entry("cyd", 200)],
@@ -43,6 +43,22 @@ describe("mountDailyLeaderboard", () => {
     expect(mount.querySelector("#dailyLbShowAll").textContent).toContain("40");
     // The finisher token rides the request — letters unlock server-side.
     expect(String(globalThis.fetch.mock.calls[0][0])).toContain("t=tok-1");
+  });
+
+  it("your row is plain @name (accented in CSS) — never a 'you (@name)' prefix", async () => {
+    const mount = document.getElementById("dailyLeaderboard");
+    mountDailyLeaderboard({ mount, date: "2026-06-06", username: "yan" });
+    await flush();
+    const you = mount.querySelector(".daily-top-row.is-you .daily-top-name");
+    expect(you.textContent).toBe("@yan");
+    expect(mount.textContent).not.toContain("you (@");
+  });
+
+  it("links to the day's full recap (stats page)", async () => {
+    const mount = document.getElementById("dailyLeaderboard");
+    mountDailyLeaderboard({ mount, date: "2026-06-06", username: "yan" });
+    await flush();
+    expect(mount.querySelector(".daily-lb-recap").getAttribute("href")).toBe("/daily/2026-06-06/stats");
   });
 
   it("is idempotent per mount (renderDailyUnlock runs per snapshot)", async () => {
@@ -130,6 +146,16 @@ describe("replay popup", () => {
     expect(stamp).toBeTruthy();
     expect(stamp.classList.contains("has-letters")).toBe(true);   // finisher → real letters
     expect(stamp.querySelectorAll(".is-veiled").length).toBeGreaterThan(0); // replay started
+  });
+
+  it("the modal head tells the full story — result AND solve time (rows stay minimal)", async () => {
+    const mount = document.getElementById("dailyLeaderboard");
+    mountDailyLeaderboard({ mount, date: "2026-06-06", username: "yan" });
+    await flush();
+    mount.querySelector('.daily-top-row[data-user="ada"]').click();
+    const head = document.querySelector(".daily-lb-modal-head");
+    expect(head.querySelector(".daily-top-guesses").textContent).toContain("in 3");
+    expect(head.querySelector(".daily-lb-modal-time").textContent).toBe("2m 51s"); // 171000ms
   });
 
   it("Esc closes and focus returns to the opener row", async () => {

@@ -121,6 +121,32 @@ function renderFeaturedCard(entry, { isYou, yourGrid, yourWords, rank }) {
   return `${grid}<div class="daily-featured-cap is-other">${bits.join("")}</div>`;
 }
 
+// Result column shared by every leaderboard row: solved → "in N"; gave up → skull
+// (forfeit, 0 gold); ran out of guesses → cross. Luxe currentColor glyphs (never
+// emoji), themed by class in CSS.
+export function resultMark(entry) {
+  return entry.won
+    ? `in ${entry.guesses}`
+    : entry.resigned
+      ? `<span class="daily-top-mark is-quit" role="img" aria-label="gave up" title="gave up">${GLYPH.skull}</span>`
+      : `<span class="daily-top-mark is-out" role="img" aria-label="ran out of guesses" title="ran out of guesses">${GLYPH.cross}</span>`;
+}
+
+// One roster row — the SAME vocabulary on every after-the-word surface (golden card,
+// Show-all roster, day Stats page): medal/#N · @name · gold · result. Your own row is
+// marked .is-you (outline + accented name in CSS) — never a "you (@name)" prefix, and
+// never an inline time, so the row can't wrap. Duration lives in the replay modal.
+export function rosterRow(e, me) {
+  const u = escAttr(e.username);
+  const mine = u === escAttr(me);
+  return `<li class="daily-top-row${mine ? " is-you" : ""}" data-user="${u}">
+    <span class="daily-top-rank" aria-hidden="true">${e.rank <= 3 ? medalGlyph(e.rank) : `#${e.rank}`}</span>
+    <a class="daily-top-name" href="/@${u}" data-profile="${u}">@${u}</a>
+    <span class="daily-top-gold">${goldValue(e.gold)}</span>
+    <span class="daily-top-guesses">${resultMark(e)}</span>
+  </li>`;
+}
+
 // Build the leaderboard HTML from a LeaderboardView ({ top, you, total }) and the
 // viewer's own username. Top-3 medal rows; your medal row gets .is-you; if you're
 // outside the top, a pinned row with your real rank — always shown ("celebrate you").
@@ -130,19 +156,11 @@ export function renderLeaderboard(view, me) {
     const u = escAttr(entry.username);
     const badge = opts.pinned ? `#${rank}` : medalGlyph(rank);
     const mine = u === escAttr(me);
-    const label = mine ? `you (@${u})` : `@${u}`;
-    // Result column: solved → "in N"; gave up → skull (forfeit, 0 gold); ran out of
-    // guesses → cross. Luxe currentColor glyphs (never emoji), themed by class in CSS.
-    const result = entry.won
-      ? `in ${entry.guesses}`
-      : entry.resigned
-        ? `<span class="daily-top-mark is-quit" role="img" aria-label="gave up" title="gave up">${GLYPH.skull}</span>`
-        : `<span class="daily-top-mark is-out" role="img" aria-label="ran out of guesses" title="ran out of guesses">${GLYPH.cross}</span>`;
     return `<li class="daily-top-row${mine ? " is-you" : ""}${opts.pinned ? " is-pinned" : ""}" data-user="${u}">
       <span class="daily-top-rank" aria-hidden="true">${badge}</span>
-      <a class="daily-top-name" href="/@${u}" data-profile="${u}">${label}</a>
+      <a class="daily-top-name" href="/@${u}" data-profile="${u}">@${u}</a>
       <span class="daily-top-gold">${goldValue(entry.gold)}</span>
-      <span class="daily-top-guesses">${result}</span>
+      <span class="daily-top-guesses">${resultMark(entry)}</span>
     </li>`;
   };
   const medals = view.top.map((e, i) => row(e, i + 1)).join("");

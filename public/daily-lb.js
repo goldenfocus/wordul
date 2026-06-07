@@ -5,8 +5,7 @@
 // (N)" swaps in the full roster (internal scroll past SCROLL_AT rows) → tapping
 // any row pops the player's auto-playing replay (replay-modal, Task 7).
 // Decoupling: NEVER imports app.js — i18n comes in via opts.t (settle.js pattern).
-import { renderLeaderboard, renderStamp, boardRows, goldValue, medalGlyph } from "/daily-card.js";
-import { GLYPH } from "/hub-glyphs.js";
+import { renderLeaderboard, renderStamp, boardRows, goldValue, rosterRow, resultMark, fmtDuration } from "/daily-card.js";
 import { playStampReplay } from "/stamp-replay.js";
 
 const SCROLL_AT = 25; // past this many rows the roster scrolls inside the card
@@ -16,34 +15,18 @@ function escAttr(s) { return String(s).replace(/[^a-z0-9_-]/gi, ""); } // userna
 // listeners). Set to null when the modal self-closes; overwritten when one replaces another.
 let closeActive = null;
 
-// One full-roster row — same vocabulary as the home card's medal rows (medals for the
-// podium, plain #N beyond), so the expanded list reads as "more of the same board".
-function rosterRow(e, me) {
-  const u = escAttr(e.username);
-  const mine = u === escAttr(me);
-  const result = e.won
-    ? `in ${e.guesses}`
-    : e.resigned
-      ? `<span class="daily-top-mark is-quit" role="img" aria-label="gave up" title="gave up">${GLYPH.skull}</span>`
-      : `<span class="daily-top-mark is-out" role="img" aria-label="ran out of guesses" title="ran out of guesses">${GLYPH.cross}</span>`;
-  return `<li class="daily-top-row${mine ? " is-you" : ""}" data-user="${u}">
-    <span class="daily-top-rank" aria-hidden="true">${e.rank <= 3 ? medalGlyph(e.rank) : `#${e.rank}`}</span>
-    <a class="daily-top-name" href="/@${u}" data-profile="${u}">${mine ? `you (@${u})` : `@${u}`}</a>
-    <span class="daily-top-gold">${goldValue(e.gold)}</span>
-    <span class="daily-top-guesses">${result}</span>
-  </li>`;
-}
-
 // Tap a row → that player's board pops up and replays itself. The stamp is built from
 // the row's leaderboard entry (grid always; words only when the server unlocked them
 // for this finisher). Scrim tap / ✕ / Esc dismiss; focus returns to the opener row.
 // Lifecycle: closeActive tracks the live close fn so evicting a prior modal goes through
 // close() — this removes its document keydown listener and avoids orphaned listeners.
 // The refocus param lets eviction skip the focus-return (the incoming modal owns focus).
-function openReplayModal(entry, opener) {
+export function openReplayModal(entry, opener) {
   closeActive?.({ refocus: false }); // evict any existing modal cleanly (no orphaned keydown)
   const u = escAttr(entry.username);
   const cols = Array.isArray(entry.grid) && entry.grid[0] ? String(entry.grid[0]).length : 5;
+  // The row stays minimal; the full story lives here — result AND how long it took.
+  const dur = fmtDuration(entry.durationMs);
   const overlay = document.createElement("div");
   overlay.id = "dailyLbModal";
   overlay.className = "daily-lb-modal";
@@ -51,6 +34,8 @@ function openReplayModal(entry, opener) {
     <div class="daily-lb-modal-head">
       <a class="daily-top-name" href="/@${u}" data-profile="${u}">@${u}</a>
       <span class="daily-top-gold">${goldValue(entry.gold)}</span>
+      <span class="daily-top-guesses">${resultMark(entry)}</span>
+      ${dur ? `<span class="daily-lb-modal-time">${dur}</span>` : ""}
       <button type="button" class="daily-lb-modal-close" aria-label="Close">✕</button>
     </div>
     ${renderStamp(entry.grid, entry.words, boardRows(cols))}
@@ -74,6 +59,23 @@ function openReplayModal(entry, opener) {
   return overlay;
 }
 
+// Make every .daily-top-row under root tappable: tap/Enter/Space → that player's replay
+// modal (rows whose entry has no grid simply don't open). entries is a Map keyed by the
+// row's data-user (escaped username). Shared by the golden card AND the day Stats page.
+export function wireReplayRows(root, entries) {
+  root.querySelectorAll(".daily-top-row").forEach((row) => {
+    row.setAttribute("tabindex", "0");
+    const open = () => {
+      const hit = entries.get(row.getAttribute("data-user"));
+      if (hit && Array.isArray(hit.grid) && hit.grid.length) openReplayModal(hit, row);
+    };
+    row.addEventListener("click", (e) => { if (!e.target.closest("a")) open(); });
+    row.addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === " ") && !e.target.closest("a")) { e.preventDefault(); open(); }
+    });
+  });
+}
+
 // Mount once per finished daily (idempotent — renderDailyUnlock runs on every snapshot).
 // opts: { mount, date, username, t? } — t is the i18n fn (identity fallback keeps tests hermetic).
 export function mountDailyLeaderboard({ mount, date, username, t = (_k, f) => f }) {
@@ -84,19 +86,7 @@ export function mountDailyLeaderboard({ mount, date, username, t = (_k, f) => f 
   const api = (extra) => `/api/daily/${date}/leaderboard?username=${encodeURIComponent(username)}${extra}${tq}`;
   // Row index by escaped username → entry, so a tap can open the right board.
   const entries = new Map();
-  const wireRows = (root) => {
-    root.querySelectorAll(".daily-top-row").forEach((row) => {
-      row.setAttribute("tabindex", "0");
-      const open = () => {
-        const hit = entries.get(row.getAttribute("data-user"));
-        if (hit && Array.isArray(hit.grid) && hit.grid.length) openReplayModal(hit, row);
-      };
-      row.addEventListener("click", (e) => { if (!e.target.closest("a")) open(); });
-      row.addEventListener("keydown", (e) => {
-        if ((e.key === "Enter" || e.key === " ") && !e.target.closest("a")) { e.preventDefault(); open(); }
-      });
-    });
-  };
+  const wireRows = (root) => wireReplayRows(root, entries);
   fetch(api("&n=3"))
     .then((r) => (r.ok ? r.json() : null))
     .then((view) => {
@@ -107,8 +97,11 @@ export function mountDailyLeaderboard({ mount, date, username, t = (_k, f) => f 
       view.top.forEach((e) => entries.set(escAttr(e.username), e));
       if (view.you) entries.set(escAttr(view.you.username), view.you);
       const more = view.total > view.top.length + (view.you ? 1 : 0);
+      // The recap link closes the loop: post-finish card → the day's full Stats page
+      // (same rows, same replays) — one continuous after-the-word surface.
       mount.innerHTML = renderLeaderboard(view, username) +
-        (more ? `<button type="button" class="daily-lb-showall" id="dailyLbShowAll">${t("daily.lbShowAll", "Show all")} (${view.total}) →</button>` : "");
+        (more ? `<button type="button" class="daily-lb-showall" id="dailyLbShowAll">${t("daily.lbShowAll", "Show all")} (${view.total}) →</button>` : "") +
+        `<a class="daily-lb-recap" href="/daily/${date}/stats">${t("daily.lbRecap", "Full day recap")} →</a>`;
       mount.hidden = false;
       wireRows(mount);
       const showAll = mount.querySelector("#dailyLbShowAll");
