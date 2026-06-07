@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { triesFor, seatModel, compactRowProps, ghostSeatModel } from "../public/lobby-view.js";
+import { triesFor, seatModel, compactRowProps, ghostSeatModel, railPillLabel } from "../public/lobby-view.js";
 
 describe("triesFor (mirrors server guessesFor)", () => {
   it("is length+1, plateauing at 8", () => {
@@ -62,5 +62,44 @@ describe("compactRowProps (floor row)", () => {
     expect(p.tries).toBe(8);
     expect(p.host).toBe("maya");
     expect(p.seats).toBe("4/5");
+  });
+});
+
+describe("seatModel spectators (Lobby v2)", () => {
+  const snap = {
+    capacity: 2,
+    players: [
+      { username: "papa", role: "duelist", ready: true },
+      { username: "kai", role: "duelist" },
+      { username: "zoe", role: "spectator" },
+      { username: "ana", role: "spectator" },
+    ],
+  };
+  it("excludes spectators from seats and counts them as watching", () => {
+    const m = seatModel(snap, "papa");
+    expect(m.seats.map((s) => s.kind)).toEqual(["you", "taken"]);
+    expect(m.taken).toBe(2);
+    expect(m.capacity).toBe(2);
+    expect(m.watching).toBe(2);
+    expect(m.iAmSpectator).toBe(false);
+  });
+  it("a spectator viewer gets no you-seat and knows it", () => {
+    const m = seatModel(snap, "zoe");
+    expect(m.seats.map((s) => s.kind)).toEqual(["taken", "taken"]);
+    expect(m.iAmSpectator).toBe(true);
+    expect(m.watching).toBe(2); // zoe counts herself among the watchers
+  });
+  it("legacy snapshots without roles still seat everyone", () => {
+    const m = seatModel({ capacity: 3, players: [{ username: "papa" }, { username: "kai" }] }, "papa");
+    expect(m.seats.map((s) => s.kind)).toEqual(["you", "taken", "empty"]);
+    expect(m.watching).toBe(0);
+  });
+});
+
+describe("railPillLabel", () => {
+  it("pluralizes the open-tables count", () => {
+    expect(railPillLabel(0)).toBe("0 tables open");
+    expect(railPillLabel(1)).toBe("1 table open");
+    expect(railPillLabel(7)).toBe("7 tables open");
   });
 });

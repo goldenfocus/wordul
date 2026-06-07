@@ -5,19 +5,36 @@ export function triesFor(length) {
   return Math.min(length + 1, 8);
 }
 
-// Build the "Your table" seat model from a snapshot. Seat 0 is always "you";
-// remaining joined players are "taken"; pad with "empty" up to capacity.
-// capacity falls back to max(2, players.length) when the server didn't send one.
+// Build the "Your table" seat model from a snapshot. Seats hold the rotation roster only
+// (duelists + queued, capped at capacity); spectators are excluded and surface as a
+// `watching` count instead. Seat 0 is "you" — unless YOU are the spectator (iAmSpectator),
+// in which case there is no you-seat and the strip shows the table you're watching.
+// capacity falls back to max(2, seated) when the server didn't send one.
 export function seatModel(snap, me) {
   const players = Array.isArray(snap && snap.players) ? snap.players : [];
-  const capacity = Math.max(2, Number(snap && snap.capacity) || players.length || 2);
+  const seated = players.filter((p) => p && p.role !== "spectator");
+  const watching = players.length - seated.length;
   const mine = players.find((p) => p && p.username === me);
-  const others = players.filter((p) => p && p.username !== me);
+  const iAmSpectator = !!(mine && mine.role === "spectator");
+  const capacity = Math.max(2, Number(snap && snap.capacity) || seated.length || 2);
+  const others = seated.filter((p) => p.username !== me);
   const seats = [];
-  seats.push({ kind: "you", username: me, icon: null, ready: !!(mine && mine.ready) });
+  if (!iAmSpectator) seats.push({ kind: "you", username: me, icon: null, ready: !!(mine && mine.ready) });
   for (const p of others) seats.push({ kind: "taken", username: p.username, isBot: !!p.isBot, ready: !!p.ready });
   while (seats.length < capacity) seats.push({ kind: "empty" });
-  return { seats: seats.slice(0, Math.max(capacity, seats.length)), taken: players.length, capacity };
+  return {
+    seats: seats.slice(0, Math.max(capacity, seats.length)),
+    taken: seats.filter((s) => s.kind !== "empty").length,
+    capacity,
+    watching,
+    iAmSpectator,
+  };
+}
+
+// The mobile rail pill's label — the "▸" arrow is markup, this is just the words.
+export function railPillLabel(n) {
+  const c = Number(n) || 0;
+  return `${c} table${c === 1 ? "" : "s"} open`;
 }
 
 // Challenge rooms are solo-vs-ghosts (one DO per player): the seat strip shows the
