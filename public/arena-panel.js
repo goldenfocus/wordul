@@ -66,7 +66,7 @@ export function nextPollMs(state, inLobby) {
 // onJoin(routePath) is called when a row is tapped (typically → navigate(routePath)).
 // opts.excludePath: drop the row for that routePath (the room you're already sitting in)
 //   and, when given, show the "you're first — others trickle in" lobby copy on an empty list.
-export function mountArenaList(mountEl, { onJoin, excludePath } = {}) {
+export function mountArenaList(mountEl, { onJoin, excludePath, onCount } = {}) {
   if (!mountEl) return () => {};
   let stopped = false;
   let timer = null;
@@ -78,6 +78,9 @@ export function mountArenaList(mountEl, { onJoin, excludePath } = {}) {
     const visible = Array.isArray(games) ? games.filter((g) => g && g.routePath !== excludePath) : games;
     const state = arenaEmptyState(visible, isError);
     lastState = state;
+    // Live count for the lobby rail's mobile pill ("▸ N tables open"). Only meaningful
+    // states report: loading/error keep the last good number instead of flashing 0.
+    if (onCount && (state === "list" || state === "empty")) onCount(state === "list" ? visible.length : 0);
     if (state === "loading") { mountEl.innerHTML = `<div class="arena-state">Finding opponents…</div>`; return; }
     if (state === "error") { mountEl.innerHTML = `<div class="arena-state">Couldn't reach the Arena. Retrying…</div>`; return; }
     if (state === "empty") {

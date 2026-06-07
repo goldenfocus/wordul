@@ -3306,6 +3306,41 @@ body.lobby .lobby-right {
 @media (min-width: 881px) {
   body.lobby .lobby-rail { order: -1; }
 }
+/* Mobile rail pill: ≤880px the rail collapses to "▸ N tables open"; tap expands the
+   list in place (the poll never stops). Desktop never sees the pill. */
+.lobby-rail-pill { display: none; }
+@media (max-width: 880px) {
+  body.lobby .lobby-rail-title { display: none; } /* the pill IS the header on mobile */
+  body.lobby .lobby-rail {
+    padding: 0; border: none; background: none;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+  body.lobby .lobby-rail-pill {
+    display: flex; align-items: center; gap: var(--space-2);
+    width: 100%; padding: var(--space-2) var(--space-3);
+    border: 1px solid color-mix(in oklab, var(--fg) 7%, var(--border));
+    border-radius: var(--r-md);
+    background: color-mix(in oklab, var(--bg-card) 60%, transparent);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    color: var(--muted); font-family: var(--font-body);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  body.lobby .lobby-rail-pill-arrow { transition: transform 0.16s ease; }
+  body.lobby .lobby-rail.expanded .lobby-rail-pill-arrow { transform: rotate(90deg); }
+  body.lobby .lobby-rail:not(.expanded) .lobby-rail-list { display: none; }
+  /* Expanded: the card surface returns around pill + list. */
+  body.lobby .lobby-rail.expanded {
+    border: 1px solid color-mix(in oklab, var(--fg) 7%, var(--border));
+    border-radius: var(--r-md);
+    background: color-mix(in oklab, var(--bg-card) 60%, transparent);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    padding: var(--space-2);
+  }
+  body.lobby .lobby-rail.expanded .lobby-rail-pill {
+    border: none; background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+    padding: var(--space-1) var(--space-1) var(--space-2);
+  }
+}
 /* In lobby the header owns the room name + the two-zone layout owns the screen,
    so the in-bar title card + the Play/Games/Players tabs collapse away.
    (JS already sets #roomTabs.hidden; this is belt-and-suspenders.) */

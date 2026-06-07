@@ -36,7 +36,7 @@ import { renderSettlement, dailyReceiptLines } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
 import { autoPlayBoardOnce, boardReplayActive } from "/board-replay.js";
-import { seatModel, ghostSeatModel } from "/lobby-view.js";
+import { seatModel, ghostSeatModel, railPillLabel } from "/lobby-view.js";
 import { encodeLocalSolve, needsDailyRecovery, recoverDailyArtifacts } from "/daily-recover.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
@@ -1617,6 +1617,7 @@ function mountLobbyRailIfNeeded() {
   const list = $("#lobbyRailList");
   if (!el || !list) return;
   el.hidden = false;
+  wireLobbyRailPill(el);
   if (lobbyRailStop) return; // already polling — don't restart on every render()
   const mine = `/@${game.owner}/${game.slug}`;
   lobbyRailStop = mountArenaList(list, {
@@ -1624,6 +1625,24 @@ function mountLobbyRailIfNeeded() {
     // Defect: leave this room and jump into the tapped one. showRoom()→leaveRoom() closes
     // the current socket; the 45s abandon-grace then delists the table I bailed from.
     onJoin: (routePath) => { pendingArenaOrigin = true; navigate(routePath); },
+    // Mobile pill header rides the same poll — "▸ N tables open" stays live while collapsed.
+    onCount: (n) => {
+      const c = $("#lobbyRailPillCount");
+      if (c) c.textContent = railPillLabel(n);
+    },
+  });
+}
+
+// The mobile rail collapses to a "▸ N tables open" pill; tap toggles the list open.
+// Collapsed-vs-expanded is pure CSS (≤880px scoped) — desktop never shows the pill, so
+// the class is inert there. Wired once per mount (the room template rebuilds the node).
+function wireLobbyRailPill(el) {
+  const pill = $("#lobbyRailPill");
+  if (!pill || pill.dataset.wired) return;
+  pill.dataset.wired = "1";
+  pill.addEventListener("click", () => {
+    const expanded = el.classList.toggle("expanded");
+    pill.setAttribute("aria-expanded", String(expanded));
   });
 }
 

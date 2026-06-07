@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { arenaRowProps, arenaEmptyState, pickNextGame, seatLabel, isHot, nextPollMs } from "../public/arena-panel.js";
 import { compactRowProps } from "../public/lobby-view.js";
 
@@ -113,5 +114,13 @@ describe("compact floor row", () => {
     const p = compactRowProps({ routePath: "/@m/x", personaIcon: "🦊", host: "maya", wordLength: 6, seats: "2/4", edition: "default" });
     expect(p.tries).toBe(7);
     expect(p.dim).toBe("6×7");
+  });
+});
+
+describe("rail pill count plumbing", () => {
+  const src = readFileSync(new URL("../public/arena-panel.js", import.meta.url), "utf8");
+  it("mountArenaList reports the visible count via onCount", () => {
+    expect(src).toContain("onCount");
+    expect(src).toContain("onCount(state === \"list\" ? visible.length : 0)");
   });
 });

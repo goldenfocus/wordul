@@ -67,3 +67,15 @@ describe("lobby v2 mobile order", () => {
     expect(css).toMatch(/min-width: 881px[\s\S]{0,200}\.lobby-rail \{ order: -1; \}/);
   });
 });
+
+describe("lobby v2 rail pill", () => {
+  it("the rail has a pill header and the lobby wires its toggle + live count", () => {
+    expect(html).toContain('id="lobbyRailPill"');
+    expect(html).toContain('id="lobbyRailPillCount"');
+    expect(app).toContain("railPillLabel");
+    expect(app).toContain("function wireLobbyRailPill");
+  });
+  it("mobile collapses the rail to the pill via CSS", () => {
+    expect(css).toMatch(/\.lobby-rail:not\(\.expanded\)[\s\S]{0,120}\.lobby-rail-list \{ display: none; \}/);
+  });
+});
