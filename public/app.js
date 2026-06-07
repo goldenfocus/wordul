@@ -5592,6 +5592,10 @@ function showWorld(slug) {
 
 function route() {
   stopArenaPoll(); // leaving the in-place Arena view (incl. browser Back / popstate) kills its poll
+  // The ritual stage class must not outlive the daily view: routes that don't pass
+  // through leaveRoom (/feed, /worlds, stats) would otherwise keep header chrome
+  // hidden. renderDailyUnlock re-adds it whenever a finished daily renders.
+  document.body.classList.remove("daily-ritual");
   const r = parseRoute();
   renderCrumbs(r);
   if (r.kind === "challenge") {
