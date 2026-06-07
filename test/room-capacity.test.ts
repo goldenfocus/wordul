@@ -146,6 +146,25 @@ describe("spectator role", () => {
     expect(room.state.phase).toBe("lobby");
   });
 
+  it("KOTH rotation never touches a spectator", async () => {
+    const { room } = makeRoom();
+    const [a, b, c, d] = [mockWs(), mockWs(), mockWs(), mockWs()];
+    await join(room, a, "alice");
+    await join(room, b, "bob");
+    room.state.capacity = 3;          // open one queue seat…
+    await join(room, c, "cara");      // …cara takes it (queued)
+    room.state.capacity = 2;          // legacy-style shrink: cara stays seated (no evictions)
+    await join(room, d, "dan");       // dan is past capacity → spectator
+    room.state.winner = "alice";      // alice won the round
+    (room as unknown as { applyRotation: () => void }).applyRotation();
+    const dan = room.state.players.find((p) => p.username === "dan")!;
+    expect(dan.role).toBe("spectator");                 // untouched by rotation
+    expect(room.state.queue).not.toContain("dan");      // and still outside the queue
+    // sanity: the queue advanced normally around him — cara stepped up, bob dropped back
+    expect(room.state.players.find((p) => p.username === "cara")!.role).toBe("duelist");
+    expect(room.state.queue).toEqual(["bob"]);
+  });
+
   it("MAX_PLAYERS (8) still caps the room overall — joiner #9 is rejected", async () => {
     const { room } = makeRoom();
     const names = ["alice", "bob", "cara", "dan", "eve", "fay", "gus", "hal", "ivy"];

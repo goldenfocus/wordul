@@ -1288,6 +1288,8 @@ export class Room extends DurableObject<Env> {
     const botRole: "duelist" | "queued" | "spectator" = this.isDuelRoom()
       ? nextSeatRole(this.state.players, this.state.capacity)
       : "duelist";
+    // A clanker that can't ever play is dead weight — skip the add when the table is full.
+    if (botRole === "spectator") return;
     this.state.players.push({
       username: botName,
       connected: true,
