@@ -27,13 +27,15 @@ Compact event stream, ms offsets from round GO (same time basis as the existing 
 
 ```js
 { v: 1, events: [ [t, kind, ...data], ... ], truncated?: true }
-// "k" letter typed        ["k", 4520, "s"]
-// "b" backspace           ["b", 5100]
-// "c" clear-line (hold)   ["c", 9300]
-// "s" submit accepted     ["s", 12040, rowIndex]   // word+mask join from leaderboard data
-// "r" submit rejected     ["r", 8000, "notaword"]
-// "p" power-up / penalty  ["p", 15200, "deadletter-drain"]
-// "v" companion line      ["v", 12300, lineId]
+// events are [t, kind, data?] (t first — keeps rows compact):
+// "k" letter typed        [4520, "k", "S"]
+// "b" backspace           [5100, "b"]
+// "c" clear-line (hold)   [9300, "c"]
+// "e" guess submitted     [12040, "e"]   // accepted unless an "r" follows before the
+//                                        // next k/b/c/e; masks join from leaderboard grid
+// "r" submit rejected     [8000, "r"]
+// "p" power-up / penalty  [15200, "p", "vowels"]
+// "v" companion line      [12300, "v", { raw, text, voice, revealVoice, answer? }]
 ```
 
 - Cap: **5,000 events / 32KB serialized** (ghost-tape precedent, `src/ghost-core.ts`).
@@ -57,8 +59,11 @@ Compact event stream, ms offsets from round GO (same time basis as the existing 
 ### 3. Upload (client → Room DO)
 - When the game is scored (win, loss, or resign), client sends one
   `{ type: "tape", date, events }` WS message.
-- `src/room.ts` handler validates: sender is the player, player is scored, size ≤ cap,
-  accepts **once** (first write wins). Stores under DO storage key `tape:<username>`.
+- `src/room.ts` handler validates: sender is the player, player has reached a terminal
+  status (status-based, not scored-based — scorePlayer broadcasts the terminal snapshot
+  before the mint confirms `scored`), size ≤ cap, accepts **once** (first write wins).
+  Stores `{ events, truncated }` under DO storage key `tape:<username>` — a separate key,
+  never inside room state, so snapshots and persists stay light.
 - If the WS is gone (tab crashed), the localStorage mirror is offered for upload on the
   next visit to that day's room (revisit flow already reconnects).
 
