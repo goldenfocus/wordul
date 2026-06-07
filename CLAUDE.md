@@ -13,6 +13,10 @@
 >    hook** (`prepush-freshness.sh`) — rebase to integrate others' work, never force-push.
 > 3. **Deploy is automatic — never run `wrangler deploy` by hand.** CI
 >    (`.github/workflows/deploy.yml`) deploys `origin/main` on merge. Prod always == main.
+> 4. **Keep this file true.** If your change makes any statement in `CLAUDE.md` wrong — a path,
+>    a command, a secret's location, how deploy works — fix it in the SAME change/ship. A stale
+>    instruction misleads every future tab and has already cost real debug time. Treat the docs
+>    as part of the code you're editing, not an afterthought.
 >
 > **Why:** worktree isolation + rebase-before-push + CI-only deploy are the three things that
 > stop the "another agent reverted my work / a stale local deploy reverted prod" failures.
@@ -30,13 +34,17 @@ deployments-cicd, etc.) — they do not apply here.
 - **Worker = `wordul`** (renamed from the legacy `wordle-race` on 2026-06-05). It hosts every
   Durable Object (`wordul_Room`, `_User`, `_WordStats`, `_Challenge`, `_Daily`, `_Science`,
   `_Arena`). The public domain is **`wordul.com`** (custom domain; `workers_dev:false`).
-- **Worker secrets live ONLY on the worker, never in `wrangler.jsonc`** — so `wrangler deploy`
-  does **not** carry them, and renaming/recreating the worker drops them. Required runtime
-  secrets: `DAILY_SALT` (anti-cheat seed for the daily word) and `DAILY_ADMIN_TOKEN` (gates
-  `POST /daily/schedule`). Both are optional in code (graceful no-op when unset). Re-set after
-  any worker recreate via `wrangler secret put <NAME>`. The encrypted vault
-  `~/golden-cloud/secrets/wordul-prod.env` holds **only** the `CLOUDFLARE_*` deploy creds — NOT
-  these two — so they have no canonical backup; rotate, don't expect to recover an old value.
+- **Two kinds of secret, two homes** (verified 2026-06-07):
+  - **CI deploy creds** — `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` live as **GitHub
+    Actions repo secrets** (set 2026-06-05; `gh secret list` to confirm). CI uses them to deploy
+    `origin/main`. They are NOT in `wrangler.jsonc` and NOT in the golden vault.
+  - **Worker runtime secrets** — `DAILY_SALT` (anti-cheat seed for the daily word) and
+    `DAILY_ADMIN_TOKEN` (gates `POST /daily/schedule` **and** the `/admin/*` studio routes via
+    `requireAdmin`) live **only on the worker**; `wrangler deploy` does NOT carry them and
+    recreating the worker drops them. Both are optional in code (graceful no-op when unset);
+    re-set via `wrangler secret put <NAME>`. The encrypted vault
+    `~/golden-cloud/secrets/wordul-prod.env` backs up **`DAILY_ADMIN_TOKEN`** only; `DAILY_SALT`
+    has **no** canonical backup (rotate, don't expect to recover an old value).
 
 ---
 
@@ -88,8 +96,12 @@ have a private workspace; nothing you do can touch another tab's files.
 4. **Before merging to main, integrate first** — `git fetch && git rebase origin/main`. This
    pulls in everyone else's work instead of overwriting it. `dev/ship.sh` does this for you.
 5. **Deploy only via `dev/ship.sh`** (or the `/push` skill). It tests, rebases, tags a backup
-   of current prod, and fast-forwards main — then **CI deploys `origin/main`** (once the
-   Cloudflare secret is set; until then `ship.sh` deploys locally). Never `wrangler deploy` by hand.
+   of current prod, and fast-forwards main — then **CI deploys `origin/main`** automatically
+   (the `CLOUDFLARE_*` repo secrets are set, so CI's "Deploy to Cloudflare" step runs). ⚠️ The
+   step literally named **"Skipped deploy (no Cloudflare secret yet)"** is a *fallback* that only
+   runs when the secret is missing — it shows as **skipped** (a `-` glyph) when healthy. Read step
+   *conclusions* (`gh run view <id> --json jobs`), not the step's name, before concluding a deploy
+   was skipped. Never `wrangler deploy` by hand.
 
 ### Ship when done
 
