@@ -7,6 +7,7 @@ import { renderProfile } from "/profile.js";
 import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, activeMistakeFx, isVoiceEnabled, setVoiceEnabled } from "/edition.js";
 import { pickGuessEvent } from "/roomConfig.js";
 import { playVoice } from "/voice.js";
+import { tapeStart, tapeRecord, tapeForUpload, tapeIsLive } from "/tape-recorder.js";
 import { loadVoiceConfig, setActiveVoiceId } from "/voice-config.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
 import { typingHints } from "/hints.js";
@@ -1466,6 +1467,9 @@ function celebrateCombo(discoveries, mult) {
 function showCompanion(event, ctx = {}) {
   const { text, raw, tier, speak, revealVoice, voice } = companionReact(event, ctx);
   if (!text) return;
+  // Tape the line that actually fired (recorder is live only during a daily solve) —
+  // the replay re-speaks exactly this line through the viewer's voice engine.
+  tapeRecord("v", { raw, text, voice, revealVoice, answer: ctx.answer });
   // The written toast is opt-out via Settings → Companion comments. Voice is governed
   // separately — the 🗣️ voice opt-in (wordul.voice, off by default: only the word
   // reveal speaks) plus the 🔊 mute (wordul.muted) — so the two channels stay independent.
@@ -2183,6 +2187,12 @@ function onServerMessage(msg) {
     if (msg.room.dailyToken && msg.room.isDaily && game.dailyDate) {
       try { localStorage.setItem(`${LS.dailyToken}:${game.dailyDate}`, msg.room.dailyToken); } catch { /* storage off */ }
     }
+    // Real-solve tape: arm the recorder the moment the daily is playable for me.
+    // tapeStart resumes a same-day crash mirror, so a mid-game reload keeps its early events.
+    if (game.isDaily && msg.room.phase === "playing" && !tapeIsLive()) {
+      const meT = msg.room.players.find((p) => p.username === getUsername());
+      if (meT && meT.status === "playing") tapeStart(game.dailyDate);
+    }
     // Live-typing ghosts are transient: drop a player's ghost the moment they commit a guess
     // (their row advanced) or leave the race (won / out / away), so no phantom fill lingers on
     // the new empty row. Done here, before render(), so the board never flashes a stale ghost.
@@ -2470,6 +2480,13 @@ function onServerMessage(msg) {
     // replayed coin-rain), and a reconnect AFTER arming still cashes out on the re-join
     // snapshot if the confirmed one was lost to the dropped socket.
     if (game.isDaily && game.pendingCashOut && dailyCashOutReady(me, game.cashedOut)) cashOutDaily(me);
+    // File the tape exactly once when MY daily game reaches a terminal status. Covers
+    // win, loss, AND resign; also files a crash-mirror from an earlier tab (the server
+    // accepts the first write only, so a duplicate send is harmless).
+    if (game.isDaily && me && me.status !== "playing" && !game.tapeSent) {
+      const tape = tapeForUpload(game.dailyDate);
+      if (tape) { game.tapeSent = true; send({ type: "tape", events: tape.events, truncated: tape.truncated }); }
+    }
     render();
   } else if (msg.type === "invalid_guess") {
     // Shake the row and toast prominently, but DON'T burn a guess slot. The gold is
@@ -2478,6 +2495,7 @@ function onServerMessage(msg) {
     const reason = msg.reason || "not a word";
     if (SHOW_REJECT_TOAST) toast(`${reason} — doesn't count, try again`, { error: true, duration: 2500 });
     showCompanion("invalid");
+    tapeRecord("r");
     // Only MY live turn is penalized: a late / duplicate / out-of-phase reject must not
     // silently subtract gold or inch me toward the 💀 offer with no visible cause.
     const meNow = game.snapshot?.players.find((p) => p.username === getUsername());
@@ -2522,6 +2540,7 @@ function onServerMessage(msg) {
     }
   } else if (msg.type === "revealed_letter" || msg.type === "vowels") {
     handlePowerupMessage(powerupsCtx, msg);
+    tapeRecord("p", msg.type);
   } else if (msg.type === "rematch_proposed") {
     if (msg.proposer !== getUsername()) renderRematchPrompt(msg.proposer);
   } else if (msg.type === "rematch_accepted") {
@@ -4092,6 +4111,7 @@ function typeLetter(l) {
   if (!game.snapshot || game.snapshot.phase !== "playing") return;
   if (game.pending.length >= game.snapshot.wordLength) return;
   game.pending += l.toUpperCase();
+  tapeRecord("k", l.toUpperCase());
   patchMyInputRow(); // in-place: a keystroke only changes my input row, not the whole room
   sendTyping();
   resetIdle();
@@ -4101,6 +4121,7 @@ let lastWipeReactAt = 0;
 // where the "invalid" companion already spoke.
 function clearRow({ silent = false } = {}) {
   if (!game.pending.length) return;
+  tapeRecord("c");
   const cleared = game.pending.length;
   resetIdle();
   sendTyping(0); // tell opponents the row emptied the instant the wipe starts
@@ -4133,6 +4154,7 @@ function activeInputRow() {
 function backspace() {
   if (game.pending.length === 0) return;
   game.pending = game.pending.slice(0, -1);
+  tapeRecord("b");
   patchMyInputRow(); // in-place: backspace only changes my input row
   sendTyping();
   resetIdle();
@@ -4180,6 +4202,7 @@ function submitGuess() {
   // `hard` rides along so the server's pointsEarned applies the dead-letter penalty
   // only for hard-mode players — keeps settlement in lockstep with the client drain.
   send({ type: "guess", word: game.pending, hard: activeDifficulty() === "hard" });
+  tapeRecord("e");
 }
 
 function checkHardMode(guess, prevGuesses) {
