@@ -4,7 +4,7 @@ import { getSessionToken, openSecureSheet } from "/account.js";
 import { wireCardArt, aiLookupHref, hasOgCard } from "/endcard.js";
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
-import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx } from "/edition.js";
+import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx, isVoiceEnabled, setVoiceEnabled } from "/edition.js";
 import { pickGuessEvent } from "/roomConfig.js";
 import { speakLine, speakTemplated } from "/voice.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
@@ -1486,7 +1486,8 @@ function showCompanion(event, ctx = {}) {
   const { text, raw, tier, speak, revealVoice } = companionReact(event, ctx);
   if (!text) return;
   // The written toast is opt-out via Settings → Companion comments. Voice is governed
-  // separately by the 🔊 sound mute (wordul.muted), so the two channels stay independent.
+  // separately — the 🗣️ voice opt-in (wordul.voice, off by default: only the word
+  // reveal speaks) plus the 🔊 mute (wordul.muted) — so the two channels stay independent.
   if (getSettings().companionComments) {
     // Big moments linger; routine lines stay snappy.
     const big = tier && !(event === "wrong" && tier === "normal");
@@ -4393,7 +4394,8 @@ function triggerLoseSequence(snap, me) {
   setTimeout(() => {
     game.exploding = false;
     if (game.snapshot) renderBoards(game.snapshot, game.snapshot.players.find((p) => p.username === getUsername()));
-    if (forfeited) speakLine(VOICE_EDITION, inspire, inspire); // voice + screen land together
+    // Direct speakLine bypasses companionReact's gate, so honor the voice opt-in here too.
+    if (forfeited && isVoiceEnabled()) speakLine(VOICE_EDITION, inspire, inspire); // voice + screen land together
     openStats({
       snap: game.snapshot ?? snap,
       me,
@@ -5049,10 +5051,12 @@ function showHub(anchor) {
     anchor,
     inRoom,
     isMuted: localStorage.getItem("wordul.muted") === "1",
+    isVoiceOn: isVoiceEnabled(),
     onSettings: showSettings,
     onTheme: showSettings, // theme lives inside Settings (Appearance section)
     onStats: () => openStats(),
     onMute: toggleMute,
+    onVoice: toggleVoice,
     onShare: inRoom ? () => shareRoomInvite() : null,
     onRename: inRoom ? () => renameRoom() : null,
     onScoreboard: inRoom ? () => scrollToScoreboard() : null,
@@ -5065,6 +5069,13 @@ function showHub(anchor) {
 function toggleMute() {
   const muted = toggleMuted();
   toast(muted ? "Muted" : "Sound on", { duration: 1000 });
+}
+
+// Flip the companion-voice opt-in (wordul.voice — OFF by default, see edition.js).
+// The end-of-game word reveal speaks either way; this governs the running commentary.
+function toggleVoice() {
+  const on = setVoiceEnabled(!isVoiceEnabled());
+  toast(on ? "Voice on" : "Voice off — the word reveal still speaks", { duration: 1400 });
 }
 
 // Tear down any live room connection when leaving a room view.

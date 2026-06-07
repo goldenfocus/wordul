@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   scoreWin, scoreGreens, scoreMistake, shouldSpeak, resolveTier, splitTemplate,
 } from "/companion.js";
 import { companionReact } from "/edition.js";
+
+// Voice is OFF by default (wordul.voice, see edition.js) — these tests exercise the
+// budget/tier semantics of the OPTED-IN path, so flip the pref on. Default-off
+// behavior (only the word reveal speaks) is covered in edition.test.js.
+beforeEach(() => localStorage.setItem("wordul.voice", "1"));
 
 const cfg = {
   voiceBudget: { routine: 0.33 },

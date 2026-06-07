@@ -163,8 +163,8 @@ function closeSettings() {
 // callback (stats/share/rename/scoreboard logic all live in app.js), settings.js just
 // builds the menu and routes taps.
 //
-// openHub({ anchor, onSettings, onStats, onMute, onShare, onRename, onScoreboard,
-//           isMuted, inRoom })
+// openHub({ anchor, onSettings, onStats, onMute, onVoice, onShare, onRename,
+//           onScoreboard, isMuted, isVoiceOn, inRoom })
 //  - anchor       the avatar button the popover hangs off (for positioning + outside-click).
 //  - inRoom       true while inside a room — gates the room-only rows (share/rename/scoreboard).
 //  - onShare/onRename/onScoreboard may be omitted (e.g. on home); their rows hide.
@@ -184,7 +184,7 @@ function closeHub() {
 export function openHub(opts = {}) {
   // Toggle: a second tap on the avatar closes it.
   if (hubEl) { closeHub(); return; }
-  const { anchor, isMuted, inRoom } = opts;
+  const { anchor, isMuted, isVoiceOn, inRoom } = opts;
 
   const menu = document.createElement("div");
   menu.className = "hub-menu";
@@ -218,6 +218,8 @@ export function openHub(opts = {}) {
   addItem("⚙", "Settings", opts.onSettings);
   addItem("🎨", "Theme", opts.onTheme);
   addItem(isMuted ? "🔇" : "🔊", isMuted ? "Sound off" : "Sound on", opts.onMute, { keepOpen: false });
+  // Companion voice opt-in (off by default — only the end-of-game word reveal speaks).
+  addItem(isVoiceOn ? "🗣️" : "🤫", isVoiceOn ? "Voice on" : "Voice off", opts.onVoice, { keepOpen: false });
   addItem("📊", "Stats", opts.onStats);
   // Accounts P0: show "Secure this account" only when name is set but not yet claimed.
   addItem("🔒", "Secure this account", opts.onSecure);

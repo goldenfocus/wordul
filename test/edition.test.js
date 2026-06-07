@@ -101,6 +101,44 @@ describe("editions + companion", () => {
   });
 });
 
+import { isVoiceEnabled, setVoiceEnabled } from "/edition.js";
+
+describe("voice preference (wordul.voice — OFF by default)", () => {
+  it("defaults to off; setVoiceEnabled flips and persists", () => {
+    expect(isVoiceEnabled()).toBe(false);
+    expect(setVoiceEnabled(true)).toBe(true);
+    expect(isVoiceEnabled()).toBe(true);
+    expect(setVoiceEnabled(false)).toBe(false);
+    expect(isVoiceEnabled()).toBe(false);
+  });
+  it("routine companion lines do NOT speak with voice off (the default)", () => {
+    // rng: () => 0 would force shouldSpeak() true — proving it's the new pref gating.
+    for (const ev of ["invalid", "wrong", "idle"]) {
+      expect(companionReact(ev, { rng: () => 0 }).speak).toBe(false);
+    }
+  });
+  it("the end-of-game word reveal STILL speaks with voice off", () => {
+    const loss = companionReact("loss", { answer: "CRANE" });
+    expect(loss.raw).toContain("{answer}");
+    expect(loss.speak).toBe(true);
+    const win = companionReact("winReveal", { answer: "CRANE" });
+    expect(win.raw).toContain("{answer}");
+    expect(win.speak).toBe(true);
+  });
+  it("wordul.voice=1 restores full voice (budget throttle still applies)", () => {
+    setVoiceEnabled(true);
+    expect(companionReact("wrong", { rng: () => 0 }).speak).toBe(true);   // under budget
+    expect(companionReact("wrong", { rng: () => 0.99 }).speak).toBe(false); // over budget
+    expect(companionReact("loss", { answer: "CRANE" }).speak).toBe(true);
+  });
+  it("mute silences everything, even the reveal", () => {
+    localStorage.setItem("wordul.muted", "1");
+    expect(companionReact("loss", { answer: "CRANE" }).speak).toBe(false);
+    setVoiceEnabled(true);
+    expect(companionReact("loss", { answer: "CRANE" }).speak).toBe(false);
+  });
+});
+
 import { applyEdition } from "/edition.js";
 
 describe("applyEdition", () => {
