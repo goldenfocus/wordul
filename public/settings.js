@@ -235,7 +235,7 @@ export function openHub(opts = {}) {
   // /studio-* page's token field). A normal player never has it. The server still gates
   // every write on the token, so this is just a convenience shortcut, not the auth boundary.
   if (localStorage.getItem("wordul.admin.token")) {
-    addItem("🎙️", "Studio · Voice", () => { location.href = "/studio-voice.html"; });
+    addItem("🎙️", "Studio · Voice", () => { location.href = "/studio-voice"; });
   }
 
   hubEl = menu;
