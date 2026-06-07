@@ -17,7 +17,7 @@ import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, dete
 import { getSettings, saveSettings, applySettings, openSettings, openHub, activeDifficulty } from "/settings.js";
 import { wireMuteBtn, toggleMuted } from "/mute-btn.js";
 import { buildShareCardModel, renderShareCard } from "/share-card.js";
-import { shareTargetUrl } from "/share-links.js";
+import { shareTargetUrl, masksToGiftPattern } from "/share-links.js";
 import { buildOwnerTape } from "/owner-tape.js";
 import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
 import { mountArenaList, pickNextGame, renderYourTableRow } from "/arena-panel.js";
@@ -394,14 +394,17 @@ function maybeRecoverDailySolve(username, profile, cbs) {
   }).catch(() => { dailyRecoveryInFlight = false; });
 }
 
-// Challenge a friend onto this day's Wordul — a spoiler-free line + the day's link (no
-// board PNG here, since the game isn't loaded on the home). Native sheet, else clipboard.
+// Challenge a friend onto this day's Wordul — a spoiler-free dare line + the day's
+// link. When the run's masks are on hand, the link carries ?g=<colors-only pattern>
+// so the unfurl shows the sharer's golden board, letters hidden (the worker's
+// /daily/og route renders it). Native sheet, else clipboard.
 // `date` pins the link to the day being shared (past-day pages); omitted → today.
 function shareDailyResult(result, date) {
-  const url = location.origin + "/daily/" + (date || todayUTC());
+  const pattern = masksToGiftPattern(result?.masks);
+  const url = location.origin + "/daily/" + (date || todayUTC()) + (pattern ? `?g=${pattern}` : "");
   const line = result && result.won
-    ? `I got this Wordul in ${result.guesses} — think you can beat it?`
-    : "This Wordul beat me — avenge me?";
+    ? `I got this Wordul in ${result.guesses} — I dare you.`
+    : "This Wordul beat me — I dare you to avenge me.";
   if (typeof navigator.share === "function") {
     navigator.share({ title: "Wordul of the Day", text: line, url }).catch(() => {});
   } else if (navigator.clipboard?.writeText) {
@@ -2661,7 +2664,7 @@ function renderDailyUnlock(snap, me) {
     share.textContent = t("daily.challenge");
     // shareDailyResult is gesture-safe here: this listener runs on the tap itself.
     // game.dailyDate: a past-day page must challenge friends to THAT day, not today's.
-    share.addEventListener("click", () => shareDailyResult({ won, guesses: me.guesses.length }, game.dailyDate));
+    share.addEventListener("click", () => shareDailyResult({ won, guesses: me.guesses.length, masks: me.guesses.map((g) => g.mask) }, game.dailyDate));
     share.dataset.wired = "1";
   }
   // The action rail under the CTA: Wiki · Recap · Past days · Home.
