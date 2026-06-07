@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio · Voice</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 880px; margin: 2rem auto; padding: 0 1rem; }
+  table { width: 100%; border-collapse: collapse; } td, th { padding: .4rem .5rem; border-bottom: 1px solid #ddd; text-align: left; vertical-align: top; }
+  .muted { color: #777; } button { cursor: pointer; }
+  select, input[type=text], input[type=number] { font: inherit; padding: .2rem .3rem; }
+</style></head>
+<body>
+  <h1>Studio · Voice</h1>
+  <p class="muted">Each World is silent unless you give it a voice. Edits affect the live game. Voice &amp; clips reuse Yang's line set.</p>
+  <p><label>Admin token <input id="token" type="text" size="40" placeholder="DAILY_ADMIN_TOKEN"></label></p>
+  <table id="rows"><thead><tr><th>World</th><th>On</th><th>Source</th><th>Detail</th><th></th></tr></thead><tbody></tbody></table>
+  <p><button id="save">Save</button> <span id="status" class="muted"></span></p>
+  <script type="module" src="/studio-voice.js"></script>
+</body></html>
