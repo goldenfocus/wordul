@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { encodePng } from "../src/gift-png.ts";
+import { encodePng, renderGiftPng, GIFT_W, GIFT_H } from "../src/gift-png.ts";
 
 /** Minimal PNG reader for OUR encoder's output: parses IHDR dims and inflates the
     single IDAT back to filter-prefixed scanlines. Uses DecompressionStream, the
@@ -40,5 +40,30 @@ describe("encodePng", () => {
 
   it("rejects a mis-sized buffer", async () => {
     await expect(encodePng(2, 2, new Uint8Array(5))).rejects.toThrow();
+  });
+});
+
+describe("renderGiftPng", () => {
+  it("renders 1200×630 with correct tile colors and letters nowhere", async () => {
+    const d = await decodePng(await renderGiftPng("2026-06-07", "chwcc-hhhhh"));
+    expect([d.width, d.height]).toEqual([GIFT_W, GIFT_H]);
+    // Geometry (mirrors the renderer's constants): TILE=72 GAP=10, board centered,
+    // 64px reserved under the board for the wordmark strip.
+    // rows=2 → boardH = 2*72+10 = 154; y0 = (630-154-64)/2 = 206; x0 = (1200-400)/2 = 400.
+    const bg = px(d, 10, 10);
+    expect(bg).toEqual([14, 14, 16]); // --bg #0e0e10
+    const cold = px(d, 400 + 36, 206 + 36);       // row 0 col 0 = 'c' (center)
+    expect(cold).toEqual([13, 13, 15]);           // #0d0d0f fill
+    const hot = px(d, 400 + 36, 206 + 82 + 36);   // row 1 col 0 = 'h' (center)
+    expect(hot[0]).toBeGreaterThan(180);          // gold gradient midpoint ≈ [211,176,97]
+    expect(hot[1]).toBeGreaterThan(140);
+    expect(hot[2]).toBeLessThan(130);
+    const warmEdge = px(d, 400 + 2 * 82, 206 + 1); // row 0 col 2 = 'w', top edge strip
+    expect(warmEdge).toEqual([216, 201, 122]);     // #d8c97a border
+  });
+
+  it("rejects an invalid pattern even if a caller skips route validation", async () => {
+    await expect(renderGiftPng("2026-06-07", "abcde")).rejects.toThrow();
+    await expect(renderGiftPng("2026-06-07", "hhhh")).rejects.toThrow();
   });
 });
