@@ -82,7 +82,7 @@ export function awardGold(delta, reducedMotion, opts = {}) {
   if (!hud) return;
   const after = wallet.get();
   if (!reducedMotion) spawnGoldCoins(Math.min(28, Math.max(6, Math.round(delta / 18))));
-  animateCount(hud, before, after, 650, prefix);
+  animateCount(hud, before, after, 650, prefix, opts.onDone);
   hud.classList.remove("gold-bump"); void hud.offsetWidth; hud.classList.add("gold-bump");
 }
 
@@ -103,14 +103,16 @@ export function goldDrain(amount, reducedMotion, playChime, opts = {}) {
   if (!hud) { hud = document.getElementById("goldHud"); if (!hud) { renderGoldHud(); hud = document.getElementById("goldHud"); } }
   if (!hud) return;
   const after = wallet.get();
-  animateCount(hud, before, after, 650, prefix);
+  animateCount(hud, before, after, 650, prefix, opts.onDone);
   hud.classList.remove("gold-bump-loss"); void hud.offsetWidth; hud.classList.add("gold-bump-loss");
   if (!reducedMotion && typeof playChime === "function") playChime([[392, 0], [330, 0.08]]); // descending: a sad trombone, lite
 }
 
 // Tween the balance number old→new with an easeOutCubic so it visibly climbs.
 // `dur` is tunable so per-beat payout ticks can climb faster than the lump bump.
-function animateCount(el, from, to, dur = 650, prefix = "◆ ") {
+// `onDone` fires once the tween lands — callers use it to re-apply a visibility gate
+// (e.g. a #roundScore drain ending exactly on 0 must not leave "Score 0" painted).
+function animateCount(el, from, to, dur = 650, prefix = "◆ ", onDone) {
   if (!el) return;
   // A balance worth tweening is worth seeing: #roundScore starts hidden while the tally
   // is zero (iter3 §2 — never paint "Score 0"), so the first payout tick reveals it.
@@ -121,6 +123,7 @@ function animateCount(el, from, to, dur = 650, prefix = "◆ ") {
     const v = Math.round(from + (to - from) * (1 - Math.pow(1 - t, 3)));
     el.textContent = `${prefix}${v}`;
     if (t < 1) requestAnimationFrame(step);
+    else onDone?.();
   }
   requestAnimationFrame(step);
 }

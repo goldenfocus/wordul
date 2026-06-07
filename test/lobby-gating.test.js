@@ -94,7 +94,17 @@ describe("iter3 §2 top chrome de-clutter", () => {
     // the play-phase mobile sheet entry point stays wired
     expect(app).toContain("topBtn.onclick = openChatSheet");
   });
-  it("the round-score chip routes through the pure shouldShowRoundScore gate", () => {
-    expect(app).toContain("shouldShowRoundScore(snap.phase");
+  it("renderRoundScore OWNS the visibility gate (pure shouldShowRoundScore) — every paint path inherits it", () => {
+    const fn = app.slice(app.indexOf("function renderRoundScore"), app.indexOf("function renderRoundScore") + 700);
+    expect(fn).toContain("shouldShowRoundScore(");
+    expect(fn).toContain("el.hidden = true");
+    // the render loop and the power-up drain adapter both delegate — no second gate, no bypass
+    expect(app).not.toContain("shouldShowRoundScore(snap.phase"); // old render-loop gate is gone
+    expect(app).toMatch(/drainGold: \(n\) => \{[\s\S]{0,200}renderRoundScore\?\.\(\)/);
+  });
+  it("tween completions re-apply the gate (a drain landing exactly on 0 must not leave 'Score 0' painted)", () => {
+    expect(app).toContain("onDone: renderRoundScore");
+    const gold = readFileSync(new URL("../public/gold.js", import.meta.url), "utf8");
+    expect(gold).toMatch(/else onDone\?\.\(\)/);
   });
 });

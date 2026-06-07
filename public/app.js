@@ -2088,12 +2088,21 @@ const roundScoreWallet = {
 // animated ticks share one format ("<label> <n>"). animateCount writes `${prefix}${n}`, so the
 // label lives in the prefix; keep the trailing space.
 const SCORE_PREFIX = () => (game.isDaily ? t("daily.roundScorePrefix") : t("race.scorePrefix")) + " ";
-// Paint the round-score chip from the current tally. The payout animation tweens the number
+// Paint the round-score chip from the current tally — and OWN its visibility. Every static
+// paint (render loop, power-up drains, post-tween settles) routes through here, so the
+// iter3 §2 gate (pure shouldShowRoundScore in lobby-view.js: never in the lobby phase,
+// never a zero tally) lives in exactly one place. The payout animation tweens the number
 // itself (via the wallet adapter + #roundScore as its hud); this is the static render used
 // on mount / reveal so the chip is never blank or stale between animated ticks.
 function renderRoundScore() {
   const el = $("#roundScore");
   if (!el) return;
+  const snap = game.snapshot;
+  const me = snap && (snap.players || []).find((p) => p.username === getUsername());
+  if (!shouldShowRoundScore(snap && snap.phase, me && me.status, game.goldThisRound)) {
+    el.hidden = true;
+    return;
+  }
   el.hidden = false;
   el.textContent = `${SCORE_PREFIX()}${game.goldThisRound || 0}`;
 }
@@ -2282,7 +2291,9 @@ function onServerMessage(msg) {
         }
         // §A everywhere (settlement spec): in EVERY mode the payout/drain choreography
         // drives the EPHEMERAL #roundScore — the sacred ◆ wallet moves only at settlement.
-        const payoutOpts = { wallet: roundScoreWallet, hud: $("#roundScore"), prefix: SCORE_PREFIX() };
+        // onDone re-applies the visibility gate once a tween lands, so a drain ending
+        // exactly on 0 doesn't leave "Score 0" painted until the next render() pass.
+        const payoutOpts = { wallet: roundScoreWallet, hud: $("#roundScore"), prefix: SCORE_PREFIX(), onDone: renderRoundScore };
         // Drain + red log lines. Caller owns the line text; goldDrain stays generic.
         const runDrain = () => {
           if (penalty <= 0) return;
@@ -2447,6 +2458,7 @@ function onServerMessage(msg) {
     // the sacred ◆ wallet never moves mid-game; it moves only at settlement.
     goldDrain(GOLD.invalidPenalty, reducedMotion, playChime, {
       wallet: roundScoreWallet, hud: $("#roundScore"), prefix: SCORE_PREFIX(),
+      onDone: renderRoundScore, // gate re-applies post-tween (a drain to exactly 0 hides the chip)
     });
     const log = getHacklog();
     log?.logLine(
@@ -2979,18 +2991,11 @@ function render() {
   }
   if (game.isDaily) renderDailyUnlock(snap, me);
   // §A: the ephemeral round-score chip rides ABOVE the board while you're still solving,
-  // in EVERY mode. The payout animation tweens its number; this paints/refreshes the
-  // static value and hides it once you're done (the settlement screen owns the end state).
-  // iter3 §2: pure gate in lobby-view.js — never in the lobby phase (it leaked there as a
-  // stray "Score 0"), never a zero tally. The chip stays hidden until the first payout
-  // tween reveals it (animateCount in gold.js unhides the hud it writes).
-  {
-    const rs = $("#roundScore");
-    if (rs) {
-      if (shouldShowRoundScore(snap.phase, me && me.status, game.goldThisRound)) renderRoundScore();
-      else rs.hidden = true;
-    }
-  }
+  // in EVERY mode. The payout animation tweens its number; renderRoundScore paints the
+  // static value AND owns the visibility gate (iter3 §2: pure shouldShowRoundScore in
+  // lobby-view.js — never in the lobby phase, never a zero tally; hidden once you're
+  // done, the settlement screen owns the end state), so the render loop just repaints.
+  renderRoundScore();
 
   // Keep the header name (and tab title) in sync with server renames.
   if (snap.name && snap.name !== game.name) {
