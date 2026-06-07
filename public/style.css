@@ -147,12 +147,23 @@ input, textarea, .chat-log {
   color: #f0c14b;
   text-shadow: 0 0 12px rgba(240, 193, 75, 0.7), 0 0 28px rgba(240, 193, 75, 0.35);
   letter-spacing: 0.02em;
-  padding: 4px 0;
+  padding: 2px 0;
   font-size: 15px;
   white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
 }
+/* Premium stacked gold (iter3 §3): a small ◆ riding ABOVE the amount — a column,
+   "suddenly premium". Shared by the home #hubGold and the in-room #goldHud; the
+   count-up tween writes only .gold-stack-num (gold.js goldCountTarget). */
+.gold-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  line-height: 1;
+}
+.gold-stack-glyph { font-size: 9px; line-height: 1; }
+.gold-stack-num { font-variant-numeric: tabular-nums; line-height: 1; }
 .gold-hud.gold-bump { animation: gold-bump 0.5s ease; }
 @keyframes gold-bump {
   0% { transform: scale(1); }
@@ -443,23 +454,22 @@ body.reduced-motion .tile.ghost-cursor {
 }
 .icon-btn:hover { background: rgba(255,255,255,0.06); }
 
-/* Immersive in-game header (C5): the avatar IS the hub. A squared glass tile
-   showing the username's initial; one tap opens the consolidated menu. */
+/* Immersive in-game header (C5): the avatar IS the hub — one tap opens the
+   consolidated menu. Premium identity (iter3 §3): FRAMELESS — just the glyph,
+   "like a picture without a frame". Bare at rest; hover lights the glyph itself,
+   not a border. The 44×44 box keeps the touch target ≥44px. */
 .avatar-btn {
-  width: 34px; height: 34px; flex-shrink: 0;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  width: 44px; height: 44px; flex-shrink: 0;
+  border: 0;
+  background: transparent;
   color: var(--fg);
-  font-weight: 800; font-size: 15px; line-height: 1;
+  font-weight: 800; font-size: 18px; line-height: 1;
   cursor: pointer; padding: 0;
-  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 0 22px -12px color-mix(in srgb, var(--accent) 80%, transparent);
   display: inline-flex; align-items: center; justify-content: center;
   text-transform: uppercase;
-  transition: border-color 0.15s, box-shadow 0.18s, transform 0.05s;
+  transition: color 0.15s, text-shadow 0.18s, transform 0.05s;
 }
-.avatar-btn:hover { border-color: var(--accent); box-shadow: 0 0 30px -10px color-mix(in srgb, var(--accent) 95%, transparent); }
+.avatar-btn:hover { color: var(--accent); text-shadow: 0 0 16px color-mix(in srgb, var(--accent) 80%, transparent); }
 .avatar-btn:active { transform: scale(0.93); }
 
 /* The immersive header lives between the brand and the avatar: gold only — the
@@ -472,7 +482,9 @@ body.reduced-motion .tile.ghost-cursor {
 .avatar-name {
   font-size: 9.5px; line-height: 1.2; font-weight: 700; color: var(--muted);
   white-space: nowrap; max-width: 72px; overflow: hidden; text-overflow: ellipsis;
-  margin-top: 1px;
+  /* The frameless 44px hit box centers an 18px glyph, leaving dead space below —
+     tuck the caption into it so avatar + @name still fit the 50px topbar. */
+  margin-top: -8px;
 }
 .avatar-name[hidden] { display: none; }
 

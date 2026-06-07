@@ -83,7 +83,8 @@
     <!-- Home-only identity: gold + streak. Revealed by body.hub-home (the hub is up);
          hidden in rooms, where #goldHud after #roomHeader owns the in-room gold. -->
     <div class="topbar-stats" id="topbarStats">
-      <span class="hub-stat-glyph" id="hubGold" title="Gold">◆ <span id="hubGoldVal">0</span></span>
+      <!-- Premium stack (iter3 §3): small ◆ riding ABOVE the amount — a column, not "◆ N". -->
+      <span class="hub-stat-glyph gold-stack" id="hubGold" title="Gold" aria-label="0 gold"><span class="gold-stack-glyph" aria-hidden="true">◆</span><span class="gold-stack-num" id="hubGoldVal">0</span></span>
       <span class="hub-stat-glyph" id="hubStreak" title="Streak" hidden>🔥 <span id="hubStreakVal">0</span></span>
     </div>
     <!-- In a room the username rides BELOW the avatar as a tiny caption (less header

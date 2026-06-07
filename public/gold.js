@@ -108,6 +108,17 @@ export function goldDrain(amount, reducedMotion, playChime, opts = {}) {
   if (!reducedMotion && typeof playChime === "function") playChime([[392, 0], [330, 0.08]]); // descending: a sad trombone, lite
 }
 
+// Premium stacked gold (iter3 §3): the gold HUDs render the ◆ glyph as its OWN element
+// riding above the amount (.gold-stack-glyph over .gold-stack-num), so a count-up must
+// tween ONLY the number child — never repaint the glyph. Pure resolver (unit-tested):
+// a hud with a .gold-stack-num child targets the child with NO prefix (the glyph is
+// already on screen); any other hud (e.g. #roundScore's inline "Score N") keeps the
+// legacy whole-element `${prefix}${v}` behavior.
+export function goldCountTarget(el, prefix = "◆ ") {
+  const num = el && typeof el.querySelector === "function" ? el.querySelector(".gold-stack-num") : null;
+  return num ? { el: num, prefix: "" } : { el, prefix };
+}
+
 // Tween the balance number old→new with an easeOutCubic so it visibly climbs.
 // `dur` is tunable so per-beat payout ticks can climb faster than the lump bump.
 // `onDone` fires once the tween lands — callers use it to re-apply a visibility gate
@@ -116,14 +127,21 @@ function animateCount(el, from, to, dur = 650, prefix = "◆ ", onDone) {
   if (!el) return;
   // A balance worth tweening is worth seeing: #roundScore starts hidden while the tally
   // is zero (iter3 §2 — never paint "Score 0"), so the first payout tick reveals it.
+  // Unhide the CONTAINER (the stacked hud / #roundScore), then tween only the number.
   el.hidden = false;
+  const target = goldCountTarget(el, prefix);
   const start = performance.now();
   function step(now) {
     const t = Math.min(1, (now - start) / dur);
     const v = Math.round(from + (to - from) * (1 - Math.pow(1 - t, 3)));
-    el.textContent = `${prefix}${v}`;
-    if (t < 1) requestAnimationFrame(step);
-    else onDone?.();
+    target.el.textContent = `${target.prefix}${v}`;
+    if (t < 1) return requestAnimationFrame(step);
+    // Stacked gold hud: the aria-label carries the balance (the glyph/number split
+    // would otherwise read as two fragments) — refresh it once the tween lands.
+    if (target.el !== el && el.classList?.contains("gold-hud")) {
+      el.setAttribute("aria-label", `${to} gold — view your gold history`);
+    }
+    onDone?.();
   }
   requestAnimationFrame(step);
 }
@@ -277,6 +295,8 @@ export function playPayoutSequence(opts = {}) {
 // The gold HUD lives in the room header. It's a tappable button that jumps to the player's
 // public gold history (/@<username>#gold-history) — the ◆ balance is the door to its story.
 // No-op tap when there's no known username (the count-up/animations are untouched either way).
+// Premium stack (iter3 §3): the ◆ glyph rides ABOVE the amount as its own element
+// (.gold-stack), so count-ups tween only .gold-stack-num (see goldCountTarget).
 export function renderGoldHud() {
   const host =
     document.querySelector(".room-header") ||
@@ -287,11 +307,10 @@ export function renderGoldHud() {
   if (!hud) {
     hud = document.createElement("div");
     hud.id = "goldHud";
-    hud.className = "gold-hud";
+    hud.className = "gold-hud gold-stack";
     hud.setAttribute("role", "button");
     hud.setAttribute("tabindex", "0");
     hud.style.cursor = "pointer";
-    hud.setAttribute("aria-label", "View your gold history");
     const goToHistory = () => {
       let u = "";
       try { u = localStorage.getItem("wr.username") || ""; } catch { /* storage off */ }
@@ -303,5 +322,20 @@ export function renderGoldHud() {
     });
     host.appendChild(hud);
   }
-  hud.textContent = `◆ ${getGold()}`;
+  // Idempotent structure: glyph above number. Built once; static paints touch only the number.
+  let num = hud.querySelector(".gold-stack-num");
+  if (!num) {
+    hud.textContent = ""; // clear any legacy "◆ N" flat text
+    const glyph = document.createElement("span");
+    glyph.className = "gold-stack-glyph";
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.textContent = "◆";
+    num = document.createElement("span");
+    num.className = "gold-stack-num";
+    hud.append(glyph, num);
+  }
+  const v = getGold();
+  num.textContent = String(v);
+  // Glyph + number split → keep the button legible to screen readers as one phrase.
+  hud.setAttribute("aria-label", `${v} gold — view your gold history`);
 }

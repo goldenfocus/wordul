@@ -31,6 +31,8 @@ export function renderHub(profile, callbacks) {
   const g = document.getElementById("hubGoldVal");
   const s = document.getElementById("hubStreakVal");
   if (g) g.textContent = String(hubState.gold);
+  // The stacked glyph/number split (iter3 §3) reads as one phrase via the container label.
+  document.getElementById("hubGold")?.setAttribute("aria-label", `${hubState.gold} gold`);
   if (s) s.textContent = String(hubState.streak);
   // Streak only shows when there IS one — no cold flame sitting at 0.
   const streakEl = document.getElementById("hubStreak");

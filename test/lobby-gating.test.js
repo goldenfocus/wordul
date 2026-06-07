@@ -104,7 +104,8 @@ describe("iter3 §2 top chrome de-clutter", () => {
   });
   it("tween completions re-apply the gate (a drain landing exactly on 0 must not leave 'Score 0' painted)", () => {
     expect(app).toContain("onDone: renderRoundScore");
+    // onDone fires ONLY once the tween lands (mid-tween frames return early).
     const gold = readFileSync(new URL("../public/gold.js", import.meta.url), "utf8");
-    expect(gold).toMatch(/else onDone\?\.\(\)/);
+    expect(gold).toMatch(/if \(t < 1\) return requestAnimationFrame\(step\);[\s\S]{0,400}onDone\?\.\(\);/);
   });
 });
