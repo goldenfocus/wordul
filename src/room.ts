@@ -18,6 +18,7 @@ import { activeDate } from "./daily-core.ts";
 import { countMask, maskToPattern, type ScienceBaseEvent, type ScienceEvent, type ScienceOutcome, type ScienceRoomKind } from "./science.ts";
 import { makeChallengeId, challengeRoundLocked } from "./challenge-core.ts";
 import { newTape, tapePush, type GhostTape } from "./ghost-core.ts";
+import { validateTapeEvents } from "./tape-core.ts";
 import {
   outpacedLosers,
   rematchReduce,
@@ -239,6 +240,18 @@ export class Room extends DurableObject<Env> {
       }
       return this.handleDailyRetheme();
     }
+    // The real-solve tape: keystroke-level replay, gated by the SAME finisher token
+    // as letter rows — a tape contains typed letters (including the answer).
+    if (req.method === "GET" && url.pathname.endsWith("/tape")) {
+      const t = url.searchParams.get("t") ?? "";
+      if (!this.state.finisherSecret || t !== this.state.finisherSecret) {
+        return new Response("forbidden", { status: 403 });
+      }
+      const u = (url.searchParams.get("u") ?? "").toLowerCase().trim();
+      const rec = await this.ctx.storage.get(`tape:${u}`);
+      if (!rec) return new Response("not found", { status: 404 });
+      return Response.json(rec); // { events, truncated }
+    }
     // Read-only daily leaderboard: top N by gold + the caller's own rank. No socket,
     // no mutation — just a sort over the players already persisted in state.
     if (req.method === "GET" && url.pathname.endsWith("/leaderboard")) {
@@ -436,6 +449,8 @@ export class Room extends DurableObject<Env> {
         return this.onGuess(ws, msg.word, msg.hard);
       case "typing":
         return this.onTyping(ws, msg.len);
+      case "tape":
+        return this.onTape(ws, msg.events, msg.truncated);
       case "rematch_propose":
         return this.onRematchPropose(ws);
       case "rematch_accept":
@@ -1203,6 +1218,23 @@ export class Room extends DurableObject<Env> {
         // socket may be closing; ignore
       }
     }
+  }
+
+  // The real-solve tape: a finished daily player files their keystroke record exactly
+  // once. Stored as a SEPARATE storage key (never in state — snapshots stay light);
+  // served only behind the finisher token (see /tape below). Guard is status-based,
+  // not scored-based: scorePlayer broadcasts the terminal snapshot BEFORE the mint
+  // confirms scored=true, and the client uploads on that first terminal snapshot.
+  private async onTape(ws: WebSocket, events: unknown, truncated?: boolean): Promise<void> {
+    const username = this.userFor(ws);
+    if (!username || !this.state.isDaily) return;
+    const player = this.state.players.find((p) => p.username === username);
+    if (!player || player.status === "playing") return;
+    const key = `tape:${username}`;
+    if (await this.ctx.storage.get(key)) return; // first write wins
+    const valid = validateTapeEvents(events);
+    if (!valid) return;
+    await this.ctx.storage.put(key, { events: valid, truncated: !!truncated });
   }
 
   // Bot counterpart to onTyping: broadcast a count-only ghost-fill pulse for a (socket-less) bot.

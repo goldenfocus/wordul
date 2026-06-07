@@ -158,6 +158,7 @@ export type ClientMessage =
   | { type: "reveal_letter"; known?: number[] }
   | { type: "vowel_count" }
   | { type: "resign" }
+  | { type: "tape"; events: unknown; truncated?: boolean }
   | { type: "ping" };
 
 export type ServerMessage =
