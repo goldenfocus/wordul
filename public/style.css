@@ -1773,6 +1773,7 @@ body.lobby #dimWrap { display: none; }
 .setting-row.danger .setting-name { color: var(--error); }
 .setting-row.stack { flex-direction: column; align-items: stretch; gap: 10px; }
 .edition-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .edition-chip {
   appearance: none; -webkit-appearance: none; cursor: pointer;
   padding: 8px 14px; border-radius: 10px;

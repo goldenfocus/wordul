@@ -107,12 +107,10 @@ export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker,
     roomSection.hidden = !inRoom;
     if (inRoom) mountRoomLength?.();
   }
-  const hm = document.getElementById("setHardMode");
   const cb = document.getElementById("setColorBlind");
   const rm = document.getElementById("setReducedMotion");
   const cs = document.getElementById("setCommunityScience");
   const cc = document.getElementById("setCompanionComments");
-  if (hm) hm.checked = s.hardMode;
   if (cb) cb.checked = s.colorBlind;
   if (rm) rm.checked = s.reducedMotion;
   if (cs) cs.checked = s.communityScience;
@@ -131,11 +129,39 @@ export function openSettings({ onChange, mountLayoutPicker, renderEditionPicker,
       onChange?.(); // apply colorblind/hard-mode/reduced-motion to the live board now
     });
   };
-  wire(hm, "hardMode");
   wire(cb, "colorBlind");
   wire(rm, "reducedMotion");
   wire(cs, "communityScience");
   wire(cc, "companionComments");
+
+  // Difficulty chips (easy/medium/hard). Wired once via dataset sentinel so re-opens
+  // don't stack handlers. onChange is the same stable callback every open
+  // (app.js: `() => { if (game.snapshot) render(); }`) — safe to capture once.
+  const DIFFICULTY_DESC = {
+    easy: "Typing shows what you already know: proven letters glow, dead letters blink",
+    medium: "No hints, no penalties — the classic game",
+    hard: "Revealed hints must be used, reusing eliminated letters drains gold, and bankruptcy past −300 ends the game",
+  };
+  const diffPicker = document.getElementById("difficultyPicker");
+  const diffDesc = document.getElementById("difficultyDesc");
+  const paintDifficulty = (cur) => {
+    if (diffDesc) diffDesc.textContent = DIFFICULTY_DESC[cur] ?? "";
+    diffPicker?.querySelectorAll(".edition-chip").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.difficulty === cur);
+      b.setAttribute("aria-pressed", String(b.dataset.difficulty === cur));
+    });
+  };
+  if (diffPicker && diffPicker.dataset.wired !== "1") {
+    diffPicker.dataset.wired = "1";
+    diffPicker.addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-difficulty]");
+      if (!chip) return;
+      saveSettings({ ...getSettings(), difficulty: chip.dataset.difficulty });
+      paintDifficulty(chip.dataset.difficulty);
+      onChange?.();
+    });
+  }
+  paintDifficulty(s.difficulty);
 
   // Theme/edition picker. The theme is bound to the room, so a pick re-applies settings
   // locally AND notifies the caller (onEditionPick → set_edition for everyone). Locked

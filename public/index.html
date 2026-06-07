@@ -458,16 +458,17 @@
         <span class="settings-chevron" aria-hidden="true">›</span>
       </button>
       <div class="settings-section-body">
-        <label class="setting-row" for="setHardMode">
+        <div class="setting-row stack" id="difficultyRow">
           <div class="setting-text">
-            <div class="setting-name">Hard Mode</div>
-            <div class="setting-desc">Revealed hints must be used, reusing eliminated letters drains gold, and bankruptcy past −300 ends the game</div>
+            <div class="setting-name">Difficulty</div>
+            <div class="setting-desc" id="difficultyDesc"></div>
           </div>
-          <span class="switch">
-            <input type="checkbox" id="setHardMode" />
-            <span class="switch-slider" aria-hidden="true"></span>
-          </span>
-        </label>
+          <div class="chip-row" id="difficultyPicker" role="group" aria-label="Difficulty">
+            <button type="button" class="edition-chip" data-difficulty="easy">Easy</button>
+            <button type="button" class="edition-chip" data-difficulty="medium">Medium</button>
+            <button type="button" class="edition-chip" data-difficulty="hard">Hard</button>
+          </div>
+        </div>
         <label class="setting-row" for="setReducedMotion">
           <div class="setting-text">
             <div class="setting-name">Reduced Motion</div>
