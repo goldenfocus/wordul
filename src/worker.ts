@@ -338,16 +338,34 @@ export default {
       return Response.redirect(url.origin + "/daily/" + activeDate(Date.now()), 302);
     }
 
-    // Admin seed: POST /daily/schedule (Bearer token; closed/401 when DAILY_ADMIN_TOKEN unset).
-    if (url.pathname === "/daily/schedule" && req.method === "POST") {
+    // Admin schedule: POST writes a curated World, GET lists curated days (no words),
+    // DELETE ?date= unschedules one — the day falls back to the house World (base look).
+    // All Bearer-token gated; closed/401 when DAILY_ADMIN_TOKEN unset.
+    if (url.pathname === "/daily/schedule" && ["POST", "GET", "DELETE"].includes(req.method)) {
       const denied = requireAdmin(req, env);
       if (denied) return denied;
       const stub = env.DAILY.get(env.DAILY.idFromName("daily"));
-      return stub.fetch(new Request("https://do/schedule", {
-        method: "POST",
-        body: await req.text(),
-        headers: { "content-type": "application/json" },
-      }));
+      const target = "https://do/schedule" + url.search;
+      if (req.method === "POST") {
+        return stub.fetch(new Request(target, {
+          method: "POST",
+          body: await req.text(),
+          headers: { "content-type": "application/json" },
+        }));
+      }
+      return stub.fetch(new Request(target, { method: req.method }));
+    }
+
+    // Admin retheme: re-apply the day's resolved theme to an already-seeded daily room
+    // (theme fields only — the word and boards are untouched). ?date= defaults to today.
+    if (url.pathname === "/daily/retheme" && req.method === "POST") {
+      const denied = requireAdmin(req, env);
+      if (denied) return denied;
+      const date = url.searchParams.get("date") || activeDate(Date.now());
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return new Response("bad date", { status: 400 });
+      const path = `daily/${date}`;
+      const stub = env.ROOM.get(env.ROOM.idFromName(path));
+      return stub.fetch(new Request(`https://do/daily/retheme?path=${encodeURIComponent(path)}`, { method: "POST" }));
     }
 
     // Public effective Worlds registry (code base + admin KV overrides). Powers the

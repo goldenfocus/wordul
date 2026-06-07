@@ -226,6 +226,19 @@ export class Room extends DurableObject<Env> {
       }
       return this.handleWotdBotTick();
     }
+    // Admin retheme: re-pull the day's resolved World and re-apply THEME fields only —
+    // never the word, phase, or anyone's board. Lets an admin unfigure/re-skin a live
+    // day after the room already seeded (seeding is otherwise once-and-locked).
+    if (req.method === "POST" && url.pathname === "/daily/retheme") {
+      const path = url.searchParams.get("path") ?? "";
+      if (this.state.path === "" && /^daily\/\d{4}-\d{2}-\d{2}$/.test(path)) {
+        this.state.path = path;
+        const [owner, slug] = path.split("/");
+        this.state.owner = owner ?? "";
+        this.state.slug = slug ?? "";
+      }
+      return this.handleDailyRetheme();
+    }
     // Read-only daily leaderboard: top N by gold + the caller's own rank. No socket,
     // no mutation — just a sort over the players already persisted in state.
     if (req.method === "GET" && url.pathname.endsWith("/leaderboard")) {
@@ -677,6 +690,32 @@ export class Room extends DurableObject<Env> {
       console.error("seedDaily failed", this.state.path, (e as Error).message);
       this.pushSystem("Today's Wordul is warming up — refresh in a sec.");
     }
+  }
+
+  // Re-resolve the day's World and re-apply its THEME to an already-seeded daily room:
+  // edition/voice/story/colorScheme/vibeTitle only — the word, phase, and boards are
+  // untouched, so a mid-day retheme can't disturb anyone's play. Unseeded room → no-op
+  // (the normal seed path will apply the current World on first contact anyway).
+  private async handleDailyRetheme(): Promise<Response> {
+    const date = dailyDateOf(this.state.path);
+    if (!date) return new Response("not a daily room", { status: 400 });
+    if (!this.state.isDaily || !this.state.word) return Response.json({ ok: true, seeded: false });
+    const res = await this.env.DAILY.get(this.env.DAILY.idFromName("daily"))
+      .fetch(`https://do/resolve?date=${date}`);
+    if (!res.ok) return new Response("resolve failed", { status: 502 });
+    const world = (await res.json()) as {
+      edition: string; voice: string;
+      story: { title: string; body: string; tip?: string };
+      colorScheme?: { a1: string; a2: string; a3: string };
+      vibeTitle?: string;
+    };
+    this.state.edition = world.edition || "default";
+    this.state.voice = world.voice || "yang";
+    this.state.story = world.story ?? null;
+    this.state.colorScheme = world.colorScheme ?? null;
+    this.state.vibeTitle = world.vibeTitle;
+    await this.persistAndBroadcast();
+    return Response.json({ ok: true, seeded: true, edition: this.state.edition });
   }
 
   // Apply a resolved one-shot World to room state: lock the word, theme/story/palette,

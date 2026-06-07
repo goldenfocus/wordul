@@ -49,6 +49,33 @@ export class Daily extends DurableObject<Env> {
       return Response.json({ dates });
     }
 
+    // Admin list: the curated days, summarized — theme identity only, NEVER the word,
+    // so a listing pasted into a chat/log can't leak a future answer. Auth upstream.
+    if (req.method === "GET" && url.pathname === "/schedule") {
+      const state = await this.load();
+      const days = Object.values(state.schedule)
+        .sort((a, b) => (a.date < b.date ? -1 : 1))
+        .map((w) => ({
+          date: w.date, edition: w.edition, voice: w.voice,
+          vibeTitle: w.vibeTitle, hasColorScheme: !!w.colorScheme, title: w.story?.title,
+        }));
+      return Response.json({ days });
+    }
+
+    // Admin unschedule: drop the curated World for ?date= — the day falls back to the
+    // house World (base look). `seen` is untouched, so an already-played day keeps its
+    // archive/sitemap entry. Auth upstream.
+    if (req.method === "DELETE" && url.pathname === "/schedule") {
+      const date = url.searchParams.get("date") ?? "";
+      const state = await this.load();
+      const removed = !!state.schedule[date];
+      if (removed) {
+        delete state.schedule[date];
+        await this.ctx.storage.put("state", state);
+      }
+      return Response.json({ ok: true, date, removed });
+    }
+
     // Admin seed: write/overwrite a curated World. Auth is enforced UPSTREAM in the
     // worker (Bearer token) before this is ever reached.
     if (req.method === "POST" && url.pathname === "/schedule") {
