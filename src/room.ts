@@ -171,7 +171,7 @@ export class Room extends DurableObject<Env> {
         // (8 = MAX_PLAYERS). A *settable* capacity is always ≤ 6, so a stored value ≥
         // MAX_PLAYERS can only be legacy — recompute from the seated roster (never evicts).
         if (
-          typeof restored.capacity !== "number" ||
+          !Number.isFinite(restored.capacity) ||
           restored.capacity < 2 ||
           restored.capacity >= MAX_PLAYERS
         ) {

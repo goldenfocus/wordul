@@ -103,7 +103,7 @@ describe("persisted capacity", () => {
     };
     const { room } = makeRoom("old", stored);
     await flush(); // ctor restore runs async behind blockConcurrencyWhile
-    expect(room.state.capacity).toBe(3);
+    expect(room.state.capacity).toBe(3); // queued players count too — capacity floor is the full rotation roster (duelists + queued), not just the two duelist seats
   });
 
   it("a legitimately-set capacity (≤6) survives restore untouched", async () => {
