@@ -446,6 +446,43 @@ export default {
       return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
     }
 
+    // Admin: upload one clip into a clip set. multipart form: clipSetId, lineKey, file (wav/mp3).
+    if (url.pathname === "/admin/voice/clips" && req.method === "POST") {
+      const denied = requireAdmin(req, env);
+      if (denied) return denied;
+      const form = await req.formData().catch(() => null);
+      if (!form) return new Response(JSON.stringify({ error: "bad_form" }), { status: 400, headers: { "content-type": "application/json" } });
+      const clipSetId = String(form.get("clipSetId") ?? "");
+      const lineKey = String(form.get("lineKey") ?? "");
+      // Workers-types FormData.get() is typed string|null; cast to access File properties.
+      const file = form.get("file") as File | string | null;
+      if (!/^[a-z0-9-]{1,40}$/.test(clipSetId)) return new Response(JSON.stringify({ error: "bad_clipSetId" }), { status: 400, headers: { "content-type": "application/json" } });
+      if (!/^[a-z0-9._-]{1,80}$/.test(lineKey)) return new Response(JSON.stringify({ error: "bad_lineKey" }), { status: 400, headers: { "content-type": "application/json" } });
+      if (!(file instanceof File)) return new Response(JSON.stringify({ error: "no_file" }), { status: 400, headers: { "content-type": "application/json" } });
+      if (!["audio/wav", "audio/x-wav", "audio/mpeg"].includes(file.type)) return new Response(JSON.stringify({ error: "bad_type" }), { status: 415, headers: { "content-type": "application/json" } });
+      if (file.size > 2 * 1024 * 1024) return new Response(JSON.stringify({ error: "too_large" }), { status: 413, headers: { "content-type": "application/json" } });
+
+      const ext = file.type === "audio/mpeg" ? "mp3" : "wav";
+      const fname = `${lineKey}.${ext}`;
+      await env.VOICE.put(`clipsets/${clipSetId}/${fname}`, file.stream(), { httpMetadata: { contentType: file.type } });
+
+      // Update the per-set manifest (lineKey -> filename).
+      const mkey = `clipsets/${clipSetId}/manifest.json`;
+      let manifest: Record<string, string> = {};
+      const cur = await env.VOICE.get(mkey);
+      if (cur) { try { manifest = JSON.parse(await cur.text()) || {}; } catch { manifest = {}; } }
+      manifest[lineKey] = fname;
+      await env.VOICE.put(mkey, JSON.stringify(manifest), { httpMetadata: { contentType: "application/json" } });
+
+      // Register the set id so the validator accepts it (skip built-ins, which live in ASSETS).
+      if (!builtinClipSets().includes(clipSetId)) {
+        const reg = new Set(await knownClipSets(env));
+        reg.add(clipSetId);
+        await env.DIRECTORY.put("voice:clipsets", JSON.stringify([...reg].filter((s) => !builtinClipSets().includes(s))));
+      }
+      return new Response(JSON.stringify({ ok: true, file: fname }), { headers: { "content-type": "application/json" } });
+    }
+
     // Vibe Studio "✨ tune" — rewrite a curator's "why this word" note via Workers AI.
     // POST /vibe-studio/tune  { story, prompt? } -> { text }. Open for now (the whole
     // studio is an un-launched, un-auth'd seam; real auth + rate-limit land with the
@@ -561,6 +598,16 @@ export default {
     // Legacy redirect: /r or /r/<code> -> home (rooms are owner-nested now).
     if (url.pathname === "/r" || url.pathname.startsWith("/r/")) {
       return Response.redirect(url.origin + "/", 301);
+    }
+
+    // Serve uploaded voice clips from the VOICE R2 bucket at /voice-clips/<set>/<file>.
+    if (url.pathname.startsWith("/voice-clips/")) {
+      const key = "clipsets/" + url.pathname.slice("/voice-clips/".length);
+      const obj = await env.VOICE.get(key);
+      if (!obj) return new Response("not found", { status: 404 });
+      return new Response(obj.body, {
+        headers: { "content-type": obj.httpMetadata?.contentType ?? "application/octet-stream", "cache-control": "public, max-age=300" },
+      });
     }
 
     // Design gallery: serve /designs/* from the DESIGNS R2 bucket (permanent,
