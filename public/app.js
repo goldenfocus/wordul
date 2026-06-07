@@ -2597,6 +2597,10 @@ function renderDailyUnlock(snap, me) {
   if (!box) return;
   const done = me && me.status !== "playing";
   box.hidden = !done;
+  // The ritual stage: once you're done, non-ritual chrome (mute, hacklog, header
+  // chat/link) bows out via CSS — see body.daily-ritual in style.css. Toggled (not
+  // added) so a not-yet-done render never leaves a stale stage class behind.
+  document.body.classList.toggle("daily-ritual", done);
   if (!done) return;
   // The curated day's name (vibeTitle) crowns the reveal — a palette-gradient hero on a
   // themed day (see .daily-vibe-title), inserted once above the goody. Absent on legacy days.
@@ -2605,7 +2609,7 @@ function renderDailyUnlock(snap, me) {
     h.className = "daily-vibe-title";
     h.id = "dailyVibeTitle";
     h.textContent = snap.vibeTitle;
-    box.insertBefore(h, box.firstChild);
+    box.insertBefore(h, $("#dailyReveal")); // crown the card — the dare button stays first
     box.dataset.vibeTitled = "1";
   }
   const won = me.status === "won";
@@ -2661,7 +2665,7 @@ function renderDailyUnlock(snap, me) {
   }
   const share = $("#dailyShareBtn");
   if (share && !share.dataset.wired) {
-    share.textContent = t("daily.challenge");
+    share.textContent = t("daily.dare");
     // shareDailyResult is gesture-safe here: this listener runs on the tap itself.
     // game.dailyDate: a past-day page must challenge friends to THAT day, not today's.
     share.addEventListener("click", () => shareDailyResult({ won, guesses: me.guesses.length, masks: me.guesses.map((g) => g.mask) }, game.dailyDate));
@@ -5343,6 +5347,7 @@ function leaveRoom() {
   clearHeaderIdentity(); // drop the in-room username + gold from the topbar header
   document.body.classList.remove("playing"); // restore full chrome outside a room
   document.body.classList.remove("daily");
+  document.body.classList.remove("daily-ritual");
   document.body.classList.remove("lobby"); // drop the two-zone lobby layout outside a room
   game.isDaily = false; game.dailyDate = null;
   settlementShown = false; // discard stale latch so a different already-finished room can show

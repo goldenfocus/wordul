@@ -277,6 +277,10 @@
         <div id="lobbyRailList" class="lobby-rail-list"></div>
       </aside>
       <section id="dailyUnlock" class="daily-unlock" hidden>
+        <!-- ◆ Dare ◆ — the one-word bridge between your board and the golden card:
+             a spoiler-free share of THIS day's link (+ masked-board gift unfurl).
+             Filled + wired by renderDailyUnlock; aria-label carries the full verb. -->
+        <button type="button" class="daily-dare" id="dailyShareBtn" aria-label="Dare — challenge a friend on this word"></button>
         <!-- The Broadsheet reveal (design ritual winner, Jun 5 2026): kicker → the word as
              a front-page serif headline → dictionary entry → minted credit. The word, the
              entry, and the credit link ALL lead into the word's wiki page (/word/<word>).
@@ -301,7 +305,6 @@
         <div class="daily-bridge">
           <!-- One CTA ("Challenge a friend" — spoiler-free share of THIS day's link) +
                a quiet action rail: Wiki · Recap · Past days · Home. Wired by renderDailyUnlock. -->
-          <button type="button" class="btn primary block daily-bridge-btn" id="dailyShareBtn"></button>
           <nav class="daily-bridge-actions" aria-label="After the word">
             <a class="btn ghost small" id="dailyWikiLink" hidden></a>
             <a class="btn ghost small" id="dailyRecapLink" hidden></a>
