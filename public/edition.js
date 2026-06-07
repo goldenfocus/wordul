@@ -2,6 +2,7 @@
 import { EDITIONS, getEdition } from "/editions/index.js";
 import { resolveTier, shouldSpeak } from "/companion.js";
 import { mergeConfig } from "/roomConfig.js";
+import { activeVoiceLayer, resolveClipBase } from "/voice-config.js";
 
 const LS = { edition: "wordul.edition", gold: "wordul.gold", muted: "wordul.muted", voice: "wordul.voice" };
 
@@ -86,6 +87,7 @@ export function companionReact(event, ctx = {}) {
   // Resolve config through the merge contract: edition default <- room override (empty in rung 1).
   const merged = mergeConfig(
     { voice: { react: ed.companion?.react ?? {}, lines: ed.companion?.lines ?? {} } },
+    activeVoiceLayer(),                 // per-surface voice source (silent ⇒ {})
     { voice: snapshotVoiceConfig() },
   );
   const react = merged.voice?.react;
@@ -113,19 +115,25 @@ export function companionReact(event, ctx = {}) {
 
   let text = raw.replace("{answer}", ctx.answer ?? "that one");
   const muted = localStorage.getItem(LS.muted) === "1";
-  const voiceOn = !!ed.sound?.voice?.on && !muted;
-  // Voice pref gate: opted in → the normal scarcity budget decides; default (off) →
-  // only the {answer}-templated word reveal speaks. Mute above trumps both.
+  const source = merged.voice?.source ?? null;   // null ⇒ this surface is silent
   const allowed = isVoiceEnabled()
     ? shouldSpeak(event, tier, react, ctx.rng)
     : raw.includes("{answer}");
+  const speak = !!source && !muted && allowed;
+
   // How the {answer} reveal is voiced: "robot" (default — whole line in the robot
   // voice with a beat before the word) or "split" (cloned frame + robot answer).
   // Per-world via the ACTIVE edition's sound.voice.reveal (the world owns the vibe,
   // even though lines/clips stay Yang's); per-room via the rung-2 snapshot override.
   const revealVoice = snapshotVoiceConfig().reveal
     ?? getEdition(activeId).sound?.voice?.reveal ?? "robot";
-  return { text, raw, tier, revealVoice, speak: voiceOn && allowed };
+
+  // Audio descriptor consumed by the playback dispatcher (app.js / voice.js).
+  let voice = { mode: "silent" };
+  if (source?.kind === "ai") voice = { mode: "ai", voiceName: source.voiceName, rate: source.rate, pitch: source.pitch };
+  else if (source?.kind === "clips") voice = { mode: "clips", clipBase: resolveClipBase(source.clipSetId) };
+
+  return { text, raw, tier, revealVoice, speak, voice };
 }
 
 // The palette is split into two surfaces with different morphing rules:

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getGold, setGold, addGold, spendGold, drainGold } from "/edition.js";
 
 beforeEach(() => localStorage.clear());
@@ -102,8 +102,23 @@ describe("editions + companion", () => {
 });
 
 import { isVoiceEnabled, setVoiceEnabled } from "/edition.js";
+import { hydrateVoiceConfig, setActiveVoiceId } from "/voice-config.js";
+
+const YANG_SOURCE = { kind: "clips", clipSetId: "yang", origin: "clone-existing" };
 
 describe("voice preference (wordul.voice — OFF by default)", () => {
+  // An active yang clips source must be present so speak:true is reachable in these
+  // tests. Per-surface voice is required by the new silent-by-default contract; the
+  // tests below focus on the pref/mute/budget gates, NOT on source presence.
+  beforeEach(() => {
+    hydrateVoiceConfig({ yang: { on: true, source: YANG_SOURCE } });
+    setActiveVoiceId("yang");
+  });
+  afterEach(() => {
+    hydrateVoiceConfig({});
+    setActiveVoiceId(null);
+  });
+
   it("defaults to off; setVoiceEnabled flips and persists", () => {
     expect(isVoiceEnabled()).toBe(false);
     expect(setVoiceEnabled(true)).toBe(true);
@@ -112,7 +127,8 @@ describe("voice preference (wordul.voice — OFF by default)", () => {
     expect(isVoiceEnabled()).toBe(false);
   });
   it("routine companion lines do NOT speak with voice off (the default)", () => {
-    // rng: () => 0 would force shouldSpeak() true — proving it's the new pref gating.
+    // rng: () => 0 would force shouldSpeak() true — proving it's the pref gate, not
+    // shouldSpeak or source-absence, that keeps these lines silent.
     for (const ev of ["invalid", "wrong", "idle"]) {
       expect(companionReact(ev, { rng: () => 0 }).speak).toBe(false);
     }
@@ -136,6 +152,52 @@ describe("voice preference (wordul.voice — OFF by default)", () => {
     expect(companionReact("loss", { answer: "CRANE" }).speak).toBe(false);
     setVoiceEnabled(true);
     expect(companionReact("loss", { answer: "CRANE" }).speak).toBe(false);
+  });
+});
+
+describe("companionReact — per-surface voice descriptor (silent by default)", () => {
+  afterEach(() => {
+    hydrateVoiceConfig({});
+    setActiveVoiceId(null);
+  });
+
+  it("returns speak:false and voice.mode==='silent' when no active voice is configured", () => {
+    // Baseline: nothing hydrated, nothing active → the surface is silent.
+    const r = companionReact("loss", { answer: "FOO" });
+    expect(r.speak).toBe(false);
+    expect(r.voice.mode).toBe("silent");
+  });
+
+  it("returns voice.mode==='clips' and the expected clipBase when an active clips source is set", () => {
+    hydrateVoiceConfig({ yang: { on: true, source: YANG_SOURCE } });
+    setActiveVoiceId("yang");
+    // voice off by default → allowed only for {answer} lines; loss+answer picks one
+    const r = companionReact("loss", { answer: "FOO" });
+    expect(r.speak).toBe(true);
+    expect(r.voice.mode).toBe("clips");
+    // built-in clipSetId "yang" → static assets route
+    expect(r.voice.clipBase).toBe("/voice/yang/");
+  });
+
+  it("returns voice.mode==='ai' with the source fields when an active ai source is set", () => {
+    hydrateVoiceConfig({ myai: { on: true, source: { kind: "ai", voiceName: "Ember", rate: 1.1, pitch: 0.9 } } });
+    setActiveVoiceId("myai");
+    setVoiceEnabled(true);
+    const r = companionReact("wrong", { rng: () => 0 }); // rng=0 → under budget
+    expect(r.speak).toBe(true);
+    expect(r.voice.mode).toBe("ai");
+    expect(r.voice.voiceName).toBe("Ember");
+    expect(r.voice.rate).toBe(1.1);
+    expect(r.voice.pitch).toBe(0.9);
+    setVoiceEnabled(false);
+  });
+
+  it("an off voice-config entry produces speak:false and voice.mode==='silent'", () => {
+    hydrateVoiceConfig({ yang: { on: false, source: YANG_SOURCE } });
+    setActiveVoiceId("yang");
+    const r = companionReact("loss", { answer: "FOO" });
+    expect(r.speak).toBe(false);
+    expect(r.voice.mode).toBe("silent");
   });
 });
 
