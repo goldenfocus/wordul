@@ -133,6 +133,20 @@ export function recentGameView(game, ctx = {}) {
     };
   }
 
+  // Challenge game (roomPath "c:<id>:<player>"): the server strips `words` (toPublicGame —
+  // the pinned word replays for every player, so letters would spoil /c/<id>); render the
+  // colors-only stamp and link the caption to PLAY that same challenge.
+  if (roomPath.startsWith("c:")) {
+    const id = roomPath.split(":")[1] || "";
+    return {
+      kind: "challenge", won, guesses, label: "Challenge", shortLabel: "Challenge", result, date: null, wordLength,
+      grid: rawGrid,
+      words: null,   // belt-and-braces: never letters for a challenge, even on an old payload
+      locked: false,
+      roomHref: id ? `/c/${id}` : null,
+    };
+  }
+
   // Room game: render the stored letter-card if we have one; legacy records with no board
   // fall back to a link into the room.
   const slug = roomPath.includes("/") ? roomPath.split("/")[1] || "" : roomPath;

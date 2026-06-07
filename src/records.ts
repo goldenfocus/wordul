@@ -23,18 +23,23 @@ export type GameRecord = {
                           // on fixed pacing until they play new games after this change).
 };
 
-// The public projection of a finished game. Two things change vs the stored record:
+// The public projection of a finished game. Three things change vs the stored record:
 //   • the redundant top-level `word` is always dropped (the answer also lives in the
 //     winning row of `words`, and the client never reads `word`);
 //   • for the CURRENT daily, `words` is dropped too — today's letters must never leave the
-//     server, or anyone could fetch the answer without playing. Every PAST game keeps its
-//     `words` so a full letter-card can render. `solveGrid` (colors) is always kept.
+//     server, or anyone could fetch the answer without playing;
+//   • for a CHALLENGE game (roomPath "c:<id>:<player>"), `words` is dropped FOREVER — the
+//     Challenge DO replays the same pinned word for every player and scoring is one-shot,
+//     so a finisher's letter board would hand the answer to anyone yet to play /c/<id>.
+// Every other PAST game keeps its `words` so a full letter-card can render (room words are
+// random per round — no spoiler). `solveGrid` (colors) is always kept.
 // Pass liveDailyPath = "daily/<activeDate>"; "" means "nothing is live" (reveal all letters).
 export type PublicGameRecord = Omit<GameRecord, "word">;
 export function toPublicGame(g: GameRecord, liveDailyPath = ""): PublicGameRecord {
   const { word, words, ...rest } = g;
   void word;
   if (liveDailyPath && g.roomPath === liveDailyPath) return rest; // live daily: no letters
+  if (g.roomPath.startsWith("c:")) return rest;                   // challenge: no letters, ever
   return { ...rest, words }; // guessAts (if present) rides along — not a spoiler (offsets only, no letters)
 }
 

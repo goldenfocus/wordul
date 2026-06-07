@@ -42,6 +42,14 @@ describe("toPublicGame (live-daily letter guard)", () => {
     expect(pub.words).toBeUndefined();
     expect(pub.solveGrid).toEqual(["yxxxx", "ggggg"]);
   });
+  it("strips the letters for a CHALLENGE game — the pinned word replays for every player", () => {
+    // c:<id>:<player> rooms ALWAYS play the challenge's pinned word (room.ts), and scoring
+    // is one-shot — so a finisher's letter board IS the answer for anyone yet to play /c/<id>.
+    const pub = toPublicGame({ ...rec, roomPath: "c:djJzV:antonio" }, "daily/2026-06-04");
+    expect(JSON.stringify(pub)).not.toContain("CRANK");
+    expect(pub.words).toBeUndefined();
+    expect(pub.solveGrid).toEqual(["yxxxx", "ggggg"]); // colors stay — the stamp still renders
+  });
 });
 
 describe("buildGameRecords", () => {

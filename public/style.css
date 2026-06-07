@@ -2103,6 +2103,16 @@ a.pgame-name { color: var(--muted); }
 .pgame-lock { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
 .pgame-lock .glyph { width: 22px; height: 22px; opacity: .85; filter: drop-shadow(0 0 7px rgba(233,178,61,.25)); }
 .pgame.is-locked .daily-stamp { cursor: inherit; }
+/* The fold: cards past GAMES_FOLD hide behind one quiet "Show all (N)" card. */
+.pgame.is-folded { display: none; }
+.pgame-more { justify-content: center; min-height: 120px; }
+.pgame-more-btn {
+  width: 100%; height: 100%; min-height: 100px; margin: 0; padding: .5rem;
+  background: none; border: 1px dashed color-mix(in oklab, var(--muted) 45%, transparent);
+  border-radius: 8px; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer;
+  transition: color .15s ease, border-color .15s ease;
+}
+.pgame-more-btn:hover { color: #f0c14b; border-color: rgba(233,178,61,.5); }
 
 /* Gold ledger — the public chain: every mint on the record, chain-explorer calm.
    Columns: date · faded glyph + reason · gold delta · running balance · (›).

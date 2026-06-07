@@ -106,6 +106,18 @@ describe("recentGameView", () => {
     expect(v.grid).toBeNull();
     expect(v.roomHref).toBe("/@crane/snappy-moose");
   });
+
+  it("renders a challenge game colors-only with a play link (the pinned word must never leak)", () => {
+    // Even if a payload somehow carried words, the view drops them — the server already
+    // strips them in toPublicGame; this is the client's belt-and-braces twin.
+    const v = recentGameView(room("c:djJzV:antonio", { solveGrid: ["xyxxx", "ggggg"], words: ["AUDIO", "CRANK"] }), { today, playedToday: true });
+    expect(v.kind).toBe("challenge");
+    expect(v.shortLabel).toBe("Challenge");
+    expect(v.grid).toEqual(["xyxxx", "ggggg"]);
+    expect(v.words).toBeNull();
+    expect(JSON.stringify(v)).not.toContain("CRANK");
+    expect(v.roomHref).toBe("/c/djJzV");
+  });
 });
 
 describe("humanizeReason", () => {

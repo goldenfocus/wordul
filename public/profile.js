@@ -27,6 +27,7 @@ function partLabel(label) {
 
 const DAILY_SOLVE_LS = "wr.dailySolve"; // mirrors LS.dailySolve in app.js (client-only solve)
 const DAILY_TOKEN_LS = "wr.dailyToken"; // mirrors LS.dailyToken in app.js (per-date proof-of-finish)
+const GAMES_FOLD = 12; // game cards above the "Show all (N)" fold — ~3-4 grid rows
 
 // A viewer who FINISHED today's daily holds the per-date finisher token. Exchange it (the
 // server validates — a wrong/absent token just yields no letters) for this profile's letter
@@ -85,9 +86,16 @@ export async function renderProfile(username, mountEl) {
   );
   const todayWords = playedToday && hasLiveDaily ? await fetchTodayWords(username, today) : null;
 
-  const recent = (p.games || [])
-    .map((g) => renderGameCard(recentGameView(g, { today, playedToday, todayWords })))
+  // Fold the games grid: the first GAMES_FOLD cards show, the rest hide behind one
+  // "Show all (N)" card. History caps at 100 server-side — without a fold a heavy
+  // player's profile is a wall of 100 boards before the ledger.
+  const allGames = p.games || [];
+  let recent = allGames
+    .map((g, i) => renderGameCard(recentGameView(g, { today, playedToday, todayWords }), i >= GAMES_FOLD))
     .join("");
+  if (allGames.length > GAMES_FOLD) {
+    recent += `<li class="pgame pgame-more"><button class="pgame-more-btn" type="button">Show all ${allGames.length}</button></li>`;
+  }
 
   // The ledger's running-balance column: walked backwards from the current gold total.
   // No total on the payload → no column (rows render without balances, never NaN).
@@ -119,6 +127,13 @@ export async function renderProfile(username, mountEl) {
   if (location.hash === "#gold-history") {
     mountEl.querySelector("#gold-history")?.scrollIntoView({ block: "start" });
   }
+
+  // "Show all (N)": unfold the hidden game cards and retire the button's card.
+  const moreBtn = mountEl.querySelector(".pgame-more-btn");
+  moreBtn?.addEventListener("click", () => {
+    mountEl.querySelectorAll(".pgame.is-folded").forEach((el) => el.classList.remove("is-folded"));
+    moreBtn.closest("li")?.remove();
+  });
 
   // Tap a gold-history row WITH parts to reveal its component legs (granular mode).
   mountEl.querySelectorAll(".gold-row-btn").forEach((btn) => {
@@ -174,7 +189,9 @@ function emptyBoard(rows, cols) {
 //   • locked (today's daily, viewer hasn't played) → empty shell + faded lock, links home
 //   • has grid → the stamp, with LETTERS when words legitimately shipped
 //   • legacy game with no stored board → empty shell; rooms keep their link caption
-function renderGameCard(v) {
+//   • folded → hidden behind the grid's "Show all (N)" card until tapped
+function renderGameCard(v, folded = false) {
+  const fold = folded ? " is-folded" : "";
   const rows = boardRows(v.wordLength);
   const cols = Number(v.wordLength) || 5;
   const mark = v.won
@@ -187,7 +204,7 @@ function renderGameCard(v) {
   if (v.locked) {
     // The result stays visible (it was never a spoiler) — only the board hides behind
     // the lock until the viewer has played today. Tapping the veil goes home to play.
-    return `<li class="pgame is-locked">
+    return `<li class="pgame is-locked${fold}">
         <a class="pgame-veil" href="/" title="Play today's Wordul to unlock" aria-label="Play today's Wordul to unlock this board">
           ${emptyBoard(rows, cols)}
           <span class="pgame-lock">${GLYPH.lock}</span>
@@ -197,7 +214,7 @@ function renderGameCard(v) {
   const board = Array.isArray(v.grid) && v.grid.length
     ? renderStamp(v.grid, Array.isArray(v.words) ? v.words : undefined, rows)
     : emptyBoard(rows, cols);
-  return `<li class="pgame">${board}${cap}</li>`;
+  return `<li class="pgame${fold}">${board}${cap}</li>`;
 }
 
 function escapeHtml(s) {
