@@ -13,6 +13,21 @@ describe("nextSeatRole", () => {
   it("exposes a two-seat duel", () => {
     expect(MAX_DUELISTS).toBe(2);
   });
+
+  it("seats beyond capacity become spectators", () => {
+    const two = [{ role: "duelist" as const }, { role: "duelist" as const }];
+    expect(nextSeatRole(two, 2)).toBe("spectator");
+    expect(nextSeatRole(two, 3)).toBe("queued");
+    expect(nextSeatRole([...two, { role: "queued" as const }], 3)).toBe("spectator");
+  });
+
+  it("spectators don't hold seats — a watcher doesn't block the queue", () => {
+    const players = [
+      { role: "duelist" as const }, { role: "duelist" as const },
+      { role: "spectator" as const },
+    ];
+    expect(nextSeatRole(players, 3)).toBe("queued");
+  });
 });
 
 describe("applyKothRotation", () => {

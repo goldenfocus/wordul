@@ -175,8 +175,7 @@ export class Room extends DurableObject<Env> {
           restored.capacity < 2 ||
           restored.capacity >= MAX_PLAYERS
         ) {
-          restored.capacity = Math.max(2, restored.players.filter((p) => p.role !== ("spectator" as typeof p.role)).length);
-          // TODO(lobby-v2 Task 2): drop cast once the union widens to include "spectator"
+          restored.capacity = Math.max(2, restored.players.filter((p) => p.role !== "spectator").length);
         }
         // A room caught mid-countdown by restore can't trust its stale goAt alarm — drop
         // back to lobby so duelists simply re-ready (cheap; avoids a stuck 3-2-1 overlay).
@@ -517,7 +516,9 @@ export class Room extends DurableObject<Env> {
         this.send(ws, { type: "error", message: "room full" });
         return;
       }
-      const role: "duelist" | "queued" = this.isDuelRoom() ? nextSeatRole(this.state.players) : "duelist";
+      const role: "duelist" | "queued" | "spectator" = this.isDuelRoom()
+        ? nextSeatRole(this.state.players, this.state.capacity)
+        : "duelist";
       this.state.players.push({
         username,
         connected: true,
@@ -1284,7 +1285,9 @@ export class Room extends DurableObject<Env> {
     if (this.state.players.some((p) => p.isBot)) return;
     if (this.state.players.length >= MAX_PLAYERS) return;
     const botName = BOT_NAME;
-    const botRole: "duelist" | "queued" = this.isDuelRoom() ? nextSeatRole(this.state.players) : "duelist";
+    const botRole: "duelist" | "queued" | "spectator" = this.isDuelRoom()
+      ? nextSeatRole(this.state.players, this.state.capacity)
+      : "duelist";
     this.state.players.push({
       username: botName,
       connected: true,

@@ -54,7 +54,7 @@ export type PlayerState = {
   status: "playing" | "won" | "lost";
   isBot?: boolean;         // a worduler — born in Wordul, plays from public masks only
   ready: boolean;          // duel readiness — gates the 3-2-1 countdown (reset false on join/round)
-  role: "duelist" | "queued"; // duel seat: only two duelists play at a time; everyone else is queued (spectator)
+  role: "duelist" | "queued" | "spectator"; // duel seat: two duelists play; queued rotate in (KOTH); spectators (past capacity) watch + chat, never rotate
   scienceOptOut?: boolean; // true = skip player-level research telemetry
   revealHints?: number;    // per-round count, powers aggregate hint-use research
   vowelHints?: number;     // per-round count, powers aggregate hint-use research

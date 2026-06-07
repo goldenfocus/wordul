@@ -76,6 +76,7 @@ const player = (room: AnyRoom, u: string) => room.state.players.find((p) => p.us
 describe("duel room — full DO integration (seats → ready → countdown → KOTH)", () => {
   it("seats the first two as duelists and queues the rest", async () => {
     const { room } = makeRoom();
+    room.state.capacity = 3; // raise so carol lands queued (tests the queued path)
     const [a, b, c] = [mockWs(), mockWs(), mockWs()];
     await join(room, a, "alice");
     await join(room, b, "bob");
@@ -120,6 +121,7 @@ describe("duel room — full DO integration (seats → ready → countdown → K
 
   it("a win finishes the round and KOTH rotates: winner stays, loser queues, next steps up", async () => {
     const { room } = makeRoom();
+    room.state.capacity = 3; // raise so carol lands queued and can rotate in
     const [a, b, c] = [mockWs(), mockWs(), mockWs()];
     await join(room, a, "alice");
     await join(room, b, "bob");

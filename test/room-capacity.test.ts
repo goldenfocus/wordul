@@ -120,3 +120,37 @@ describe("persisted capacity", () => {
     expect(room.state.capacity).toBe(4);
   });
 });
+
+describe("spectator role", () => {
+  it("the joiner past capacity is a spectator and NEVER enters the rotation queue", async () => {
+    const { room } = makeRoom();
+    const [a, b, c] = [mockWs(), mockWs(), mockWs()];
+    await join(room, a, "alice");
+    await join(room, b, "bob");
+    await join(room, c, "cara"); // capacity 2, both seats taken
+    const cara = room.state.players.find((p) => p.username === "cara")!;
+    expect(cara.role).toBe("spectator");
+    expect(room.state.queue).toEqual([]); // never-rotated invariant: not in the queue,
+    // and applyKothRotation only seats from the queue — so cara can never rotate in.
+  });
+
+  it("a spectator's ready is inert", async () => {
+    const { room } = makeRoom();
+    const [a, b, c] = [mockWs(), mockWs(), mockWs()];
+    await join(room, a, "alice");
+    await join(room, b, "bob");
+    await join(room, c, "cara");
+    await room.webSocketMessage(c, JSON.stringify({ type: "ready", ready: true }));
+    const cara = room.state.players.find((p) => p.username === "cara")!;
+    expect(cara.ready).toBe(false);
+    expect(room.state.phase).toBe("lobby");
+  });
+
+  it("MAX_PLAYERS (8) still caps the room overall — joiner #9 is rejected", async () => {
+    const { room } = makeRoom();
+    const names = ["alice", "bob", "cara", "dan", "eve", "fay", "gus", "hal", "ivy"];
+    for (const n of names) await join(room, mockWs(), n);
+    expect(room.state.players.length).toBe(8);
+    expect(room.state.players.some((p) => p.username === "ivy")).toBe(false);
+  });
+});

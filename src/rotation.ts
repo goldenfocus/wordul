@@ -4,11 +4,18 @@ export const MAX_DUELISTS = 2;
 
 export type Throne = { username: string; streak: number } | null;
 
+export type SeatRole = "duelist" | "queued" | "spectator";
+
 /** Seat for a newly joining player: a duelist seat while fewer than two are taken
- *  (by role — a disconnected duelist still holds their seat), otherwise the queue. */
-export function nextSeatRole(players: { role: "duelist" | "queued" }[]): "duelist" | "queued" {
-  const taken = players.filter((p) => p.role === "duelist").length;
-  return taken < MAX_DUELISTS ? "duelist" : "queued";
+ *  (by role — a disconnected duelist still holds their seat); then the queue while the
+ *  table has room (seated = duelists + queued < capacity); past capacity the joiner is a
+ *  spectator — fully live (boards, chat) but never in the rotation. No capacity (legacy
+ *  callers/tests) means an uncapped table: the old duelist/queued behavior. */
+export function nextSeatRole(players: { role: SeatRole }[], capacity = Infinity): SeatRole {
+  const duelists = players.filter((p) => p.role === "duelist").length;
+  if (duelists < MAX_DUELISTS) return "duelist";
+  const seated = players.filter((p) => p.role !== "spectator").length;
+  return seated < capacity ? "queued" : "spectator";
 }
 
 export type KothInput = {
