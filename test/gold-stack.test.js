@@ -3,6 +3,7 @@
 // amount, and every count-up tween writes ONLY the number child — the glyph never
 // repaints, #roundScore keeps its legacy inline "<prefix>N" shape.
 import { describe, it, expect, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
 import { goldCountTarget, renderGoldHud, awardGold, goldDrain } from "/gold.js";
 import { setGold } from "/edition.js";
 
@@ -107,5 +108,28 @@ describe("count-up tween targets — stacked hud vs plain #roundScore", () => {
     );
     expect(score.textContent).toBe("Score 25");
     expect(score.querySelector(".gold-stack-num")).toBe(null);
+  });
+});
+
+describe("static #hubGold markup (index.html) — same stacked contract + ARIA role", () => {
+  // cwd-relative: under jsdom import.meta.url is an http: URL, not file:.
+  const html = readFileSync("public/index.html", "utf8");
+
+  it('carries role="img" so the aria-label is announced (aria-label is prohibited on a bare <span>)', () => {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const hub = doc.getElementById("hubGold");
+    expect(hub.getAttribute("role")).toBe("img");
+    expect(hub.getAttribute("aria-label")).toBe("0 gold");
+  });
+
+  it("mirrors the hud's glyph/num shape: aria-hidden ◆ above a .gold-stack-num (#hubGoldVal)", () => {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const hub = doc.getElementById("hubGold");
+    expect(hub.classList.contains("gold-stack")).toBe(true);
+    const kids = [...hub.children];
+    expect(kids.map((k) => k.className)).toEqual(["gold-stack-glyph", "gold-stack-num"]);
+    expect(kids[0].textContent).toBe("◆");
+    expect(kids[0].getAttribute("aria-hidden")).toBe("true");
+    expect(kids[1].id).toBe("hubGoldVal");
   });
 });
