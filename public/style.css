@@ -3340,9 +3340,8 @@ body.lobby .lobby-aura { opacity: 1; }
 }
 @keyframes lobby-aura-spin { to { transform: rotate(360deg) scale(1.05); } }
 @keyframes lobby-aura-drift { 50% { transform: translate(-4%, 3%) scale(1.1); } }
-/* Lift the real lobby content above the aura. */
-body.lobby .lobby-bar,
-body.lobby #roomTabs,
+/* Lift the real lobby content above the aura. (.lobby-bar and #roomTabs are
+   display:none in lobby — only the live zones need the lift.) */
 body.lobby #tabPlay,
 body.lobby #chatPanel { position: relative; z-index: 1; }
 /* Reduced motion: freeze the aura (still visible, just static). Dual-guard. */
@@ -3432,17 +3431,14 @@ body.lobby .lobby-right {
     padding: var(--space-1) var(--space-1) var(--space-2);
   }
 }
-/* In lobby the header owns the room name + the two-zone layout owns the screen,
-   so the in-bar title card + the Play/Games/Players tabs collapse away.
-   (JS already sets #roomTabs.hidden; this is belt-and-suspenders.) */
-body.lobby .lobby-bar .room-info { display: none; }
+/* In lobby the header owns the room name + the two-zone layout owns the screen, and
+   arrangeLobbyLayout reparents #lobbyControls into .lobby-left — so EVERYTHING the bar
+   hosts is gone (.room-info hidden, #endControls [hidden]) and the bar itself would
+   render as an empty bordered pill under the header. Hide the whole bar; it returns
+   untouched in playing/finished (room name + Play again). The Play/Games/Players tabs
+   collapse too (JS already sets #roomTabs.hidden; this is belt-and-suspenders). */
+body.lobby .lobby-bar { display: none; }
 body.lobby #roomTabs { display: none; }
-/* The lobby header is a translucent blurred panel (prototype .bar). */
-body.lobby .lobby-bar {
-  background: color-mix(in oklab, var(--bg-card) 55%, transparent);
-  border-color: color-mix(in oklab, var(--fg) 8%, var(--border));
-  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-}
 /* #lobbyControls is reparented into .lobby-left — center it and give the Start
    button the prototype's full-width "deal" feel. Scoped to body.lobby so the
    global .btn.primary is untouched everywhere else. */

@@ -84,6 +84,16 @@ describe("iter3 §2 top chrome de-clutter", () => {
   it("an EMPTY message row collapses (no ghost pill under the header); populated rows still show", () => {
     expect(css).toMatch(/\.message-row:empty\s*\{[^}]*display:\s*none/);
   });
+  it("the lobby-bar hides whole in the lobby phase — it hosts nothing there (the real 'mystery pill')", () => {
+    // In lobby, arrangeLobbyLayout reparents #lobbyControls into .lobby-left, .room-info
+    // is header-owned, and #endControls is [hidden] — an unhidden bar is an empty bordered
+    // panel under the header. body.lobby is phase-scoped (snap.phase === "lobby"), so
+    // playing/finished keep the bar (room name + Play again) exactly as before.
+    expect(css).toMatch(/body\.lobby \.lobby-bar \{ display: none; \}/);
+    // the old lobby-only translucent-panel skin is dead styling once the bar hides — gone
+    expect(css).not.toMatch(/body\.lobby \.lobby-bar \{\s*\n\s*background: color-mix/);
+    expect(app).toMatch(/document\.body\.classList\.toggle\("lobby", isLobby\)/);
+  });
   it("the topbar share/link button is gone — Invite (lobby pair) owns sharing", () => {
     expect(html).not.toContain("roomLinkBtn");
     expect(app).not.toContain("roomLinkBtn");
