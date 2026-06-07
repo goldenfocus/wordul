@@ -116,7 +116,7 @@ export class Room extends DurableObject<Env> {
       chat: [],
       wordLength: DEFAULT_LENGTH,
       maxGuesses: guessesFor(DEFAULT_LENGTH),
-      capacity: MAX_PLAYERS, // placeholder; snapshotFor recomputes (seed?.capacity ?? MAX_PLAYERS) outbound
+      capacity: 2, // duel default — the host resizes via set_capacity (2–6); seeded rooms read seed.capacity instead (snapshotFor)
       mode: DEFAULT_MODE,
       scoreboard: [],
       history: [],
@@ -166,6 +166,17 @@ export class Room extends DurableObject<Env> {
             if (seated < 2) { p.role = "duelist"; seated++; }
             else { p.role = "queued"; restored.queue.push(p.username); }
           }
+        }
+        // Capacity backfill: rooms persisted before Lobby v2 stored the ctor placeholder
+        // (8 = MAX_PLAYERS). A *settable* capacity is always ≤ 6, so a stored value ≥
+        // MAX_PLAYERS can only be legacy — recompute from the seated roster (never evicts).
+        if (
+          typeof restored.capacity !== "number" ||
+          restored.capacity < 2 ||
+          restored.capacity >= MAX_PLAYERS
+        ) {
+          restored.capacity = Math.max(2, restored.players.filter((p) => p.role !== ("spectator" as typeof p.role)).length);
+          // TODO(lobby-v2 Task 2): drop cast once the union widens to include "spectator"
         }
         // A room caught mid-countdown by restore can't trust its stale goAt alarm — drop
         // back to lobby so duelists simply re-ready (cheap; avoids a stuck 3-2-1 overlay).
@@ -2168,8 +2179,8 @@ export class Room extends DurableObject<Env> {
       ...this.state,
       isDuel: duel,
       // Seat capacity for the lobby "Your table" strip: seeded rooms expose their configured
-      // capacity; normal rooms expose the hard max (8). Computed outbound — never persisted stale.
-      capacity: this.state.seed?.capacity ?? MAX_PLAYERS,
+      // capacity; duel rooms expose the persisted, host-settable table size (default 2).
+      capacity: this.state.seed?.capacity ?? this.state.capacity,
       word: reveal ? this.state.word : null,
       // The daily story names the answer ("Why EMBER?") — gate it exactly like `word`,
       // else a still-playing viewer reads today's word straight off the WS payload.
