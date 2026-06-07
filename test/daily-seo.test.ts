@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isValidDateString, dailyDateFromPathname, dailyPrevNext } from "../src/daily-seo.ts";
+import { isValidDateString, dailyDateFromPathname, dailyPrevNext, giftPatternFromSearch, dailyOgFromPathname, buildGiftMeta } from "../src/daily-seo.ts";
 
 describe("isValidDateString", () => {
   it("accepts real calendar dates", () => {
@@ -71,5 +71,41 @@ describe("dailySitemapUrls", () => {
     expect(urls).toContain("https://wordul.com/daily/archive");
     expect(urls).toContain("https://wordul.com/daily/2026-06-02");
     expect(urls).toContain("https://wordul.com/daily/2026-06-01");
+  });
+});
+
+describe("gift pattern (dare ritual)", () => {
+  it("accepts a strictly valid ?g= pattern", () => {
+    expect(giftPatternFromSearch("?g=chwcc-hhhhh")).toBe("chwcc-hhhhh");
+    expect(giftPatternFromSearch("?g=hhhhh")).toBe("hhhhh");
+    expect(giftPatternFromSearch("?g=ccccc-ccccc-ccccc-ccccc-ccccc-hhhhh")).toBe("ccccc-ccccc-ccccc-ccccc-ccccc-hhhhh");
+  });
+
+  it("rejects malformed patterns", () => {
+    for (const bad of ["", "?g=", "?g=hhhh", "?g=hhhhhh", "?g=abcde", "?g=hhhhh-", "?g=HHHHH",
+      "?g=ccccc-ccccc-ccccc-ccccc-ccccc-ccccc-hhhhh", "?x=hhhhh"]) {
+      expect(giftPatternFromSearch(bad)).toBe(null);
+    }
+  });
+
+  it("parses /daily/og/<date>/<pattern>.png", () => {
+    expect(dailyOgFromPathname("/daily/og/2026-06-07/chwcc-hhhhh.png"))
+      .toEqual({ date: "2026-06-07", pattern: "chwcc-hhhhh" });
+  });
+
+  it("rejects bad og paths (date, pattern, shape)", () => {
+    for (const bad of [
+      "/daily/og/2026-13-07/hhhhh.png",
+      "/daily/og/2026-06-07/hhhh.png",
+      "/daily/og/2026-06-07/abcde.png",
+      "/daily/og/2026-06-07/hhhhh",
+      "/daily/og/hhhhh.png",
+    ]) expect(dailyOgFromPathname(bad)).toBe(null);
+  });
+
+  it("buildGiftMeta derives the solved count only from an all-hot last row", () => {
+    expect(buildGiftMeta("ccccc-hhhhh").description).toContain("Solved in 2");
+    expect(buildGiftMeta("ccccc-chwcc").description).not.toContain("Solved");
+    expect(buildGiftMeta("hhhhh").title).toBe("You've been dared — Wordul of the Day");
   });
 });

@@ -34,6 +34,37 @@ export function dailyPrevNext(date: string): { prev: string; next: string } {
   };
 }
 
+/* ——— Dare-ritual gift link (spec 2026-06-07-dare-ritual) ——— */
+
+// Colors-only board mask: 1–6 rows of 5 cells, each h(ot)/w(arm)/c(old).
+// By construction this alphabet can never carry a letter of the answer.
+const GIFT_PATTERN_RE = /^[hwc]{5}(-[hwc]{5}){0,5}$/;
+
+/** `?g=<pattern>` from a URL search string; null unless strictly valid. */
+export function giftPatternFromSearch(search: string): string | null {
+  const g = new URLSearchParams(search ?? "").get("g");
+  return g && GIFT_PATTERN_RE.test(g) ? g : null;
+}
+
+/** /daily/og/<date>/<pattern>.png → { date, pattern }; anything else → null. */
+export function dailyOgFromPathname(pathname: string): { date: string; pattern: string } | null {
+  const m = /^\/daily\/og\/(\d{4}-\d{2}-\d{2})\/([hwc-]{5,35})\.png$/.exec(pathname ?? "");
+  if (!m || !isValidDateString(m[1]) || !GIFT_PATTERN_RE.test(m[2])) return null;
+  return { date: m[1], pattern: m[2] };
+}
+
+/** OG teaser for a dared daily link. Spoiler-free: derived from row colors only. */
+export function buildGiftMeta(pattern: string): { title: string; description: string } {
+  const rows = pattern.split("-");
+  const solved = rows[rows.length - 1] === "hhhhh" ? rows.length : null;
+  return {
+    title: "You've been dared — Wordul of the Day",
+    description: solved
+      ? `Solved in ${solved}. One word, the whole world — your turn.`
+      : "One word, the whole world — your turn.",
+  };
+}
+
 /** Human "June 2, 2026" from a YYYY-MM-DD (UTC, locale-stable). */
 function prettyDate(date: string): string {
   const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
