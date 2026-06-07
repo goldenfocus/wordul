@@ -34,14 +34,21 @@ export function normalizeVoiceOverrides(raw: unknown, base: WorldDef[], knownCli
     if (!baseIds.has(id)) return { ok: false, reason: `unknown world id: ${id}` };
     const entry = asObj(o[id]);
     const src = asObj(entry.source);
+    // absent / unknown → false (safe default)
     const on = entry.on === true || entry.on === 1 || entry.on === "true";
 
     if (src.kind === "ai") {
       const voiceName = typeof src.voiceName === "string" ? src.voiceName.trim() : "";
       if (!voiceName || voiceName.length > NAME_MAX) return { ok: false, reason: `bad voiceName for ${id}` };
       const source: VoiceSource = { kind: "ai", voiceName };
-      if (src.rate != null) { const n = Number(src.rate); if (!Number.isFinite(n)) return { ok: false, reason: `bad rate for ${id}` }; source.rate = clamp(n, 0.5, 2); }
-      if (src.pitch != null) { const n = Number(src.pitch); if (!Number.isFinite(n)) return { ok: false, reason: `bad pitch for ${id}` }; source.pitch = clamp(n, 0, 2); }
+      if (src.rate != null) {
+        if (typeof src.rate !== "number" || !Number.isFinite(src.rate)) return { ok: false, reason: `bad rate for ${id}` };
+        source.rate = clamp(src.rate, 0.5, 2);
+      }
+      if (src.pitch != null) {
+        if (typeof src.pitch !== "number" || !Number.isFinite(src.pitch)) return { ok: false, reason: `bad pitch for ${id}` };
+        source.pitch = clamp(src.pitch, 0, 2);
+      }
       out[id] = { on, source };
     } else if (src.kind === "clips") {
       const clipSetId = typeof src.clipSetId === "string" ? src.clipSetId : "";

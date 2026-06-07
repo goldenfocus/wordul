@@ -9,14 +9,23 @@ const base: WorldDef[] = [
 const clipSets = ["default", "yang", "my-upload"];
 
 describe("normalizeVoiceOverrides", () => {
-  it("accepts empty and round-trips an ai + clips doc", () => {
+  it("EMPTY_VOICE is an empty map and empty input normalizes to it", () => {
+    expect(EMPTY_VOICE).toEqual({});
     expect(normalizeVoiceOverrides({}, base, clipSets)).toEqual({ ok: true, value: {} });
+  });
+
+  it("round-trips an ai + clips doc", () => {
     const raw = {
       yang: { on: true, source: { kind: "clips", clipSetId: "yang", origin: "clone-existing" } },
       default: { on: false, source: { kind: "ai", voiceName: "Daniel", rate: 1.1, pitch: 0.9 } },
     };
     const r = normalizeVoiceOverrides(raw, base, clipSets);
     expect(r).toEqual({ ok: true, value: raw });
+  });
+
+  it("non-object input does not throw and normalizes to empty", () => {
+    expect(normalizeVoiceOverrides(null, base, clipSets)).toEqual({ ok: true, value: {} });
+    expect(normalizeVoiceOverrides([], base, clipSets)).toEqual({ ok: true, value: {} });
   });
 
   it("rejects an unknown world id", () => {
