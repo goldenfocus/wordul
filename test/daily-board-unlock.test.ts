@@ -110,6 +110,28 @@ async function roster(room: ReturnType<typeof makeRoom>, query: string) {
   return res.json() as Promise<{ players: Array<{ username: string; grid?: string[]; words?: string[] }> }>;
 }
 
+describe("answer-word echo (the stats page's wiki info)", () => {
+  it("WITHOUT a token: no `word` field anywhere in the payload", async () => {
+    const top = await board(makeRoom(), "username=bob&n=3") as { word?: string };
+    expect(top.word).toBeUndefined();
+    const full = await roster(makeRoom(), "username=bob&full=1") as { word?: string };
+    expect(full.word).toBeUndefined();
+    expect(JSON.stringify(full)).not.toContain("CRANE");
+  });
+
+  it("WRONG token: still no word", async () => {
+    const full = await roster(makeRoom(), "username=bob&full=1&t=nope") as { word?: string };
+    expect(full.word).toBeUndefined();
+  });
+
+  it("CORRECT token: the answer rides along on both views", async () => {
+    const top = await board(makeRoom(), "username=yan&n=3&t=secret-123") as { word?: string };
+    expect(top.word).toBe("CRANE");
+    const full = await roster(makeRoom(), "username=yan&full=1&t=secret-123") as { word?: string };
+    expect(full.word).toBe("CRANE");
+  });
+});
+
 describe("full roster boards (the golden card's Show-all + replay popups)", () => {
   it("full=1 now carries color grids for every player", async () => {
     const { players } = await roster(makeRoom(), "username=bob&full=1");

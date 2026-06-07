@@ -314,12 +314,11 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
           });
           // Default the featured card to you, and mark your row selected.
           if (entries.has(escAttr(username))) setFeatured(escAttr(username));
-          // Fill the real "N played" count now that the header exists (best-effort).
-          if (fetchPlayed) {
-            fetchPlayed().then((n) => {
-              const el = document.getElementById("dailyPlayed");
-              if (el && typeof n === "number" && n > 0) el.textContent = `${n.toLocaleString()} played`;
-            }).catch(() => {});
+          // Fill the real "N played" count from THIS payload's total (ranked finishers) —
+          // the same number the stats page roster counts, so they can never disagree.
+          const playedEl = document.getElementById("dailyPlayed");
+          if (playedEl && typeof view.total === "number" && view.total > 0) {
+            playedEl.textContent = `${view.total.toLocaleString()} played`;
           }
         }
       }).catch(() => {}).finally(() => setTimeout(autoReplay, 300));

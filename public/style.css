@@ -2712,6 +2712,11 @@ body.hub-home .topbar-stats { display: flex; }
 }
 .daily-stats-foot { margin-top: 22px; }
 .daily-stats-empty { margin-top: 32px; }
+/* The word's wiki info atop the stats (finisher-only) — reuses the broadsheet reveal look,
+   one size down so the headline crowns the numbers without dominating the page. */
+.daily-stats-reveal { margin: 0 0 30px; }
+.daily-stats-reveal .daily-reveal-word { font-size: clamp(40px, 11vw, 60px); }
+.daily-stats-reveal .daily-reveal-story { font-size: 14px; }
 
 /* ─── Daily completion reveal — "the veil lifts off the board" ─────────────────
    The single most important surface of the daily. When you finish today's word

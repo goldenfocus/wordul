@@ -247,11 +247,15 @@ export class Room extends DurableObject<Env> {
         grid: encodeSolveGrid(p.guesses),
         words: unlock ? encodeSolveWords(p.guesses) : undefined,
       }));
+      // The answer itself rides along under the SAME gate as the letter rows: a confirmed
+      // finisher (who already saw the reveal) gets it back so the stats page can show the
+      // word's wiki info; everyone else's payload stays spoiler-free.
+      const word = unlock ? (this.state.word ?? undefined) : undefined;
       if (full) {
-        return Response.json({ ...fullDaily(players, username), lane: laneSig(this.state.ruleset ?? initialRuleset(!!this.state.isDaily, this.state.mode)) });
+        return Response.json({ ...fullDaily(players, username), word, lane: laneSig(this.state.ruleset ?? initialRuleset(!!this.state.isDaily, this.state.mode)) });
       }
       const n = Number(url.searchParams.get("n") ?? "3");
-      return Response.json({ ...topDaily(players, username, n), lane: laneSig(this.state.ruleset ?? initialRuleset(!!this.state.isDaily, this.state.mode)) });
+      return Response.json({ ...topDaily(players, username, n), word, lane: laneSig(this.state.ruleset ?? initialRuleset(!!this.state.isDaily, this.state.mode)) });
     }
     return new Response("not found", { status: 404 });
   }

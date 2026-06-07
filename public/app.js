@@ -297,10 +297,13 @@ function renderHomeIdentity() {
       // dailyResult is filled from the profile below: null until you've played today,
       // then { won, guesses } — flips the home card to its post-play recap.
       dailyResult: null,
-      // Real "N played" for the day from public aggregates — never a fake number.
-      fetchPlayed: () => fetch("/api/science/today")
+      // Real "N played" for the day = the daily roster's ranked-finisher count — the SAME
+      // number the stats page derives from (Jun 7 incident: science roundsStarted said
+      // "8 played" while the stats roster listed 6; science counts rounds across ALL
+      // modes, not daily people, so home and stats disagreed).
+      fetchPlayed: () => fetch(`/api/daily/${todayUTC()}/leaderboard?username=&n=1`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((s) => s?.totals?.roundsStarted ?? s?.totals?.playerFinishes ?? null),
+        .then((v) => (typeof v?.total === "number" ? v.total : null)),
       renderRecentRooms: (mountEl) => renderRecentRoomsInto(mountEl, 3),
     };
     fetch(`/api/user/${encodeURIComponent(u)}`)
@@ -1064,6 +1067,7 @@ async function showDailyStats(date) {
       <p class="daily-stats-studio">${ed.name} <span class="muted">· from the Studio</span></p>
       <p class="daily-stats-glow">${glow}</p>
     </header>
+    <div class="daily-reveal daily-stats-reveal" id="dailyStatsReveal" hidden></div>
     <div class="daily-stats-body" id="dailyStatsBody"><p class="muted small">Loading today's numbers…</p></div>
     <h2 class="daily-stats-sub">Players</h2>
     <div class="daily-roster" id="dailyRoster"><p class="muted small">Loading players…</p></div>
@@ -1074,12 +1078,53 @@ async function showDailyStats(date) {
   let full = null;
   try {
     const me = getUsername();
-    const res = await fetch(`/api/daily/${date}/leaderboard?full=1&username=${encodeURIComponent(me)}`);
+    // Present today's proof-of-finish token (if we hold one) — the server then echoes the
+    // answer back so the page can show the word's wiki info. No token → no spoiler.
+    const tok = (() => { try { return localStorage.getItem(`${LS.dailyToken}:${date}`) || ""; } catch { return ""; } })();
+    const tq = tok ? `&t=${encodeURIComponent(tok)}` : "";
+    const res = await fetch(`/api/daily/${date}/leaderboard?full=1&username=${encodeURIComponent(me)}${tq}`);
     if (res.ok) full = await res.json();
   } catch (_) { /* offline / cold day — render the empty state */ }
   if (parseRoute().kind !== "daily-stats") return; // navigated away mid-fetch
+  renderDailyStatsReveal(full);
   renderDailyStatsBody(full);
   renderDailyRoster(full);
+}
+
+// The word's wiki info atop the stats — rendered ONLY when the server echoed the answer
+// back, which it does iff this browser presented today's finisher token. A non-finisher's
+// stats page stays spoiler-free, same contract as the letter boards. Built with
+// textContent / DOM nodes so nothing from the wire is ever parsed as markup.
+function renderDailyStatsReveal(full) {
+  const box = $("#dailyStatsReveal");
+  if (!box || !full || typeof full.word !== "string" || !full.word) return;
+  const word = full.word.toUpperCase();
+  const wiki = `/word/${word.toLowerCase()}`;
+  const me = getUsername();
+  const mine = Array.isArray(full.players) ? full.players.find((p) => p.username === me) : null;
+  const kicker = document.createElement("p");
+  kicker.className = "daily-reveal-kicker";
+  kicker.textContent = t(mine && !mine.won ? "daily.revealKickerLost" : "daily.revealKickerWon");
+  const wordEl = document.createElement("a");
+  wordEl.className = "daily-reveal-word";
+  wordEl.textContent = word;
+  wordEl.href = wiki;
+  wordEl.setAttribute("aria-label", `${word} — ${t("daily.revealStory", { word })}`);
+  box.append(kicker, wordEl);
+  const intel = wordIntel(word);
+  if (intel?.def) {
+    const entry = document.createElement("a");
+    entry.className = "daily-reveal-entry";
+    entry.textContent = intel.def;
+    entry.href = wiki;
+    box.appendChild(entry);
+  }
+  const story = document.createElement("a");
+  story.className = "daily-reveal-story";
+  story.textContent = t("daily.revealStory", { word });
+  story.href = wiki;
+  box.appendChild(story);
+  box.hidden = false;
 }
 
 // Paint the full ranked roster (names, gold, guesses, duration) below the aggregates.
