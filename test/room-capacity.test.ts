@@ -243,4 +243,39 @@ describe("set_capacity", () => {
     await setCap(room, a, 4);
     expect(room.state.capacity).toBe(2);
   });
+
+  it("a no-op set emits no chat line", async () => {
+    const { room } = makeRoom();
+    const a = mockWs();
+    await join(room, a, "alice");
+    const chatLen = room.state.chat.length;
+    await setCap(room, a, 2); // already 2
+    expect(room.state.capacity).toBe(2);
+    expect(room.state.chat.length).toBe(chatLen); // silent no-op — no "set the table" line
+  });
+
+  it("rejects non-finite capacity from the wire", async () => {
+    const { room } = makeRoom();
+    const a = mockWs();
+    await join(room, a, "alice");
+    await room.webSocketMessage(a, JSON.stringify({ type: "set_capacity", capacity: "6" }));
+    expect(room.state.capacity).toBe(2);
+    await room.webSocketMessage(a, JSON.stringify({ type: "set_capacity" })); // missing field
+    expect(room.state.capacity).toBe(2);
+  });
+
+  it("promotes straight to a duelist seat when one is open", async () => {
+    const { room } = makeRoom();
+    const [a, b, c] = [mockWs(), mockWs(), mockWs()];
+    await join(room, a, "alice");
+    await join(room, b, "bob");
+    await join(room, c, "cara"); // spectator (capacity 2)
+    // A duelist seat opens (e.g. a bot left) — degenerate but reachable.
+    const bob = room.state.players.find((p) => p.username === "bob")!;
+    room.state.players = room.state.players.filter((p) => p !== bob);
+    await setCap(room, a, 2); // no-op clamp-wise… capacity already 2 and seated is 1
+    await setCap(room, a, 3); // raise: cara promotes — duelists < 2, so straight to the seat
+    expect(room.state.players.find((p) => p.username === "cara")!.role).toBe("duelist");
+    expect(room.state.queue).toEqual([]); // seated, not queued
+  });
 });
