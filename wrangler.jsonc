@@ -77,7 +77,8 @@
   // Design gallery prototypes, served at /designs/* from R2.
   "r2_buckets": [
     { "binding": "DESIGNS", "bucket_name": "wordul-designs" },
-    { "binding": "OG", "bucket_name": "wordul-og" }
+    { "binding": "OG", "bucket_name": "wordul-og" },
+    { "binding": "VOICE", "bucket_name": "wordul-voice" }
   ],
 
   // Workers AI — powers the Vibe Studio "✨ tune" rewrite (POST /vibe-studio/tune).
