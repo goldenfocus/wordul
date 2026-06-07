@@ -20,7 +20,7 @@ import { buildShareCardModel, renderShareCard } from "/share-card.js";
 import { shareTargetUrl } from "/share-links.js";
 import { buildOwnerTape } from "/owner-tape.js";
 import { renderHub, homeTypeLetter, dayTheme } from "/hub.js";
-import { mountArenaList, pickNextGame } from "/arena-panel.js";
+import { mountArenaList, pickNextGame, renderYourTableRow } from "/arena-panel.js";
 import { computeDailyStatsFromRoster, computeRosterView, buildDayShareLine } from "/daily-stats.js";
 import { rosterRow } from "/daily-card.js";
 import { mountDailyLeaderboard, wireReplayRows } from "/daily-lb.js";
@@ -38,7 +38,7 @@ import { renderSettlement, dailyReceiptLines } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
 import { autoPlayBoardOnce, playBoardReplay, boardReplayActive } from "/board-replay.js";
-import { seatModel, ghostSeatModel, railPillLabel, emptySeatActions } from "/lobby-view.js";
+import { seatModel, ghostSeatModel, railPillLabel, emptySeatActions, yourTableRowProps, shouldChimeOnJoin } from "/lobby-view.js";
 import { createChatPill, chatHasUserText } from "/chat-pill.js";
 import { encodeLocalSolve, needsDailyRecovery, recoverDailyArtifacts } from "/daily-recover.js";
 
@@ -679,6 +679,7 @@ const game = {
   // Defaults to "table" — the your-game channel is the only visible tab.
   chatChannel: "table",
   lastSeatCount: 0, // # of taken seats last "Your table" render — new seats get a pop (seatin)
+  joinChimeSeen: null, // other-player count at last lobby render; null = first paint (silent) — drives shouldChimeOnJoin
   unreadChat: 0,
   chatCollapsed: false,
   exploding: false,
@@ -812,6 +813,7 @@ function showRoom(owner, slug) {
   game.pending = "";
   game.hasShownEndStats = false;
   game.pendingForfeitReveal = false; // stale forfeit one-shot must not announce in a new room
+  game.joinChimeSeen = null; // a fresh room's first paint is silent (my own join)
   game.lastChatLen = 0;
   game.chatChannel = "table"; // your-game chat is the only visible channel (Global hidden this release)
   game.unreadChat = 0;
@@ -930,6 +932,7 @@ async function showChallenge(id) {
   game.pending = "";
   game.hasShownEndStats = false;
   game.pendingForfeitReveal = false; // stale forfeit one-shot must not announce in a new room
+  game.joinChimeSeen = null; // a fresh room's first paint is silent (my own join)
   game.lastChatLen = 0;
   game.chatChannel = "table"; // your-game chat is the only visible channel (Global hidden this release)
   game.unreadChat = 0;
@@ -1623,6 +1626,13 @@ function mountLobbyRailIfNeeded() {
   if (!el || !list) return;
   el.hidden = false;
   wireLobbyRailPill(el);
+  // Pinned "Your table" first row (iter3 §1): painted from the LIVE snapshot on every
+  // lobby render — never the open-games feed (it may exclude/lag my own room) — so a
+  // ＋/✕ tap or a join ticks 1/2 → 1/3 immediately. Challenges skip it: their solo DO's
+  // seat math is fiction (the ghost strip is their counter).
+  if (!game.challengeId && game.snapshot) {
+    renderYourTableRow($("#lobbyRailYou"), yourTableRowProps(game.snapshot, getUsername()));
+  }
   if (lobbyRailStop) return; // already polling — don't restart on every render()
   const mine = `/@${game.owner}/${game.slug}`;
   lobbyRailStop = mountArenaList(list, {
@@ -2933,6 +2943,14 @@ function renderMyTable(snap) {
     }
     seatsEl.appendChild(el);
   }
+  // Join sound (iter3 §1): another player just took a seat while we wait. The decision is
+  // pure (lobby-view.js): lobby phase only, never the first paint (my own join), and my
+  // capacity taps move capacity — not takenSeen — so they stay silent. playChime itself
+  // honors wordul.muted. Ghost-tape challenges never ring (no live joins on a tape).
+  if (!game.challengeId && shouldChimeOnJoin(game.joinChimeSeen, takenSeen, snap.phase)) {
+    playChime([[523, 0], [784, 0.09]]); // soft two-note "someone sat down"
+  }
+  game.joinChimeSeen = takenSeen;
   game.lastSeatCount = takenSeen;
   // No n/m count for duels — the chairs themselves say it. Challenges keep their
   // "vs N ghosts" line (that strip has no empty seats to read).
@@ -3071,7 +3089,7 @@ function render() {
     const show = inLobby && (!game.challengeId || !!game.ghostTape);
     myTable.hidden = !show;
     if (show) renderMyTable(snap);
-    else game.lastSeatCount = 0;
+    else { game.lastSeatCount = 0; game.joinChimeSeen = null; }
   }
 
   // Lobby rail: only while genuinely waiting in a multiplayer lobby (not the daily, which

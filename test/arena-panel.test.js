@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { arenaRowProps, arenaEmptyState, pickNextGame, seatLabel, isHot, nextPollMs } from "../public/arena-panel.js";
+import { arenaRowProps, arenaEmptyState, pickNextGame, seatLabel, isHot, nextPollMs, renderYourTableRow } from "../public/arena-panel.js";
 import { compactRowProps } from "../public/lobby-view.js";
 
 const game = {
@@ -122,5 +122,31 @@ describe("rail pill count plumbing", () => {
   it("mountArenaList reports the visible count via onCount", () => {
     expect(src).toContain("onCount");
     expect(src).toContain("onCount(state === \"list\" ? visible.length : 0)");
+  });
+  it("the redundant 'N open' line inside the list is gone (iter3 §1)", () => {
+    expect(src).not.toContain("arena-count");
+  });
+});
+
+describe("renderYourTableRow (pinned 'Your table' rail row, iter3 §1)", () => {
+  // The renderer only assigns el.innerHTML, so a bare object stands in for the mount node.
+  it("renders a non-navigating row in the arena-row shape", () => {
+    const el = { innerHTML: "" };
+    renderYourTableRow(el, { avatar: "P", host: "Your table", dim: "5×6", seats: "2/3" });
+    expect(el.innerHTML).toContain("Your table");
+    expect(el.innerHTML).toContain("5×6");
+    expect(el.innerHTML).toContain("2/3");
+    expect(el.innerHTML).toContain("your-table");
+    expect(el.innerHTML).not.toContain("<button"); // you're already here — nothing to tap
+  });
+  it("re-render replaces the row (ticks on every snapshot)", () => {
+    const el = { innerHTML: "" };
+    renderYourTableRow(el, { avatar: "P", host: "Your table", dim: "5×6", seats: "1/2" });
+    renderYourTableRow(el, { avatar: "P", host: "Your table", dim: "5×6", seats: "1/3" });
+    expect(el.innerHTML).toContain("1/3");
+    expect(el.innerHTML).not.toContain("1/2");
+  });
+  it("tolerates a missing mount node", () => {
+    expect(() => renderYourTableRow(null, { avatar: "P", host: "x", dim: "5×6", seats: "1/2" })).not.toThrow();
   });
 });

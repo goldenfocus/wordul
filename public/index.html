@@ -266,13 +266,17 @@
       </div>
       <div id="messageRow" class="message-row" aria-live="polite"></div>
       <!-- Civ-3 lobby: while you wait, watch other open games fill up and defect into a
-           hotter one. Mounted only during the lobby phase (app.js); polls /api/arena/open. -->
-      <aside id="lobbyRail" class="lobby-rail" hidden>
-        <button type="button" id="lobbyRailPill" class="lobby-rail-pill" aria-expanded="false">
+           hotter one. Mounted only during the lobby phase (app.js); polls /api/arena/open.
+           Starts .expanded on mobile (iter3 §1 — the rail IS the join-feedback counter);
+           the pill still toggles. #lobbyRailYou pins YOUR table as the first row, painted
+           from the live snapshot (renderYourTableRow), never the open-games feed. -->
+      <aside id="lobbyRail" class="lobby-rail expanded" hidden>
+        <button type="button" id="lobbyRailPill" class="lobby-rail-pill" aria-expanded="true">
           <span class="lobby-rail-pill-arrow" aria-hidden="true">▸</span>
           <span id="lobbyRailPillCount">0 tables open</span>
         </button>
         <h3 class="lobby-rail-title">Tables</h3>
+        <div id="lobbyRailYou" class="lobby-rail-you"></div>
         <div id="lobbyRailList" class="lobby-rail-list"></div>
       </aside>
       <section id="dailyUnlock" class="daily-unlock" hidden>

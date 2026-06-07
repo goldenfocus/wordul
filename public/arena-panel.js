@@ -49,6 +49,20 @@ export function isHot(game) {
   return Number.isFinite(t) && Number.isFinite(c) && c >= 3 && c - t === 1;
 }
 
+// Pinned "Your table" first row of the lobby rail (iter3 §1). Props come from
+// lobby-view.js yourTableRowProps (the LIVE snapshot, not the open-games feed); the
+// caller re-renders on every snapshot so ＋/✕ and joins tick the seats immediately.
+// A non-navigating div, not a button — you're already sitting here.
+export function renderYourTableRow(el, props) {
+  if (!el) return;
+  el.innerHTML =
+    `<div class="arena-row your-table" aria-current="true">` +
+    `<span class="arena-row-avatar" aria-hidden="true">${props.avatar}</span>` +
+    `<span class="arena-row-body"><span class="arena-row-host">${props.host}</span>` +
+    `<span class="arena-row-meta muted"><span class="arena-row-dim">${props.dim}</span> board</span></span>` +
+    `<span class="arena-row-seats">${props.seats}</span></div>`;
+}
+
 const POLL_MS = 8000;
 const EMPTY_POLL_MS = 2000;
 
@@ -108,11 +122,9 @@ export function mountArenaList(mountEl, { onJoin, excludePath, onCount } = {}) {
       row.addEventListener("click", () => { if (onJoin) onJoin(p.routePath); });
       list.appendChild(row);
     }
+    // No "N open" line here — the rail's pill/title header already carries the count
+    // (iter3 §1: never two counts in one panel).
     mountEl.innerHTML = "";
-    const count = document.createElement("div");
-    count.className = "arena-count muted";
-    count.textContent = `${visible.length} open`;
-    mountEl.appendChild(count);
     mountEl.appendChild(list);
   };
 

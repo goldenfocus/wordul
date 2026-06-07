@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { triesFor, seatModel, compactRowProps, ghostSeatModel, railPillLabel, emptySeatActions } from "../public/lobby-view.js";
+import { triesFor, seatModel, compactRowProps, ghostSeatModel, railPillLabel, emptySeatActions, yourTableRowProps, shouldChimeOnJoin } from "../public/lobby-view.js";
 
 describe("triesFor (mirrors server guessesFor)", () => {
   it("is length+1, plateauing at 8", () => {
@@ -101,6 +101,54 @@ describe("railPillLabel", () => {
     expect(railPillLabel(0)).toBe("0 tables open");
     expect(railPillLabel(1)).toBe("1 table open");
     expect(railPillLabel(7)).toBe("7 tables open");
+  });
+});
+
+describe("yourTableRowProps (pinned rail row, iter3 §1)", () => {
+  const snap = {
+    capacity: 3,
+    wordLength: 5,
+    maxGuesses: 6,
+    players: [{ username: "papa" }, { username: "kai" }],
+  };
+  it("builds the compact-row shape from the LIVE snapshot", () => {
+    const p = yourTableRowProps(snap, "papa");
+    expect(p).toMatchObject({ avatar: "P", host: "Your table", dim: "5×6", seats: "2/3" });
+  });
+  it("ticks seats when capacity or players change (the ＋/✕ feedback)", () => {
+    expect(yourTableRowProps({ ...snap, capacity: 4 }, "papa").seats).toBe("2/4");
+    expect(yourTableRowProps({ ...snap, players: [{ username: "papa" }] }, "papa").seats).toBe("1/3");
+  });
+  it("excludes spectators from the seat count, like the seat strip", () => {
+    const p = yourTableRowProps(
+      { ...snap, players: [...snap.players, { username: "zoe", role: "spectator" }] },
+      "papa",
+    );
+    expect(p.seats).toBe("2/3");
+  });
+  it("falls back to smart-default rows when maxGuesses is missing", () => {
+    expect(yourTableRowProps({ ...snap, maxGuesses: undefined }, "papa").dim).toBe("5×6");
+  });
+  it("avatar falls back to ◆ without a username", () => {
+    expect(yourTableRowProps(snap, "").avatar).toBe("◆");
+  });
+});
+
+describe("shouldChimeOnJoin (join sound decision, iter3 §1)", () => {
+  it("chimes when the taken count grows in the lobby phase", () => {
+    expect(shouldChimeOnJoin(1, 2, "lobby")).toBe(true);
+  });
+  it("stays silent on the first paint (my own join — no previous count)", () => {
+    expect(shouldChimeOnJoin(null, 1, "lobby")).toBe(false);
+    expect(shouldChimeOnJoin(undefined, 2, "lobby")).toBe(false);
+  });
+  it("stays silent when the count holds or shrinks (capacity taps, leavers)", () => {
+    expect(shouldChimeOnJoin(2, 2, "lobby")).toBe(false);
+    expect(shouldChimeOnJoin(2, 1, "lobby")).toBe(false);
+  });
+  it("never chimes outside the lobby phase", () => {
+    expect(shouldChimeOnJoin(1, 2, "playing")).toBe(false);
+    expect(shouldChimeOnJoin(1, 2, "finished")).toBe(false);
   });
 });
 

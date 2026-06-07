@@ -3418,6 +3418,7 @@ body.lobby .lobby-right {
   }
   body.lobby .lobby-rail-pill-arrow { transition: transform 0.16s ease; }
   body.lobby .lobby-rail.expanded .lobby-rail-pill-arrow { transform: rotate(90deg); }
+  body.lobby .lobby-rail:not(.expanded) .lobby-rail-you,
   body.lobby .lobby-rail:not(.expanded) .lobby-rail-list { display: none; }
   /* Expanded: the card surface returns around pill + list. */
   body.lobby .lobby-rail.expanded {
@@ -3644,10 +3645,21 @@ body.lobby .mytable {
 
 /* 4 ── Compact floor rows (the existing .arena-row / .lobby-rail base stays). */
 .arena-row-dim { color: var(--accent); font-weight: 600; }
-.arena-count {
-  font-size: 11px; font-weight: 600; color: var(--muted);
-  padding: 2px 4px 8px;
+/* Pinned "Your table" first row (iter3 §1): same row shape, visually quiet — it's not a
+   destination (you're already here), it's the live 1/2 → 1/3 counter for ＋/✕ and joins. */
+.lobby-rail-you { margin-bottom: var(--space-2); }
+.lobby-rail-you:empty { display: none; }
+.arena-row.your-table { cursor: default; }
+.arena-row.your-table:hover { background: var(--surface, rgba(255,255,255,0.04)); border-color: var(--border, rgba(255,255,255,0.1)); }
+.arena-row.your-table:active { transform: none; }
+.arena-row.your-table .arena-row-avatar {
+  display: grid; place-items: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--warm));
+  color: var(--bg); font-size: 14px; font-weight: 700;
 }
+/* The subtle "you" accent rides the seats count — the number that ticks. */
+.arena-row.your-table .arena-row-seats { color: var(--accent); opacity: 1; }
 /* In lobby the floor is a translucent blurred panel in the right zone (prototype
    .panel): the bare top-border base is replaced with a small-corner card. */
 body.lobby .lobby-rail {

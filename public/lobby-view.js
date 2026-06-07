@@ -64,6 +64,32 @@ export function ghostSeatModel(tape) {
   };
 }
 
+// Pinned "Your table" rail row (iter3 §1): the first row of the open-tables rail is YOUR
+// room, built from the LIVE snapshot (never the /api/arena/open feed — it may exclude or
+// lag your own room). Same shape as compactRowProps so the row renderer is shared; the
+// seats string is what ticks 1/2 → 1/3 when ＋/✕ or a join lands.
+export function yourTableRowProps(snap, me) {
+  const model = seatModel(snap, me);
+  const cols = Number(snap && snap.wordLength) || 5;
+  const rows = Number(snap && snap.maxGuesses) || triesFor(cols);
+  return {
+    avatar: me ? me[0].toUpperCase() : "◆",
+    host: "Your table",
+    dim: `${cols}×${rows}`,
+    seats: `${model.taken}/${model.capacity}`,
+  };
+}
+
+// Join-sound decision (iter3 §1): chime only when ANOTHER player takes a seat while we
+// wait in the lobby. prevOthers is the other-player count from the last render — null
+// on the first paint (which includes my own join), so arriving in a busy room is silent.
+// My own capacity taps move capacity, not the taken count, so they never ring either.
+export function shouldChimeOnJoin(prevOthers, others, phase) {
+  if (phase !== "lobby") return false;
+  if (prevOthers == null) return false;
+  return others > prevOthers;
+}
+
 // Map a server OpenGame to a compact floor-row's props. The row shows the board as
 // letters×rows (e.g. 5×6); OpenGame has no maxGuesses, so rows = triesFor(wordLength)
 // (the smart default — a host's set_rows override isn't carried in the open-games feed).
