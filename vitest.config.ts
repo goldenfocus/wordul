@@ -24,6 +24,7 @@ export default defineConfig({
       { find: /^\/companion\.js$/, replacement: new URL("./public/companion.js", import.meta.url).pathname },
       { find: /^\/roomConfig\.js$/, replacement: new URL("./public/roomConfig.js", import.meta.url).pathname },
       { find: /^\/celebrate\.js$/, replacement: new URL("./public/celebrate.js", import.meta.url).pathname },
+      { find: /^\/hints\.js$/, replacement: new URL("./public/hints.js", import.meta.url).pathname },
       { find: /^\/gold\.js$/, replacement: new URL("./public/gold.js", import.meta.url).pathname },
       { find: /^\/lane\.js$/, replacement: new URL("./public/lane.js", import.meta.url).pathname },
       { find: /^\/hacklog\.js$/, replacement: new URL("./public/hacklog.js", import.meta.url).pathname },
