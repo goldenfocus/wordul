@@ -72,6 +72,15 @@ export function tapeForUpload(date) {
   } catch { return null; }
 }
 
+// Leaving a room must stop recording — otherwise the next room's keystrokes pollute
+// this tape — WITHOUT losing the crash mirror: a re-join resumes from it via tapeStart's
+// mirror path. Flush the buffered tail first so the mirror is complete.
+export function tapeSuspend() {
+  if (!live) return;
+  try { localStorage.setItem(live.key, JSON.stringify(live.tape)); } catch { /* ignore */ }
+  live = null;
+}
+
 export function tapeMirror(date) { return readMirror(date); }
 export function tapeClear(date) {
   live = null;

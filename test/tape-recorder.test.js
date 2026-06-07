@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   newTape, tapePush, TAPE_EVENT_CAP,
-  tapeStart, tapeRecord, tapeForUpload, tapeMirror, tapeClear, tapeIsLive,
+  tapeStart, tapeRecord, tapeForUpload, tapeMirror, tapeClear, tapeIsLive, tapeSuspend,
 } from "../public/tape-recorder.js";
 
 describe("tape core", () => {
@@ -62,5 +62,23 @@ describe("live recorder + mirror", () => {
     expect(up.events[0]).toEqual([5, "k", "Z"]);   // mirror preserved
     expect(up.events[1][1]).toBe("k");             // new event appended after it
     expect(up.events[1][0]).toBeGreaterThanOrEqual(5); // still monotonic
+  });
+  it("tapeSuspend flushes to the mirror, detaches, and keeps the mirror", () => {
+    tapeStart("2026-06-07", 0);
+    tapeRecord("k", "A", 100); // below the 10-event flush threshold
+    tapeSuspend();
+    expect(tapeIsLive()).toBe(false);
+    const mirrored = JSON.parse(localStorage.getItem("wr.tape:2026-06-07"));
+    expect(mirrored.events).toEqual([[100, "k", "A"]]);
+  });
+  it("a suspended tape resumes on the next tapeStart", () => {
+    tapeStart("2026-06-07", 0);
+    tapeRecord("k", "A", 100);
+    tapeSuspend();
+    tapeStart("2026-06-07", 5000);
+    tapeRecord("k", "B", 5100);
+    const up = tapeForUpload("2026-06-07");
+    expect(up.events.length).toBe(2);
+    expect(up.events[0]).toEqual([100, "k", "A"]);
   });
 });

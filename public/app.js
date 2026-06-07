@@ -7,7 +7,7 @@ import { renderProfile } from "/profile.js";
 import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, activeMistakeFx, isVoiceEnabled, setVoiceEnabled } from "/edition.js";
 import { pickGuessEvent } from "/roomConfig.js";
 import { playVoice } from "/voice.js";
-import { tapeStart, tapeRecord, tapeForUpload, tapeIsLive } from "/tape-recorder.js";
+import { tapeStart, tapeRecord, tapeForUpload, tapeIsLive, tapeSuspend } from "/tape-recorder.js";
 import { loadVoiceConfig, setActiveVoiceId } from "/voice-config.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
 import { typingHints } from "/hints.js";
@@ -838,6 +838,7 @@ function showRoom(owner, slug) {
   game.replay = [];
   game.myGuessTimes = [];
   game.myRoundStartAt = null;
+  game.tapeSent = false; // per-room one-shot: a prior daily's upload must not block this room's
   game.payingOut = false;
   // tpl-room mounts a FRESH #hacklog node, so drop any stale terminal bound to the
   // previous room's (now-detached) element — it's re-created lazily on first payout.
@@ -5373,6 +5374,7 @@ function leaveRoom() {
   document.body.classList.remove("daily-ritual");
   document.body.classList.remove("lobby"); // drop the two-zone lobby layout outside a room
   game.isDaily = false; game.dailyDate = null;
+  tapeSuspend(); // detach the recorder so the next room's keystrokes can't pollute this tape (mirror kept for resume)
   settlementShown = false; // discard stale latch so a different already-finished room can show
 }
 
