@@ -39,7 +39,7 @@ import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
 import { autoPlayBoardOnce, playBoardReplay, boardReplayActive } from "/board-replay.js";
 import { seatModel, ghostSeatModel, railPillLabel, railTitleCount, emptySeatActions, yourTableRowProps, shouldChimeOnJoin, shouldShowRoundScore } from "/lobby-view.js";
-import { createChatPill, chatHasUserText } from "/chat-pill.js";
+import { createChatPill, chatHasUserText, routeChatEntry, formatChatTime } from "/chat-pill.js";
 import { encodeLocalSolve, needsDailyRecovery, recoverDailyArtifacts } from "/daily-recover.js";
 
 initLang(); // resolve language (saved pick → locale auto-detect) before any t() call
@@ -1734,12 +1734,20 @@ function userLink(username, { at = false, suffix = "" } = {}) {
 }
 
 // The lobby chat pill: chat collapses to a "▸ Chat" row until real conversation
-// exists (chat-pill.js owns the model; this sync owns the DOM).
-const chatPill = createChatPill((open) => {
-  $("#chatPanel")?.classList.toggle("chat-open", open);
-  $("#chatPill")?.setAttribute("aria-expanded", String(open));
-  if (open) scrollChatToBottom();
-});
+// exists (chat-pill.js owns the model; this sync owns the DOM). When the user's
+// manual-close latch holds, an arriving message pulses the pill (blink) instead
+// of force-opening — opening clears the pulse.
+const chatPill = createChatPill(
+  (open) => {
+    $("#chatPanel")?.classList.toggle("chat-open", open);
+    $("#chatPill")?.setAttribute("aria-expanded", String(open));
+    if (open) {
+      $("#chatPill")?.classList.remove("blinking");
+      scrollChatToBottom();
+    }
+  },
+  () => $("#chatPill")?.classList.add("blinking"),
+);
 
 function wireChat() {
   const form = $("#chatForm");
@@ -1749,6 +1757,7 @@ function wireChat() {
   const topBtn = $("#chatTopBtn");
 
   chatPill.reset(); // new room = quiet room
+  $("#chatPill")?.classList.remove("blinking"); // a stale pulse never crosses rooms
   const pillBtn = $("#chatPill");
   if (pillBtn && !pillBtn.dataset.wired) {
     pillBtn.dataset.wired = "1";
@@ -1758,9 +1767,9 @@ function wireChat() {
   if (form) {
     form.addEventListener("submit", (e) => {
       e.preventDefault();
-      // Global is a placeholder this release — the input is disabled there so the form
-      // can't normally submit, but belt-and-suspenders: never route a global send.
-      if (game.chatChannel === "global") return;
+      // Only the Table channel sends — Global is a placeholder and Status is
+      // read-only; the input is disabled on both, but belt-and-suspenders.
+      if (game.chatChannel !== "table") return;
       const text = (input.value || "").trim();
       if (!text) return;
       send({ type: "chat", text });
@@ -1768,13 +1777,15 @@ function wireChat() {
     });
   }
 
-  // Global/Table channel tabs (wired once). Table = the real per-room chat; Global is a
-  // "coming soon" placeholder. Guarded so re-running wireChat() doesn't stack listeners.
+  // Channel tabs (wired once). Table = the real per-room chat; Status = read-only
+  // system lines; Global is a dormant "coming soon" placeholder. Guarded so
+  // re-running wireChat() doesn't stack listeners.
   const tabs = $("#chatTabs");
   if (tabs && !tabs.dataset.wired) {
     tabs.dataset.wired = "1";
     $("#chatTabGlobal")?.addEventListener("click", () => switchChatChannel("global"));
     $("#chatTabTable")?.addEventListener("click", () => switchChatChannel("table"));
+    $("#chatTabStatus")?.addEventListener("click", () => switchChatChannel("status"));
   }
 
   // Desktop toggle: collapse/expand inline panel.
@@ -1804,12 +1815,14 @@ function wireChat() {
   }
 }
 
-// Switch the active chat channel ("global" placeholder ⇄ "table" real chat). Toggles the
-// tab .is-active state, re-renders the body for the channel, and clears the Table ping.
+// Switch the active chat channel ("global" placeholder / "table" real chat / "status"
+// system lines). Toggles the tab .is-active state, re-renders the body for the
+// channel, and clears the Table ping.
 function switchChatChannel(which) {
   game.chatChannel = which;
   $("#chatTabGlobal")?.classList.toggle("is-active", which === "global");
   $("#chatTabTable")?.classList.toggle("is-active", which === "table");
+  $("#chatTabStatus")?.classList.toggle("is-active", which === "status");
   if (which === "table") {
     const ping = $("#chatTabPing");
     if (ping) ping.hidden = true;
@@ -1817,10 +1830,12 @@ function switchChatChannel(which) {
   renderChatChannel();
 }
 
-// Show the body for the active channel. Table → real #chatLog + enabled input. Global →
-// a single muted placeholder + disabled input (no networking; placeholder this release).
+// Show the body for the active channel. Table → real #chatLog + enabled input.
+// Status → read-only #chatStatusLog (timestamped system lines). Global → a single
+// muted placeholder + disabled input (no networking; placeholder this release).
 function renderChatChannel() {
   const log = $("#chatLog");
+  const statusLog = $("#chatStatusLog");
   const input = $("#chatInput");
   // Lazily create the Global placeholder line once, as a sibling of #chatLog in #chatBody.
   let placeholder = $("#chatGlobalPlaceholder");
@@ -1832,12 +1847,15 @@ function renderChatChannel() {
     log.parentNode.insertBefore(placeholder, log);
   }
   const isGlobal = game.chatChannel === "global";
-  if (log) log.hidden = isGlobal;
+  const isStatus = game.chatChannel === "status";
+  if (log) log.hidden = isGlobal || isStatus;
+  if (statusLog) statusLog.hidden = !isStatus;
   if (placeholder) placeholder.hidden = !isGlobal;
   if (input) {
-    input.disabled = isGlobal;
-    input.placeholder = isGlobal ? "Global chat coming soon…" : "Chat";
+    input.disabled = isGlobal || isStatus;
+    input.placeholder = isGlobal ? "Global chat coming soon…" : isStatus ? "Status is read-only" : "Chat";
   }
+  if (isStatus) scrollChatToBottom();
 }
 
 function isMobile() {
@@ -3107,16 +3125,18 @@ function render() {
   // second topbar entry point is clutter — hide it there, keep it during play.
   if (chatTopBtn) chatTopBtn.hidden = !showSocial || inLobbyPhase;
   if (!showSocial) closeChatSheet();
-  // The Global/Table tabs + the Global "coming soon" placeholder are a LOBBY-ONLY
-  // affordance. Outside the lobby (an active 2-player race, or a finished daily) there's
-  // no Global channel — so hide the tabs and force the real table chat, or the Global
-  // default would hide #chatLog and disable #chatInput, silently breaking working chat.
+  // The Table/Status tabs (+ dormant Global placeholder) are a LOBBY-ONLY affordance.
+  // Outside the lobby — the mobile play-phase sheet, the desktop inline play panel, a
+  // finished daily — the tabs hide and chat is forced to the Table pane (user messages),
+  // or a lingering Global/Status channel would hide #chatLog and disable #chatInput,
+  // silently breaking working chat. System lines keep routing to the Status pane
+  // (renderChat) and read back whenever the tabs are next on screen.
   const chatTabs = $("#chatTabs");
   if (!showSocial) {
     if (chatTabs) chatTabs.hidden = true;
   } else if (inLobbyPhase) {
     if (chatTabs) chatTabs.hidden = false;
-    renderChatChannel(); // respect the user's chosen Global/Table channel
+    renderChatChannel(); // respect the user's chosen Table/Status/Global channel
   } else {
     if (chatTabs) chatTabs.hidden = true;
     if (game.chatChannel !== "table") switchChatChannel("table"); // real log + enabled input
@@ -3259,28 +3279,37 @@ function resetRound(round) {
 
 function renderChat(snap) {
   const log = $("#chatLog");
+  const statusLog = $("#chatStatusLog");
   if (!log) return;
   const chat = snap.chat || [];
   // Only append new entries — avoid rebuilding scroll position on every snapshot.
   if (chat.length < game.lastChatLen) {
     // Backwards jump shouldn't happen (chat is append-only) but be defensive.
     log.textContent = "";
+    if (statusLog) statusLog.textContent = "";
     game.lastChatLen = 0;
   }
   const appended = chat.length - game.lastChatLen;
   let notifyCount = 0;
+  const freshUserMsgs = []; // this pass's Chat-pane entries, for the pill attention matrix
   for (let i = game.lastChatLen; i < chat.length; i++) {
     const e = chat[i];
-    // Presence noise is no longer emitted by the server (chat = people who spoke +
-    // real game notices), but rooms persisted before that change still carry old
-    // joined/left/reconnected lines — drop them at render time.
-    if (e.kind === "system" && /\b(joined|left|reconnected)$/.test(e.text || "")) continue;
+    // §4 split (chat-pill.js): system lines → the quiet Status pane; user messages →
+    // the Chat pane; legacy persisted presence noise (joined/left/reconnected) → dropped.
+    const route = routeChatEntry(e);
+    if (route === "drop") continue;
+    if (route === "status") {
+      // Status lines NEVER blink, expand, badge, or ping anything.
+      statusLog?.appendChild(renderChatRow(e));
+      continue;
+    }
     log.appendChild(renderChatRow(e));
-    // Only notify for real messages from someone else. System lines (presence,
-    // solve announcements, notices) render in the log but never ping the badge —
-    // an unread count of "31" that's all noise trains people to ignore it.
+    freshUserMsgs.push(e);
+    // Only notify for real messages from someone else — system lines live in the
+    // Status tab now and never touch the badge; an unread count that's all noise
+    // trains people to ignore it.
     const hasText = (e.text || "").trim().length > 0;
-    if (e.kind !== "system" && hasText && e.from !== getUsername()) notifyCount++;
+    if (hasText && e.from !== getUsername()) notifyCount++;
   }
   // Capture "a genuinely new, meaningful table message arrived" BEFORE we mutate
   // lastChatLen — seeding existing history on first render has appended>0 too, so we
@@ -3293,6 +3322,12 @@ function renderChat(snap) {
   game.lastChatLen = chat.length;
   // Lobby pill: real conversation (incl. seeded history) expands the chat box.
   chatPill.setHasText(chatHasUserText(chat));
+  // Attention matrix (chat-pill.js): a message arriving while the manual-close
+  // latch holds pulses the collapsed pill instead of force-opening it. Skipped on
+  // the initial history seed — old messages aren't "arriving".
+  if (!isInitialSeed) {
+    for (const e of freshUserMsgs) chatPill.notify(e, { mine: e.from === getUsername() });
+  }
   if (appended > 0) {
     const panel = $("#chatPanel");
     const sheetOpen = panel?.classList.contains("sheet-open");
@@ -3313,19 +3348,22 @@ function renderChat(snap) {
 
 function renderChatRow(entry) {
   const row = document.createElement("div");
+  // Timestamp first — both panes read like a transcript: 14:32 @maya: nice one.
+  // Entries carry the server's `t`; a missing one falls back to arrival time.
+  const stamp = () => {
+    const time = document.createElement("span");
+    time.className = "chat-time";
+    time.textContent = formatChatTime(entry.t || Date.now());
+    return time;
+  };
   if (entry.kind === "system") {
     row.className = "chat-row system";
-    row.textContent = entry.text;
+    row.appendChild(stamp());
+    row.appendChild(document.createTextNode(entry.text));
   } else {
     const mine = entry.from && entry.from === getUsername();
     row.className = "chat-row user" + (mine ? " mine" : "");
-    // Timestamp first — the log reads like a transcript: 14:32 @maya: nice one
-    if (entry.t) {
-      const time = document.createElement("span");
-      time.className = "chat-time";
-      time.textContent = new Date(entry.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      row.appendChild(time);
-    }
+    if (entry.t) row.appendChild(stamp());
     const from = userLink(entry.from);
     from.classList.add("from");
     row.appendChild(from);
@@ -3335,7 +3373,8 @@ function renderChatRow(entry) {
 }
 
 function scrollChatToBottom() {
-  const log = $("#chatLog");
+  // Scroll the pane the user is looking at (Status is its own log).
+  const log = game.chatChannel === "status" ? $("#chatStatusLog") : $("#chatLog");
   if (!log) return;
   // Defer to next frame so newly-appended rows have their height.
   requestAnimationFrame(() => { log.scrollTop = log.scrollHeight; });

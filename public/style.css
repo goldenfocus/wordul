@@ -3717,6 +3717,11 @@ body.lobby .arena-row.is-hot {
   cursor: not-allowed;
 }
 
+/* §4 Status pane: timestamped, muted system lines only — same log surface as the
+   chat, quieter empty state. Deliberately NO ping dot or unread badge, ever. */
+.chat-status-log:empty::before { content: "No table events yet."; }
+.chat-row.system .chat-time { font-style: normal; }
+
 /* Lobby places #chatPanel inline in the right zone. On mobile (≤520px) the panel is
    otherwise a fixed bottom sheet — pin it back in-flow so it sits in #lobbyRight and
    scrolls internally. Scoped to body.lobby so non-lobby (sheet) chat is untouched. */
@@ -3739,7 +3744,8 @@ body.lobby #chatPanel {
    grows as messages arrive (it scrolls internally) and the send button never clips. */
 body.lobby .chat-toggle { display: none; }
 body.lobby .chat-body { border-top: none; }
-body.lobby #chatLog { height: 150px; min-height: 0; max-height: none; flex: none; }
+body.lobby #chatLog,
+body.lobby #chatStatusLog { height: 150px; min-height: 0; max-height: none; flex: none; }
 /* Chevron pill (chat-pill.js): in the lobby the chat is this one quiet row until
    real conversation exists — .chat-open (set by app.js) reveals the body. The pill
    owns lobby visibility outright, so the legacy .collapsed toggle state is moot here.
@@ -3764,6 +3770,18 @@ body.lobby #chatPanel:not(.chat-open) {
   backdrop-filter: none; -webkit-backdrop-filter: none;
 }
 body.lobby #chatPanel:not(.chat-open) .chat-pill { color: var(--fg); font-size: 13px; }
+/* §4 blink: a real message arriving while the manual-close latch holds pulses the
+   collapsed "▸ Chat" row toward the accent — never force-opens. app.js removes
+   .blinking the moment the pill expands. Reduced-motion safe: the animation only
+   exists inside the no-preference query (plus the body.reduced-motion kill below). */
+@media (prefers-reduced-motion: no-preference) {
+  body.lobby #chatPanel:not(.chat-open) .chat-pill.blinking {
+    animation: chat-pill-blink 1.6s ease-in-out infinite;
+  }
+}
+@keyframes chat-pill-blink {
+  50% { color: var(--accent); }
+}
 
 /* 7 ── Bloom-on-start: stagger the full grid's rows in when leaving lobby. */
 .boards.blooming .grid-row {
@@ -3790,6 +3808,7 @@ body.lobby #chatPanel:not(.chat-open) .chat-pill { color: var(--fg); font-size: 
 }
 body.reduced-motion .seat.seatin,
 body.reduced-motion .chat-tab-ping,
+body.reduced-motion .chat-pill.blinking,
 body.reduced-motion .boards.blooming .grid-row { animation: none !important; }
 body.reduced-motion .boards.blooming .grid-row { opacity: 1 !important; transform: none !important; }
 

@@ -340,8 +340,12 @@
                switchChatChannel('global') stays wired for when the global lobby lands. -->
           <button class="chat-tab" id="chatTabGlobal" data-chan="global" role="tab" type="button" hidden>Global</button>
           <button class="chat-tab is-active" id="chatTabTable" data-chan="table" role="tab" type="button"><span class="chat-tab-hash" aria-hidden="true">⌗</span> <span id="chatTabTableLabel">Table</span><span class="chat-tab-ping" id="chatTabPing" hidden></span></button>
+          <!-- Status: timestamped system lines (table events, game notices) live here so
+               they stop drowning the chat. Deliberately quiet — no unread counts, ever. -->
+          <button class="chat-tab chat-tab-status" id="chatTabStatus" data-chan="status" role="tab" type="button">Status</button>
         </div>
         <div id="chatLog" class="chat-log" role="log" aria-live="polite"></div>
+        <div id="chatStatusLog" class="chat-log chat-status-log" role="log" hidden></div>
         <form id="chatForm" class="chat-form" autocomplete="off">
           <input id="chatInput" class="chat-input" maxlength="200" placeholder="Chat" />
           <button type="submit" class="chat-send" aria-label="Send">↑</button>
