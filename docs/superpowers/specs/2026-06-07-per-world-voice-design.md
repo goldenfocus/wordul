@@ -80,8 +80,12 @@ The implementation must plug into existing machinery, not duplicate it.
 
 ### 3.1 Per-World voice override (KV)
 
-A new override layer, keyed by **World `id`**, stored in `DIRECTORY` KV under
-`worlds:voice`. Absent id ⇒ **silent** (the default).
+A new override layer, keyed by the **shared id** that a launch World's `id`, its
+`editionId`, and the daily/room bundle's `voice` field all share today (`"yang"`,
+`"default"`, …), stored in `DIRECTORY` KV under `worlds:voice`. Absent id ⇒ **silent**
+(the default). Keying on this shared id means one map covers both `/w/<slug>` World pages
+*and* the daily/room/challenge surfaces (which already carry `bundle.voice`) — otherwise
+the daily, the main play surface, would go silent.
 
 ```ts
 // src/voice-overrides.ts  (pure, mirrors world-overrides.ts)
@@ -137,15 +141,15 @@ keys. Lines (text) remain edition banks (see §4.1).
 
 ## 4. Runtime behavior
 
-### 4.1 Line text vs. voice (the real change)
+### 4.1 Voice source per surface (the change)
 
-Two things that are conflated today get split:
+v1 changes **only the audio**, not which lines are chosen. Line selection stays exactly as
+today (Yang's banks via `VOICE_EDITION`, with tier resolution, round-robin, and the loss
+`{answer}` filter `edition.js:104-107` all unchanged). This keeps blast radius small and
+makes uploaded clip sets well-defined: they map the **known** (Yang) line-keys. Switching
+*which lines* a surface speaks is out of scope (§9).
 
-- **Line text** (the toast + what's spoken) is selected from the **active World's edition**
-  banks — so Worlds stop all showing Yang's text (a latent limitation fixed here). Tier
-  resolution, round-robin, and the loss `{answer}` filter (`edition.js:104-107`) are
-  unchanged.
-- **Voice** (the audio) comes from the World's resolved `WorldVoice`:
+What becomes per-surface is the **audio**, from the active id's resolved `WorldVoice`:
   - **absent / `on:false`** → show the toast, **speak nothing** (except the existing
     global-pref behavior is *superseded*: per-World silent means silent).
   - **`ai`** → `speechSynthesis` with the chosen `voiceName` + `rate`/`pitch`, speaking the
@@ -161,12 +165,13 @@ Two things that are conflated today get split:
 > plan must specify this precedence precisely; recommended: `speak = !muted && worldVoice.on
 > && (isVoiceEnabled() ? budget : isAnswerReveal)`.
 
-### 4.2 Resolving the active World
+### 4.2 Resolving the active voice id
 
-`companionReact` needs the active World id. The client knows the active World via routing
-(`getWorld(slug)`); the plan wires the resolved `WorldVoice` into the merge layer at the
-call site (or via a small `activeWorldVoice()` accessor in `edition.js`, fed by a boot
-hydrate — see §5).
+`companionReact` resolves the audio via the **active voice id**, set by whatever surface is
+live: a `/w/<slug>` page sets the World's id (`getWorld(slug).id`); the daily / room /
+challenge set their `bundle.voice` id. A small `setActiveVoiceId(id)` / `activeVoiceLayer()`
+accessor pair in the client (`public/voice-config.js`, §5) holds the hydrated map and
+returns the override layer for the active id (or `{}` ⇒ silent).
 
 ### 4.3 Server
 
@@ -253,9 +258,9 @@ the initial `worlds:voice` value; every other World starts silent intentionally.
 
 ## 9. Out of scope (specced as extension points, not built)
 
-Palette editing · per-World **rewording** of line text (v1 attaches voice to the *existing*
-edition lines) · end-user (non-admin) uploads · in-browser **record** · **clone-from-sample**
-rendering pipeline.
+Palette editing · per-surface **line-text selection or rewording** (v1 keeps Yang's lines;
+voice only changes the audio rendering of them) · end-user (non-admin) uploads · in-browser
+**record** · **clone-from-sample** rendering pipeline.
 
 ---
 
