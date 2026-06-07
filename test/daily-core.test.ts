@@ -100,8 +100,9 @@ describe("houseWorld", () => {
     // (text companion, decoupled from visuals).
     expect(w.edition).toBe("default");
     expect(w.voice).toBe("yang");
-    expect(typeof w.story.title).toBe("string");
-    expect(typeof w.story.body).toBe("string");
+    // House days ship NO story — the "no curator claimed" filler read as noise on
+    // the golden card. The story block is curated-content-only (Yan, Jun 7 2026).
+    expect(w.story).toBeUndefined();
     expect(houseWorld("2026-06-02", 1).word).toBe(w.word); // deterministic word
   });
   it("threads salt through to the house word: empty salt == omitted, set salt is deterministic", () => {

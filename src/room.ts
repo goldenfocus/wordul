@@ -346,10 +346,10 @@ export class Room extends DurableObject<Env> {
       const p = this.state.players.find((p) => p.username === username);
       if (p && p.connected) {
         p.connected = false;
-        // Daily rooms persist NO presence lines: hundreds flow through over 24h and every
-        // mobile background/foreground flap closed a WS — the 40-slot chat ring filled with
-        // "left/reconnected" noise and real chat fell out. Race lobbies keep them (useful).
-        if (!this.state.isDaily) this.pushSystem(`${p.username} left`);
+        // NO presence lines anywhere (Yan, Jun 7 2026): chat lists only people who spoke
+        // (+ real game notices). Presence flaps — every mobile background/foreground closes
+        // a WS — filled the 40-slot ring with joined/left/reconnected noise; first fixed
+        // for daily rooms (Jun 5), now the rule everywhere. The seat list shows who's here.
       }
       this.assignHost();
       // A pending rematch dies if either participant drops; the survivor (the
@@ -516,10 +516,9 @@ export class Room extends DurableObject<Env> {
 
     const existing = this.state.players.find((p) => p.username === username);
     if (existing) {
-      const wasOffline = !existing.connected;
       existing.connected = true;
       existing.scienceOptOut = !!scienceOptOut;
-      if (wasOffline && !this.state.isDaily) this.pushSystem(`${username} reconnected`);
+      // (no "reconnected" line — presence stays out of chat; see webSocketClose comment)
     } else {
       // Seeded room = exactly 1 persona (bot) + 1 human. A 2nd distinct human gets
       // handed the share challenge (same word + ghosts) instead of a dead-end.
@@ -599,7 +598,7 @@ export class Room extends DurableObject<Env> {
       ) {
         this.state.publicArena = true;
       }
-      if (!this.state.isDaily) this.pushSystem(`${username} joined`);
+      // (no "joined" line — presence stays out of chat; see webSocketClose comment)
     }
 
     this.assignHost();

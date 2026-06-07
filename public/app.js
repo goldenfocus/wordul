@@ -35,7 +35,7 @@ import { pickInspire, pickForfeit } from "/inspire.js";
 import { renderSettlement, dailyReceiptLines } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
-import { autoPlayBoardOnce, boardReplayActive } from "/board-replay.js";
+import { autoPlayBoardOnce, playBoardReplay, boardReplayActive } from "/board-replay.js";
 import { seatModel, ghostSeatModel, railPillLabel } from "/lobby-view.js";
 import { encodeLocalSolve, needsDailyRecovery, recoverDailyArtifacts } from "/daily-recover.js";
 
@@ -390,13 +390,14 @@ function maybeRecoverDailySolve(username, profile, cbs) {
   }).catch(() => { dailyRecoveryInFlight = false; });
 }
 
-// Share today's result from the home — a spoiler-free line + the day's link (no board
-// PNG here, since the game isn't loaded on the home). Native sheet, else clipboard.
-function shareDailyResult(result) {
-  const url = location.origin + "/daily/" + todayUTC();
+// Challenge a friend onto this day's Wordul — a spoiler-free line + the day's link (no
+// board PNG here, since the game isn't loaded on the home). Native sheet, else clipboard.
+// `date` pins the link to the day being shared (past-day pages); omitted → today.
+function shareDailyResult(result, date) {
+  const url = location.origin + "/daily/" + (date || todayUTC());
   const line = result && result.won
-    ? `I solved today's Wordul in ${result.guesses}.`
-    : "Today's Wordul got me.";
+    ? `I got this Wordul in ${result.guesses} — think you can beat it?`
+    : "This Wordul beat me — avenge me?";
   if (typeof navigator.share === "function") {
     navigator.share({ title: "Wordul of the Day", text: line, url }).catch(() => {});
   } else if (navigator.clipboard?.writeText) {
@@ -2593,7 +2594,11 @@ function renderDailyUnlock(snap, me) {
     if (won && !getSettings().reducedMotion) celebrateDailyUnlock();
   }
   const story = $("#dailyStory");
-  if (story && snap.story && !story.dataset.filled) {
+  // Curated stories ONLY: an unauthored day renders no story block at all. The house
+  // fallback ("No curator claimed …") read as filler — houseWorld no longer ships a
+  // story, and this guard also hides it in rooms seeded before that change.
+  const authoredStory = snap.story && !/^No curator claimed /.test(snap.story.body || "");
+  if (story && authoredStory && !story.dataset.filled) {
     const kicker = document.createElement("span"); kicker.className = "daily-story-kicker"; kicker.textContent = t("daily.storyKicker");
     const h = document.createElement("h3"); h.textContent = snap.story.title || t("daily.storyFallbackTitle");
     const p = document.createElement("p"); p.textContent = snap.story.body || "";
@@ -2603,20 +2608,38 @@ function renderDailyUnlock(snap, me) {
   }
   const share = $("#dailyShareBtn");
   if (share && !share.dataset.wired) {
-    share.textContent = t("daily.share");
+    share.textContent = t("daily.challenge");
     // shareDailyResult is gesture-safe here: this listener runs on the tap itself.
-    share.addEventListener("click", () => shareDailyResult({ won, guesses: me.guesses.length }));
+    // game.dailyDate: a past-day page must challenge friends to THAT day, not today's.
+    share.addEventListener("click", () => shareDailyResult({ won, guesses: me.guesses.length }, game.dailyDate));
     share.dataset.wired = "1";
   }
-  const home = $("#dailyHomeLink");
-  if (home && !home.dataset.wired) {
-    home.textContent = t("daily.home");
-    home.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); }); home.dataset.wired = "1";
+  // The action rail under the CTA: Wiki · Recap · Past days · Home.
+  const wikiL = $("#dailyWikiLink");
+  if (wikiL && word && !wikiL.dataset.wired) {
+    wikiL.textContent = t("daily.actionWiki");
+    wikiL.href = `/word/${word.toLowerCase()}`;
+    wikiL.hidden = false;
+    wikiL.dataset.wired = "1";
+  }
+  const recapL = $("#dailyRecapLink");
+  if (recapL && game.dailyDate && !recapL.dataset.wired) {
+    const statsPath = `/daily/${game.dailyDate}/stats`;
+    recapL.textContent = t("daily.actionRecap");
+    recapL.href = statsPath;
+    recapL.addEventListener("click", (e) => { e.preventDefault(); navigate(statsPath); });
+    recapL.hidden = false;
+    recapL.dataset.wired = "1";
   }
   const arch = $("#dailyArchiveLink");
   if (arch && !arch.dataset.wired) {
-    arch.textContent = t("daily.browsePast");
+    arch.textContent = t("daily.actionPast");
     arch.addEventListener("click", (e) => { e.preventDefault(); navigate("/daily/archive"); }); arch.dataset.wired = "1";
+  }
+  const home = $("#dailyHomeLink");
+  if (home && !home.dataset.wired) {
+    home.textContent = t("daily.actionHome");
+    home.addEventListener("click", (e) => { e.preventDefault(); navigate("/"); }); home.dataset.wired = "1";
   }
   // Today's winners board — mounted once the mint confirms (the finisher token from the
   // same snapshot is already in localStorage by now; see wr.dailyToken storage above).
@@ -2733,7 +2756,7 @@ function cashOutDaily(me) {
           // Daily word reveal: a solved daily's last guess IS the answer (the win beat
           // only fires on payout > 0, which a daily only mints when solved).
           word: me.status === "won" ? me.guesses?.[me.guesses.length - 1]?.word : null,
-        });
+        }).then(() => replayMyDailyBoard(me)); // overlay's gone — now the board takes its bow
         return;
       }
       if (reducedMotion) { setGold(balance); renderGoldHud(); return; }
@@ -2741,6 +2764,17 @@ function cashOutDaily(me) {
       awardGold(mint, false); // legacy fallback: tween (balance − mint) → balance, coins fly
     })
     .catch(() => refreshGold());
+}
+
+// Live-finish bow: once the supernova settlement tears down, YOUR board plays itself
+// back (type-in + signature flips). The cold-render path (renderBoards → autoPlayBoardOnce)
+// covers revisits; this covers the finish you just played — the settlement overlay sat
+// over the board until now, so without this the moment ended on a flat board.
+function replayMyDailyBoard(me) {
+  if (!me?.guesses?.length || getSettings().reducedMotion) return;
+  const board = $$(".player-board").find((b) => b.dataset.player === getUsername());
+  const grid = board?.querySelector(".grid");
+  if (grid) playBoardReplay(grid, me.guesses);
 }
 
 // Paint the §B cash-out breakdown list. Each line is one honest gold source; the list is
@@ -3202,6 +3236,10 @@ function renderChat(snap) {
   let notifyCount = 0;
   for (let i = game.lastChatLen; i < chat.length; i++) {
     const e = chat[i];
+    // Presence noise is no longer emitted by the server (chat = people who spoke +
+    // real game notices), but rooms persisted before that change still carry old
+    // joined/left/reconnected lines — drop them at render time.
+    if (e.kind === "system" && /\b(joined|left|reconnected)$/.test(e.text || "")) continue;
     log.appendChild(renderChatRow(e));
     // Only notify for real messages from someone else. System lines (presence,
     // solve announcements, notices) render in the log but never ping the badge —
@@ -3244,6 +3282,13 @@ function renderChatRow(entry) {
   } else {
     const mine = entry.from && entry.from === getUsername();
     row.className = "chat-row user" + (mine ? " mine" : "");
+    // Timestamp first — the log reads like a transcript: 14:32 @maya: nice one
+    if (entry.t) {
+      const time = document.createElement("span");
+      time.className = "chat-time";
+      time.textContent = new Date(entry.t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      row.appendChild(time);
+    }
     const from = userLink(entry.from);
     from.classList.add("from");
     row.appendChild(from);

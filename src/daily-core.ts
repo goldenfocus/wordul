@@ -7,7 +7,7 @@ export interface World {
   bonusWord?: string;      // RESERVED (#2): hidden word to discover; no behavior yet
   edition: string;         // design skin id (e.g. "yang", "default")
   voice: string;           // companion voice id (e.g. "yang")
-  story: { title: string; body: string; tip?: string };
+  story?: { title: string; body: string; tip?: string }; // curated days only — house days ship none
   // --- Vibe Studio v1 (all optional + additive; default-on-write in normalizeWorld) ---
   vibeTitle?: string;                                  // header title; falls back to story.title
   rows?: number;                                       // guess rows, 3–10, default 6
@@ -95,10 +95,9 @@ export function houseWorld(date: string, nowMs: number, salt = ""): World {
     // companion is text-only, decoupled from visuals (see VOICE_EDITION in edition.js).
     edition: "default",
     voice: "yang",
-    story: {
-      title: `Today's word`,
-      body: `No curator claimed ${date} — so the house drew a word. Play it, then come back: a curated day is coming.`,
-    },
+    // NO story: the "WHY THIS WORD / no curator claimed" filler read as noise on the
+    // golden card (Yan, Jun 7 2026). The story block renders ONLY when a curator
+    // actually wrote one in the studio; unauthored days show nothing.
     createdAt: nowMs,
   };
 }

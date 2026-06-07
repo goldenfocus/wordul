@@ -2,8 +2,9 @@
 // mobile background/foreground flap closed+reopened a WS. Each flap persisted a
 // "X left" / "X reconnected" line into the 40-slot chat ring (room.ts pushSystem),
 // drowning real chat entirely (screenshot: 18 presence lines, 1 actual message).
-// Rule: DAILY rooms persist NO presence lines (joined/left/reconnected). Race/duel
-// rooms keep them — a 2-4 player lobby needs to know who's there.
+// Rule (Yan, Jun 7 2026): NO room persists presence lines (joined/left/reconnected) —
+// chat lists only people who actually spoke, plus real game notices. The seat list
+// is what shows who's at the table. (Originally daily-only, Jun 5 2026.)
 
 import { describe, it, expect, vi } from "vitest";
 
@@ -102,14 +103,14 @@ describe("daily room chat — presence flaps are not persisted", () => {
   });
 });
 
-describe("race room chat — presence lines are kept (small lobby, useful signal)", () => {
-  it("still announces joined / left / reconnected in a non-daily room", async () => {
+describe("race room chat — presence lines are gone here too (chat = people who spoke)", () => {
+  it("join / leave / rejoin writes ZERO presence lines in a non-daily room", async () => {
     const room = makeRoom();
     const ws = mockWs();
     await join(room, ws, "alice");
     await room.webSocketClose(ws);
     const ws2 = mockWs();
     await join(room, ws2, "alice");
-    expect(systemTexts(room)).toEqual(["alice joined", "alice left", "alice reconnected"]);
+    expect(presenceLines(room)).toEqual([]);
   });
 });

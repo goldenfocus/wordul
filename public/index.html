@@ -299,9 +299,15 @@
         <div class="daily-lb" id="dailyLeaderboard" hidden></div>
         <article class="daily-story" id="dailyStory"></article>
         <div class="daily-bridge">
+          <!-- One CTA ("Challenge a friend" — spoiler-free share of THIS day's link) +
+               a quiet action rail: Wiki · Recap · Past days · Home. Wired by renderDailyUnlock. -->
           <button type="button" class="btn primary block daily-bridge-btn" id="dailyShareBtn"></button>
-          <a href="/" class="link daily-home-link" id="dailyHomeLink"></a>
-          <a href="/daily/archive" class="link daily-bridge-link" id="dailyArchiveLink"></a>
+          <nav class="daily-bridge-actions" aria-label="After the word">
+            <a class="btn ghost small" id="dailyWikiLink" hidden></a>
+            <a class="btn ghost small" id="dailyRecapLink" hidden></a>
+            <a href="/daily/archive" class="btn ghost small" id="dailyArchiveLink"></a>
+            <a href="/" class="btn ghost small" id="dailyHomeLink"></a>
+          </nav>
         </div>
       </section>
       <div id="keyboard" class="keyboard" aria-label="On-screen keyboard"></div>

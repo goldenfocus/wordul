@@ -1038,11 +1038,14 @@ async function injectDailyMeta(env: Env, url: URL, date: string): Promise<Respon
   const meta = buildDailyMeta(date, seoWorld, url.origin);
   const jsonld = JSON.stringify(buildDailyJsonLd(date, seoWorld, url.origin));
   const { prev, next } = dailyPrevNext(date);
+  const story = seoWorld.story; // absent on unauthored (house) past days — no story prose
   const prose =
     `<h1>${escapeHtml(meta.title)}</h1>` +
-    `<h2>${escapeHtml(seoWorld.story.title)}</h2>` +
-    `<p>${escapeHtml(seoWorld.story.body)}</p>` +
-    (seoWorld.story.tip ? `<p><em>${escapeHtml(seoWorld.story.tip)}</em></p>` : "") +
+    (story
+      ? `<h2>${escapeHtml(story.title)}</h2>` +
+        `<p>${escapeHtml(story.body)}</p>` +
+        (story.tip ? `<p><em>${escapeHtml(story.tip)}</em></p>` : "")
+      : "") +
     `<nav><a href="${url.origin}/daily/${prev}">← ${prev}</a> · ` +
     `<a href="${url.origin}/daily/archive">archive</a> · ` +
     `<a href="${url.origin}/daily/${next}">${next} →</a></nav>`;

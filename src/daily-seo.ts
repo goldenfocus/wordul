@@ -47,10 +47,10 @@ export function buildDailyMeta(
   origin: string,
 ): { title: string; description: string; canonical: string } {
   const pretty = prettyDate(date);
-  const firstLine = (world.story.body || "").split("\n")[0].slice(0, 150);
+  const firstLine = (world.story?.body || "").split("\n")[0].slice(0, 150);
   return {
     title: `Wordul of the Day — ${pretty}`,
-    description: world.story.title
+    description: world.story?.title
       ? `${world.story.title} ${firstLine}`.trim().slice(0, 200)
       : `Play the Wordul of the Day for ${pretty}. One word, the whole world, free — no ads.`,
     canonical: `${origin}/daily/${date}`,
@@ -66,7 +66,7 @@ export function buildDailyJsonLd(date: string, world: World, origin: string): ob
         "@type": "WebPage",
         url,
         name: `Wordul of the Day — ${prettyDate(date)}`,
-        description: world.story.body,
+        description: world.story?.body ?? `Play the Wordul of the Day for ${prettyDate(date)}.`,
         datePublished: date,
         isPartOf: { "@type": "WebSite", name: "Wordul", url: origin },
       },

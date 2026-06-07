@@ -76,7 +76,14 @@ export const en = {
   "daily.storyKicker": "Why this word",
   "daily.keepPlaying": "Keep playing",
   "daily.browsePast": "Browse past days →",
+  // The post-word bridge: one challenge CTA + the action rail under it
+  "daily.challenge": "Challenge a friend",
+  "daily.actionWiki": "Wiki",
+  "daily.actionRecap": "Recap",
+  "daily.actionPast": "Past days",
+  "daily.actionHome": "Home",
   "daily.lbShowAll": "Show all",
+  "daily.lbRecap": "Full day recap",
   "daily.archiveTitle": "Every Wordul of the Day",
 
   // Settlement screen (settle.js)
