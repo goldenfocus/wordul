@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { triesFor, seatModel, compactRowProps, ghostSeatModel, railPillLabel } from "../public/lobby-view.js";
+import { triesFor, seatModel, compactRowProps, ghostSeatModel, railPillLabel, emptySeatActions } from "../public/lobby-view.js";
 
 describe("triesFor (mirrors server guessesFor)", () => {
   it("is length+1, plateauing at 8", () => {
@@ -101,5 +101,46 @@ describe("railPillLabel", () => {
     expect(railPillLabel(0)).toBe("0 tables open");
     expect(railPillLabel(1)).toBe("1 table open");
     expect(railPillLabel(7)).toBe("7 tables open");
+  });
+});
+
+describe("emptySeatActions (tap-a-seat capacity, Air skin)", () => {
+  const model = (capacity, taken) => seatModel(
+    { capacity, players: [{ username: "host" }, ...Array.from({ length: taken - 1 }, (_, i) => ({ username: "p" + i }))] },
+    "host",
+  );
+
+  it("non-hosts get nothing — no + glyphs, no \u2715", () => {
+    expect(emptySeatActions(model(3, 1), false)).toEqual({ addable: false, removableIndex: -1 });
+  });
+
+  it("host on a fresh duel: the empty seat adds, nothing removes (capacity at floor)", () => {
+    const a = emptySeatActions(model(2, 1), true);
+    expect(a.addable).toBe(true);
+    expect(a.removableIndex).toBe(-1);
+  });
+
+  it("raised table: the LAST empty chair carries the \u2715", () => {
+    const m = model(4, 1); // you + 3 empties
+    expect(emptySeatActions(m, true).removableIndex).toBe(3);
+  });
+
+  it("at MAX capacity the + disappears but the \u2715 stays", () => {
+    const a = emptySeatActions(model(6, 1), true);
+    expect(a.addable).toBe(false);
+    expect(a.removableIndex).toBe(5);
+  });
+
+  it("never removes below seated players", () => {
+    // 3 seated at capacity 3: lo = max(2,3) = 3, no removable chair.
+    expect(emptySeatActions(model(3, 3), true).removableIndex).toBe(-1);
+  });
+
+  it("a spectator never edits, even as inherited host", () => {
+    const m = seatModel(
+      { capacity: 3, players: [{ username: "watcher", role: "spectator" }, { username: "a" }, { username: "b" }] },
+      "watcher",
+    );
+    expect(emptySeatActions(m, true)).toEqual({ addable: false, removableIndex: -1 });
   });
 });

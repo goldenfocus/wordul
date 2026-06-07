@@ -37,7 +37,7 @@ import { renderSettlement, dailyReceiptLines } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
 import { autoPlayBoardOnce, playBoardReplay, boardReplayActive } from "/board-replay.js";
-import { seatModel, ghostSeatModel, railPillLabel } from "/lobby-view.js";
+import { seatModel, ghostSeatModel, railPillLabel, emptySeatActions } from "/lobby-view.js";
 import { createChatPill, chatHasUserText } from "/chat-pill.js";
 import { encodeLocalSolve, needsDailyRecovery, recoverDailyArtifacts } from "/daily-recover.js";
 
@@ -2890,7 +2890,10 @@ function renderMyTable(snap) {
   const prevTaken = game.lastSeatCount || 0;
   let takenSeen = 0;
   seatsEl.replaceChildren();
-  for (const s of model.seats) {
+  // The empty seat IS the capacity control (Air skin): ＋ adds a chair, the last
+  // empty chair carries a ✕. No − n/m + stepper line, no count.
+  const actions = emptySeatActions(model, canEditCapacity(snap), { min: MIN_CAPACITY, max: MAX_CAPACITY });
+  for (const [i, s] of model.seats.entries()) {
     const el = document.createElement("div");
     if (s.kind === "you") {
       el.className = "seat you";
@@ -2910,30 +2913,35 @@ function renderMyTable(snap) {
       el.textContent = s.username ? s.username[0].toUpperCase() : "◆";
     } else {
       el.className = "seat empty";
-      el.textContent = "＋";
+      if (actions.addable) {
+        el.classList.add("addable");
+        el.textContent = "＋";
+        el.title = "Add a seat";
+        el.setAttribute("role", "button");
+        el.setAttribute("aria-label", "Add a seat");
+        el.addEventListener("click", () => stepCapacity(1));
+      }
+      if (i === actions.removableIndex) {
+        const x = document.createElement("button");
+        x.type = "button";
+        x.className = "seat-x";
+        x.textContent = "✕";
+        x.setAttribute("aria-label", "Remove this seat");
+        x.addEventListener("click", (e) => { e.stopPropagation(); stepCapacity(-1); });
+        el.appendChild(x);
+      }
     }
     seatsEl.appendChild(el);
   }
   game.lastSeatCount = takenSeen;
+  // No n/m count for duels — the chairs themselves say it. Challenges keep their
+  // "vs N ghosts" line (that strip has no empty seats to read).
   if (countEl) {
-    const nGhosts = model.taken - 1;
-    countEl.textContent = game.challengeId
-      ? `vs ${nGhosts} ghost${nGhosts === 1 ? "" : "s"}`
-      : `${model.taken}/${model.capacity}`;
-  }
-  // Capacity steppers — host-only, lobby-only, duel-only (the server enforces the same
-  // gate; these just don't render for anyone else). Bounds mirror onSetCapacity's clamp.
-  const capMinus = $("#capMinus");
-  const capPlus = $("#capPlus");
-  if (capMinus && capPlus) {
-    const editable = canEditCapacity(snap);
-    capMinus.hidden = capPlus.hidden = !editable;
-    if (editable) {
-      const lo = Math.max(MIN_CAPACITY, model.taken);
-      capMinus.disabled = model.capacity <= lo;
-      capPlus.disabled = model.capacity >= MAX_CAPACITY;
+    countEl.hidden = !game.challengeId;
+    if (game.challengeId) {
+      const nGhosts = model.taken - 1;
+      countEl.textContent = `vs ${nGhosts} ghost${nGhosts === 1 ? "" : "s"}`;
     }
-    wireCapSteppers();
   }
   // Watchers are company, not seats — a quiet chip after the count.
   const watchEl = $("#myTableWatch");
@@ -3473,16 +3481,6 @@ function stepCapacity(d) {
   if (clamped === snap.capacity) return;
   send({ type: "set_capacity", capacity: clamped });
 }
-function wireCapSteppers() {
-  for (const [id, d] of [["#capMinus", -1], ["#capPlus", 1]]) {
-    const btn = $(id);
-    if (btn && !btn.dataset.wired) {
-      btn.dataset.wired = "1";
-      btn.addEventListener("click", (e) => { e.stopPropagation(); stepCapacity(d); });
-    }
-  }
-}
-
 // Spectator's lobby view: the Ready button is hidden (role gate in applyDuelReadyButton);
 // this quiet line fills the hole so "no button" reads as a state, not a bug.
 function applySpectatorHint(snap, me) {

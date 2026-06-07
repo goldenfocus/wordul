@@ -1551,6 +1551,11 @@ body.lobby .mute-icon { display: none; }
 /* …and with the mute gone the gap row is empty air in the lobby — collapse it
    ("wasting a lot of space" feedback, Jun 7). It returns for play (hacklog + mute). */
 body.lobby .board-gap { display: none; }
+/* Air skin (ritual winner, Jun 7): the lobby drops its board headline — your identity
+   already lives under the topbar avatar (@name caption). And the 5×6 dimension
+   control moves into Setup (Settings already owns length + rows selects). */
+body.lobby .player-name { display: none; }
+body.lobby #dimWrap { display: none; }
 .magic-popover {
   /* The magic-bar now sits ABOVE the board, so the popover opens DOWNWARD. */
   position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
@@ -3300,6 +3305,12 @@ body.lobby .lobby-right {
 }
 @media (max-width: 880px) {
   body.lobby .lobby-grid { grid-template-columns: 1fr; }
+  /* Air skin: a quiet horizon line between the action column and the chevron rows. */
+  body.lobby .lobby-right {
+    border-top: 1px solid;
+    border-image: linear-gradient(90deg, transparent, var(--border) 30%, var(--border) 70%, transparent) 1;
+    padding-top: var(--space-3);
+  }
 }
 /* Desktop two-zone: rail above chat. The DOM order is mobile-first (chat before rail —
    the §3 order: … → CHAT → tables pill), so desktop restores rail-on-top with flex order. */
@@ -3317,15 +3328,14 @@ body.lobby .lobby-right {
     padding: 0; border: none; background: none;
     backdrop-filter: none; -webkit-backdrop-filter: none;
   }
+  /* Air skin: at rest the pill is a BARE text row (matches the chat chevron); the
+     shared card surface only returns on .expanded below. */
   body.lobby .lobby-rail-pill {
     display: flex; align-items: center; gap: var(--space-2);
     width: 100%; padding: var(--space-2) var(--space-3);
-    border: 1px solid color-mix(in oklab, var(--fg) 7%, var(--border));
-    border-radius: var(--r-md);
-    background: color-mix(in oklab, var(--bg-card) 60%, transparent);
-    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    color: var(--muted); font-family: var(--font-body);
-    font-size: 12px; font-weight: 600; cursor: pointer;
+    border: none; background: none;
+    color: var(--fg); font-family: var(--font-body);
+    font-size: 13px; font-weight: 600; cursor: pointer;
   }
   body.lobby .lobby-rail-pill-arrow { transition: transform 0.16s ease; }
   body.lobby .lobby-rail.expanded .lobby-rail-pill-arrow { transform: rotate(90deg); }
@@ -3361,9 +3371,12 @@ body.lobby .lobby-left .lobby-controls {
   flex-direction: column; align-items: center; gap: var(--space-2);
   width: 100%; max-width: 320px;
 }
+/* READY — a wide board tile, not a slab (Air skin): SHARP corners speak the game's
+   own tile language; the width hugs the word instead of filling the column. */
 body.lobby .lobby-left .lobby-controls .btn.primary {
-  width: 100%; height: 50px; font-size: 16px;
-  border: none; border-radius: var(--r-sm); color: var(--bg);
+  width: auto; min-width: 220px; height: 46px; font-size: 15px;
+  padding: 0 var(--space-6); letter-spacing: 0.16em;
+  border: none; border-radius: 0; color: var(--bg);
   font-family: var(--font-display); font-weight: 700;
   background: linear-gradient(135deg, var(--accent),
     color-mix(in oklab, var(--warm) 45%, var(--accent)));
@@ -3388,11 +3401,12 @@ body.lobby .lobby-left .lobby-pair {
   order: 5; /* #lobbyControls is appended last in lobby (DOM order ~4); keep pair after it */
 }
 body.lobby .lobby-left .lobby-controls { order: 4; }
-/* Pure icons — no pill chrome ("over-peeled" feedback, Jun 7). The aria-label/title
-   carry the words; 44px hit area around a 20px glyph. */
+/* Icon + micro-label, no pill chrome (Air skin): the word rides under the glyph as
+   10px letterspaced caps — quiet but never cryptic. */
 .lobby-pair-btn {
-  flex: none; width: 44px; height: 44px;
-  display: inline-flex; align-items: center; justify-content: center;
+  flex: none; min-width: 44px; min-height: 44px;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-1);
   border: none; background: none;
   color: var(--muted); border-radius: var(--r-sm); cursor: pointer;
   transition: color 0.16s ease;
@@ -3400,6 +3414,10 @@ body.lobby .lobby-left .lobby-controls { order: 4; }
 .lobby-pair-btn:hover { color: var(--accent); }
 .lobby-pair-btn.invite:hover { color: var(--warm); }
 .lobby-pair-btn svg { flex: none; }
+.lobby-pair-lab {
+  font-family: var(--font-body); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase;
+}
 
 /* 6 ── Header icon buttons (share / gear). They share .icon-btn; add only the
    square-iconbtn look from the prototype's .iconbtn. */
@@ -3472,21 +3490,28 @@ body.playing .room-icon-btn { display: none; }
 }
 
 /* 3 ── Your table seat strip ───────────────────────────────────────────────*/
+/* Centered chairs under the board, one Air-style hairline above (the seats ARE the
+   capacity UI now — no count, no stepper line; see emptySeatActions). */
 .mytable {
   width: 100%; max-width: 430px;
-  display: flex; align-items: center; gap: var(--space-3);
+  display: flex; align-items: center; justify-content: center; gap: var(--space-3);
 }
-/* Label trimmed to glyphs+count (aria-label="Your table" carries the meaning). */
+body.lobby .mytable {
+  padding-top: var(--space-4);
+  border-top: 1px solid;
+  border-image: linear-gradient(90deg, transparent, var(--border) 30%, var(--border) 70%, transparent) 1;
+}
+/* Label trimmed to glyphs (aria-label="Your table" carries the meaning). */
 .mytable-lab { display: none; }
-/* Seats stay ONE stable row at every capacity (2–6) — the strip is wide enough for
-   six 40px seats plus the count/steppers, so nothing wraps or resizes as the host
-   steps the table up and down ("five players goes to the second row" feedback). */
-.mytable-seats { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: 1; }
+/* Seats stay ONE stable row at every capacity (2–6); centered, never resizing as
+   chairs come and go. */
+.mytable-seats { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2); flex: none; }
 .seat {
+  position: relative;
   width: 40px; height: 40px; flex: none;
   border-radius: var(--r-md); display: grid; place-items: center; font-size: 20px;
 }
-/* Phones: shrink seats so capacity 6 still fits one row beside the count. */
+/* Phones: smaller seats so capacity 6 still fits one row. */
 @media (max-width: 520px) {
   .seat { width: 32px; height: 32px; font-size: 16px; }
   .mytable { gap: var(--space-2); }
@@ -3511,17 +3536,22 @@ body.playing .room-icon-btn { display: none; }
   font-family: var(--font-display); font-weight: 700; font-size: 15px;
   white-space: nowrap;
 }
-/* Capacity steppers — the host resizes the table right where the count lives.
-   Bare glyphs, no pill chrome ("over-peeled" feedback, Jun 7). */
-.cap-step {
-  width: 28px; height: 28px; flex: none; border-radius: var(--r-sm);
-  border: none; background: none;
-  color: var(--accent); font-size: 17px; cursor: pointer;
-  display: grid; place-items: center; transition: 0.12s;
+.mytable-cnt[hidden] { display: none; }
+/* The −/+ stepper line is retired — the chairs themselves are the control. The
+   elements stay in the DOM (hidden) so old markup references can't 404. */
+.cap-step { display: none; }
+/* Host affordances on the chairs: a dashed ＋ chair adds a seat; the last empty
+   chair carries a bare ✕ (no badge circle) to take it back. */
+.seat.empty.addable { cursor: pointer; transition: border-color 0.14s ease, color 0.14s ease; }
+.seat.empty.addable:hover { border-color: var(--accent); color: var(--accent); }
+.seat-x {
+  position: absolute; top: -9px; right: -7px;
+  border: none; background: none; padding: 2px;
+  color: var(--muted); font-size: 11px; line-height: 1; cursor: pointer;
+  text-shadow: 0 1px 4px var(--bg);
+  transition: color 0.14s ease, transform 0.1s ease;
 }
-.cap-step:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 14%, transparent); }
-.cap-step:disabled { opacity: 0.3; cursor: default; }
-.cap-step[hidden] { display: none; }
+.seat-x:hover { color: #e66; transform: scale(1.15); }
 /* Watchers are company, not seats — a quiet chip after the count. */
 .mytable-watch {
   font-family: var(--font-body); font-size: 11px; font-weight: 600;
@@ -3637,6 +3667,13 @@ body.lobby .chat-pill-arrow { transition: transform 0.16s ease; }
 body.lobby #chatPanel.chat-open .chat-pill-arrow { transform: rotate(90deg); }
 body.lobby #chatPanel .chat-body { display: none; }
 body.lobby #chatPanel.chat-open .chat-body { display: flex; }
+/* Air skin: at rest the chevron is a BARE text row — the shared card surface only
+   returns when the chat opens. (The tables pill gets the same treatment below.) */
+body.lobby #chatPanel:not(.chat-open) {
+  border: none; background: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+body.lobby #chatPanel:not(.chat-open) .chat-pill { color: var(--fg); font-size: 13px; }
 
 /* 7 ── Bloom-on-start: stagger the full grid's rows in when leaving lobby. */
 .boards.blooming .grid-row {

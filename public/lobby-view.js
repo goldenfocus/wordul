@@ -31,6 +31,22 @@ export function seatModel(snap, me) {
   };
 }
 
+// Direct-manipulation capacity (Air skin, Jun 7): the dashed empty seat IS the
+// control — no − n/m + stepper line. Tapping an empty seat's ＋ adds a chair;
+// the LAST empty chair carries a small ✕ to take it back. Host-only (canEdit),
+// and a spectator never edits even if host succession handed them the crown.
+export function emptySeatActions(model, canEdit, { min = 2, max = 6 } = {}) {
+  if (!canEdit || model.iAmSpectator) return { addable: false, removableIndex: -1 };
+  const addable = model.capacity < max;
+  let removableIndex = -1;
+  if (model.capacity > Math.max(min, model.taken)) {
+    for (let i = model.seats.length - 1; i >= 0; i--) {
+      if (model.seats[i].kind === "empty") { removableIndex = i; break; }
+    }
+  }
+  return { addable, removableIndex };
+}
+
 // The mobile rail pill's label — the "▸" arrow is markup, this is just the words.
 export function railPillLabel(n) {
   const c = Number(n) || 0;
