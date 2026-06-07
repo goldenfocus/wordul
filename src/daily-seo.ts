@@ -38,7 +38,8 @@ export function dailyPrevNext(date: string): { prev: string; next: string } {
 
 // Colors-only board mask: 1–6 rows of 5 cells, each h(ot)/w(arm)/c(old).
 // By construction this alphabet can never carry a letter of the answer.
-const GIFT_PATTERN_RE = /^[hwc]{5}(-[hwc]{5}){0,5}$/;
+// Exported so gift-png.ts can share the same source of truth.
+export const GIFT_PATTERN_RE = /^[hwc]{5}(-[hwc]{5}){0,5}$/;
 
 /** `?g=<pattern>` from a URL search string; null unless strictly valid. */
 export function giftPatternFromSearch(search: string): string | null {

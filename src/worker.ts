@@ -538,8 +538,9 @@ export default {
     // Dare-ritual gift image: /daily/og/<date>/<pattern>.png — the sharer's board,
     // letters hidden. Pattern is colors-only (validated), so the route is public,
     // spoiler-free, and immutable-cacheable: one render per board per colo.
+    // Future dates 404 (same clamp as the page route) — kills date-sweep abuse for free.
     const ogGift = dailyOgFromPathname(url.pathname);
-    if (ogGift && req.method === "GET") {
+    if (ogGift && req.method === "GET" && ogGift.date <= activeDate(Date.now())) {
       const cached = await caches.default.match(req);
       if (cached) return cached;
       const png = await renderGiftPng(ogGift.date, ogGift.pattern);

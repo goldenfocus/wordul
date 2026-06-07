@@ -4,6 +4,8 @@
 // worker's zero-runtime-deps property). IDAT compression is the platform's
 // CompressionStream("deflate") — zlib-wrapped DEFLATE, exactly PNG's format.
 
+import { GIFT_PATTERN_RE } from "./daily-seo.ts";
+
 /* ——— PNG plumbing ——— */
 
 const CRC_TABLE = new Uint32Array(256);
@@ -138,7 +140,7 @@ const GAP = 10;
     this function, so the answer cannot appear in the image by construction.
     Route-level validation is repeated here to keep direct callers honest. */
 export async function renderGiftPng(date: string, pattern: string): Promise<Uint8Array> {
-  if (!/^[hwc]{5}(-[hwc]{5}){0,5}$/.test(pattern)) throw new Error("bad gift pattern");
+  if (!GIFT_PATTERN_RE.test(pattern)) throw new Error("bad gift pattern");
   const rows = pattern.split("-");
   const r = new Raster(GIFT_W, GIFT_H, BG);
   const boardW = 5 * TILE + 4 * GAP;
