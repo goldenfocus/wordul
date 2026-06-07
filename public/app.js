@@ -3320,14 +3320,19 @@ function renderChat(snap) {
   const isInitialSeed = game.lastChatLen === 0 && appended > 0;
   const hadNewTableMsg = notifyCount > 0;
   game.lastChatLen = chat.length;
-  // Lobby pill: real conversation (incl. seeded history) expands the chat box.
-  chatPill.setHasText(chatHasUserText(chat));
-  // Attention matrix (chat-pill.js): a message arriving while the manual-close
-  // latch holds pulses the collapsed pill instead of force-opening it. Skipped on
-  // the initial history seed — old messages aren't "arriving".
+  // Attention matrix (chat-pill.js): a fresh message expands a quiet pill; one
+  // arriving while the manual-close latch holds pulses the collapsed pill instead
+  // of force-opening it. Runs BEFORE setHasText below so notify() sees the pill's
+  // pre-arrival state — otherwise setHasText opens the pill first and the expand
+  // branch could never fire. Skipped on the initial history seed — old messages
+  // aren't "arriving".
   if (!isInitialSeed) {
     for (const e of freshUserMsgs) chatPill.notify(e, { mine: e.from === getUsername() });
   }
+  // Lobby pill: real conversation (incl. seeded history) expands the chat box.
+  // For fresh arrivals this is a no-op (notify's expand already set hasText); it
+  // still covers the initial seed and the defensive history-reset path above.
+  chatPill.setHasText(chatHasUserText(chat));
   if (appended > 0) {
     const panel = $("#chatPanel");
     const sheetOpen = panel?.classList.contains("sheet-open");
@@ -3349,7 +3354,9 @@ function renderChat(snap) {
 function renderChatRow(entry) {
   const row = document.createElement("div");
   // Timestamp first — both panes read like a transcript: 14:32 @maya: nice one.
-  // Entries carry the server's `t`; a missing one falls back to arrival time.
+  // Entries carry the server's `t`. A system line missing one falls back to arrival
+  // time (the Status pane always shows a stamp); a user line just omits the stamp
+  // rather than fabricate a time on legacy history.
   const stamp = () => {
     const time = document.createElement("span");
     time.className = "chat-time";

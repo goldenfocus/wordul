@@ -153,6 +153,13 @@ describe("chatPillReaction", () => {
   it("my own message never blinks at me", () => {
     expect(chatPillReaction(latched, msg, { mine: true })).toBe("none");
   });
+
+  it("my own message in a quiet room still expands", () => {
+    // `mine` only suppresses the blink (don't nag me about my own send while I've
+    // latched the pill closed); in a quiet, unlatched room my message should reveal
+    // the conversation I just started, same as anyone else's.
+    expect(chatPillReaction(quiet, msg, { mine: true })).toBe("expand");
+  });
 });
 
 // Muted HH:MM stamps on status lines (local time, zero-padded, deterministic).

@@ -3719,7 +3719,11 @@ body.lobby .arena-row.is-hot {
 
 /* §4 Status pane: timestamped, muted system lines only — same log surface as the
    chat, quieter empty state. Deliberately NO ping dot or unread badge, ever. */
-.chat-status-log:empty::before { content: "No table events yet."; }
+.chat-status-log:empty::before {
+  content: "No table events yet.";
+  color: var(--muted);
+  font-style: italic;
+}
 .chat-row.system .chat-time { font-style: normal; }
 
 /* Lobby places #chatPanel inline in the right zone. On mobile (≤520px) the panel is
