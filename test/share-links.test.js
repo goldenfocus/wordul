@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shareTargetUrl } from "/share-links.js";
+import { shareTargetUrl, masksToGiftPattern } from "/share-links.js";
 
 // Regression: tapping the room name inside a challenge view (/c/<id>) produced
 // "https://wordul.com/@papa/null" — the chooser fell back to the room form with a
@@ -29,5 +29,26 @@ describe("shareTargetUrl", () => {
       expect(url).not.toContain("undefined");
       expect(url).toBe("https://wordul.com/");
     }
+  });
+});
+
+describe("masksToGiftPattern", () => {
+  const W = "warm", H = "hot", C = "cold";
+
+  it("encodes masks as h/w/c rows joined by dashes", () => {
+    expect(masksToGiftPattern([[C, H, W, C, C], [H, H, H, H, H]])).toBe("chwcc-hhhhh");
+  });
+
+  it("returns null for non-standard boards (wrong row length, 0 or >6 rows)", () => {
+    expect(masksToGiftPattern([])).toBe(null);
+    expect(masksToGiftPattern([[H, H, H, H]])).toBe(null);
+    expect(masksToGiftPattern(Array(7).fill([H, H, H, H, H]))).toBe(null);
+    expect(masksToGiftPattern(null)).toBe(null);
+    expect(masksToGiftPattern([[H, H, "tepid", H, H]])).toBe(null);
+  });
+
+  it("SPOILER GUARANTEE: output alphabet is exactly {h,w,c,-}", () => {
+    const p = masksToGiftPattern([[C, C, C, C, C], [W, W, W, W, W], [H, H, H, H, H]]);
+    expect(p).toMatch(/^[hwc-]+$/);
   });
 });
