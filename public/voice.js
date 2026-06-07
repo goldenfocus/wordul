@@ -1,27 +1,28 @@
 // Cloned-voice playback with graceful fallback.
-// speakLine(editionId, rawLine, spokenText):
-//   - look up the RAW template line in the edition's manifest; if a clip exists,
+// speakLine(clipBase, rawLine, spokenText):
+//   - look up the RAW template line in the clip set's manifest; if a clip exists,
 //     play it (the cloned voice). Otherwise speak `spokenText` via the browser's
 //     speechSynthesis (covers un-rendered and dynamic {answer} lines).
+// clipBase must end with "/", e.g. "/voice/yang/" or "/voice-clips/my-set/".
 import { lineKey } from "/voice-key.js";
 import { splitTemplate } from "/companion.js";
 
 const MUTE_LS = "wordul.muted";
-const manifests = {}; // editionId -> { key: filename }
+const manifests = {}; // clipBase -> { key: filename }
 let current = null;   // { audio } currently playing
 
 function isMuted() { return localStorage.getItem(MUTE_LS) === "1"; }
 
-async function loadManifest(editionId) {
+async function loadManifest(clipBase) {
   // Only ever cache a SUCCESSFUL fetch. A transient failure (offline blip, or a 404/5xx
   // during a deploy's propagation window) must NOT be memoized — otherwise one bad fetch
   // strands the whole page session on the empty map, and the cloned voice silently falls
   // back to TTS until a full reload (the "voice gone until I hard-refresh" bug). On
   // failure we return a throwaway {} that the next line retries.
-  if (manifests[editionId]) return manifests[editionId];
+  if (manifests[clipBase]) return manifests[clipBase];
   try {
-    const res = await fetch(`/voice/${editionId}/manifest.json`);
-    if (res.ok) return (manifests[editionId] = (await res.json()) || {});
+    const res = await fetch(`${clipBase}manifest.json`);
+    if (res.ok) return (manifests[clipBase] = (await res.json()) || {});
   } catch { /* transient — do not memoize the failure */ }
   return {};
 }
@@ -116,10 +117,12 @@ function sayRobotic(text) {
 // Mode "split" (per world/room via the edition's sound.voice.reveal, see edition.js):
 // the static frame in Yan's cloned voice (pre-rendered clip, else fallback TTS), the
 // answer in the robotic voice. Segments play strictly in order via `ended` events.
-export async function speakTemplated(editionId, rawLine, ctx = {}, mode = "robot") {
+// revealVoice param is accepted for forward-compat but does not yet branch behavior
+// beyond the existing robot/split modes.
+export async function speakTemplated(clipBase, rawLine, ctx = {}, revealVoice = "robot") {
   if (!rawLine || isMuted()) return;
   if (!rawLine.includes("{answer}")) { // not actually templated — fall back to the normal path
-    return speakLine(editionId, rawLine, rawLine);
+    return speakLine(clipBase, rawLine, rawLine);
   }
   // A reveal with no answer would speak a dangling frame ("the word was… [silence]").
   // Defense in depth — callers guard this too, but a missed path must stay silent.
@@ -130,7 +133,7 @@ export async function speakTemplated(editionId, rawLine, ctx = {}, mode = "robot
   // for a full dramatic second ("Congratulations — you found the word [beat] TAFFY").
   const beatMs = ctx.pauseMs > 0 ? ctx.pauseMs : REVEAL_BEAT_MS;
 
-  if (mode !== "split") {
+  if (revealVoice !== "split") {
     stopSpeaking(); // clear any clip/TTS from a prior reaction
     await sayRobotic(prefix);
     if (isMuted()) return;
@@ -141,7 +144,7 @@ export async function speakTemplated(editionId, rawLine, ctx = {}, mode = "robot
     return;
   }
 
-  const map = await loadManifest(editionId);
+  const map = await loadManifest(clipBase);
   if (isMuted()) return;
   // Clear any clip/TTS still playing from a prior reaction so segments don't stack.
   stopSpeaking();
@@ -154,7 +157,7 @@ export async function speakTemplated(editionId, rawLine, ctx = {}, mode = "robot
     if (file) {
       stopSpeaking();
       try {
-        const audio = new Audio(`/voice/${editionId}/${file}`);
+        const audio = new Audio(`${clipBase}${file}`);
         current = { audio };
         audio.addEventListener("ended", resolve, { once: true });
         audio.play().catch(resolve);
@@ -178,13 +181,37 @@ export async function speakTemplated(editionId, rawLine, ctx = {}, mode = "robot
   await playSegment(suffix);
 }
 
-export async function speakLine(editionId, rawLine, spokenText) {
+export async function speakLine(clipBase, rawLine, spokenText) {
   if (!rawLine || isMuted()) return;
-  const map = await loadManifest(editionId);
+  const map = await loadManifest(clipBase);
   if (isMuted()) return; // re-check after the await
   const file = map[lineKey(rawLine)];
-  if (file) playClip(`/voice/${editionId}/${file}`);
+  if (file) playClip(`${clipBase}${file}`);
   else fallbackSpeak(spokenText ?? rawLine);
+}
+
+// Speak arbitrary text via a named system TTS voice (the "ai" source).
+export function speakAI(voiceName, text, rate, pitch) {
+  if (!text || !window.speechSynthesis) return;
+  stopSpeaking();
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    const v = (window.speechSynthesis.getVoices?.() ?? []).find((x) => x.name === voiceName);
+    if (v) u.voice = v;
+    if (typeof rate === "number") u.rate = rate;
+    if (typeof pitch === "number") u.pitch = pitch;
+    window.speechSynthesis.speak(u);
+  } catch { /* ignore */ }
+}
+
+// Dispatch a companionReact `voice` descriptor to the right playback path.
+export function playVoice(voice, raw, text, ctx = {}, revealVoice = "robot") {
+  if (!voice || voice.mode === "silent") return;
+  if (voice.mode === "ai") return speakAI(voice.voiceName, raw.includes("{answer}") ? text : (text ?? raw), voice.rate, voice.pitch);
+  if (voice.mode === "clips") {
+    if (raw.includes("{answer}")) return speakTemplated(voice.clipBase, raw, ctx, revealVoice);
+    return speakLine(voice.clipBase, raw, text);
+  }
 }
 
 export function stopSpeaking() {
