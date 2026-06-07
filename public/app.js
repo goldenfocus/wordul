@@ -4,9 +4,10 @@ import { getSessionToken, openSecureSheet } from "/account.js";
 import { wireCardArt, aiLookupHref, hasOgCard } from "/endcard.js";
 import { generateRoomCode } from "/codes.js";
 import { renderProfile } from "/profile.js";
-import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, VOICE_EDITION, activeMistakeFx, isVoiceEnabled, setVoiceEnabled } from "/edition.js";
+import { applyEdition, applyColorScheme, getActiveEditionId, setDefaultEdition, getGold, setGold, drainGold, companionReact, renderEditionPicker, activeMistakeFx, isVoiceEnabled, setVoiceEnabled } from "/edition.js";
 import { pickGuessEvent } from "/roomConfig.js";
-import { speakLine, speakTemplated } from "/voice.js";
+import { playVoice } from "/voice.js";
+import { loadVoiceConfig, setActiveVoiceId } from "/voice-config.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
 import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence, dailyCashOutReady } from "/gold.js";
 import { createHacklog } from "/hacklog.js";
@@ -255,6 +256,7 @@ function renderHomeIdentity() {
   // hub — it only takes over when you START the WOTD, as a morph (see bloomIntoDaily).
   // This also re-persists "default", so a leftover voice can't leak into a Solo game.
   applyEdition("default");
+  setActiveVoiceId(null); // home is a non-game surface: no active voice source → stays silent
   applyColorScheme(null); // drop any curated day palette so the hub never wears yesterday's vibe
   const u = getUsername();
   const greeting = $("#homeGreeting");
@@ -1486,7 +1488,7 @@ function celebrateCombo(discoveries, mult) {
 
 // Surface the active edition's companion line for an event, reusing the toast.
 function showCompanion(event, ctx = {}) {
-  const { text, raw, tier, speak, revealVoice } = companionReact(event, ctx);
+  const { text, raw, tier, speak, revealVoice, voice } = companionReact(event, ctx);
   if (!text) return;
   // The written toast is opt-out via Settings → Companion comments. Voice is governed
   // separately — the 🗣️ voice opt-in (wordul.voice, off by default: only the word
@@ -1503,8 +1505,9 @@ function showCompanion(event, ctx = {}) {
   if (!speak || event === "wipe" || event === "win") return;
   // Templated lines (the loss reveal): full robot voice by default; a world/room can
   // opt into "split" (Yan's cloned frame + robot answer) via sound.voice.reveal.
-  if (raw.includes("{answer}")) speakTemplated(VOICE_EDITION, raw, ctx, revealVoice);
-  else speakLine(VOICE_EDITION, raw, text);
+  // Per-world dispatch: the descriptor (silent/ai/clips) comes from companionReact. text is
+  // the already-rendered line (ai voice speaks it); raw + ctx feed the clip templating path.
+  playVoice(voice, raw, text, ctx, revealVoice);
 }
 
 // The spoken WIN ANNOUNCEMENT — "Congratulations — you found the word [1s beat] TAFFY".
@@ -1515,16 +1518,16 @@ function showCompanion(event, ctx = {}) {
 // Line bank: yang.js companion.lines.winReveal (per-edition + rung-2 room tweakable).
 function speakWinReveal(answer) {
   if (!answer) return;
-  const { raw, speak, revealVoice } = companionReact("winReveal", { answer });
-  if (speak && raw) speakTemplated(VOICE_EDITION, raw, { answer, pauseMs: 1000 }, revealVoice);
+  const { raw, speak, revealVoice, voice } = companionReact("winReveal", { answer });
+  if (speak && raw) playVoice(voice, raw, raw.includes("{answer}") ? raw.replace("{answer}", answer) : raw, { answer, pauseMs: 1000 }, revealVoice);
 }
 
 // Speech-only twin of showCompanion("loss") for surfaces that own their screen (the
 // daily's curated #dailyUnlock): the spoken "the word was…" reveal without a toast
 // stacking over the curated card.
 function speakLossReveal(answer) {
-  const { raw, speak, revealVoice } = companionReact("loss", { answer });
-  if (speak && raw) speakTemplated(VOICE_EDITION, raw, { answer }, revealVoice);
+  const { raw, speak, revealVoice, voice } = companionReact("loss", { answer });
+  if (speak && raw) playVoice(voice, raw, raw.replace("{answer}", answer), { answer }, revealVoice);
 }
 
 // THE single end-game announcer. Every finish — race, arena, duel, forfeit, daily —
@@ -2167,6 +2170,9 @@ function onServerMessage(msg) {
       ? (msg.room.edition && msg.room.edition !== "default" ? msg.room.edition : getActiveEditionId())
       : msg.room.edition;
     if (wantEd && wantEd !== getActiveEditionId()) { applyEdition(wantEd); applySettings(getSettings()); }
+    // The game bundle (daily/room/challenge) carries its voice id (server defaults to "yang") —
+    // make it the active voice source so this surface speaks in the world's voice.
+    setActiveVoiceId(msg.room.voice ?? null);
     // Vibe Studio: a curated daily ships a colorScheme — re-theme the whole day page from it
     // (a1 → --accent re-lights all the chrome; a1/a2/a3 atoms drive the bespoke palette layers).
     // Non-daily rooms and legacy days pass null → falls back to the active edition's own accent.
@@ -4533,8 +4539,9 @@ function triggerLoseSequence(snap, me) {
   setTimeout(() => {
     game.exploding = false;
     if (game.snapshot) renderBoards(game.snapshot, game.snapshot.players.find((p) => p.username === getUsername()));
-    // Direct speakLine bypasses companionReact's gate, so honor the voice opt-in here too.
-    if (forfeited && isVoiceEnabled()) speakLine(VOICE_EDITION, inspire, inspire); // voice + screen land together
+    // inspire is ad-hoc text (pickForfeit), not a companion bank line — so we pull only the
+    // descriptor + gate from companionReact and speak the raw line through the per-world voice.
+    { const { voice, speak } = companionReact("loss", {}); if (forfeited && speak) playVoice(voice, inspire, inspire); } // voice + screen land together
     openStats({
       snap: game.snapshot ?? snap,
       me,
@@ -5136,6 +5143,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const p = location.pathname;
     if (changed && (p === "/" || p === "/worlds")) route();
   });
+  loadVoiceConfig(); // hydrate the effective voice registry (code defaults + admin overrides); fire-and-forget, never throws
 });
 
 // Paint the avatar glyph from the username's first letter (a generic ◆ before the
@@ -5358,6 +5366,7 @@ function renderCrumbs(r) {
 function showWorlds() {
   document.title = "Worlds — Wordul";
   applyEdition(getActiveEditionId()); // neutral page chrome; cards paint themselves
+  setActiveVoiceId(null); // the theater is a non-game surface → silent
   const app = $("#app");
   app.innerHTML = "";
   document.body.classList.remove("hub-home");
@@ -5441,6 +5450,7 @@ function showWorld(slug) {
   document.title = `${world.name} — Wordul`;
   // Try-on: preview the skin without changing the saved default.
   applyEdition(world.editionId, { persist: false });
+  setActiveVoiceId(getWorld(slug)?.id ?? null); // the world's own voice owns the /w/<slug> preview
 
   const app = $("#app");
   app.innerHTML = "";
