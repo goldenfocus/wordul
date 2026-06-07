@@ -149,6 +149,7 @@ export type ClientMessage =
   | { type: "chat"; text: string }
   | { type: "set_length"; wordLength: number }
   | { type: "set_rows"; rows: number }
+  | { type: "set_capacity"; capacity: number } // host-only (server-enforced): resize the duel table, clamped [max(2, seated), 6]
   | { type: "set_mode"; mode: RoomMode }
   | { type: "set_edition"; edition: string }
   | { type: "rename"; name: string }

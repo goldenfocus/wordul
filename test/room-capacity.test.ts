@@ -173,3 +173,74 @@ describe("spectator role", () => {
     expect(room.state.players.some((p) => p.username === "ivy")).toBe(false);
   });
 });
+
+describe("set_capacity", () => {
+  const setCap = (room: AnyRoom, ws: WebSocket, capacity: number) =>
+    room.webSocketMessage(ws, JSON.stringify({ type: "set_capacity", capacity }));
+
+  it("host-gated: a non-host sender is rejected, state unchanged", async () => {
+    const { room } = makeRoom();
+    const [a, b] = [mockWs(), mockWs()];
+    await join(room, a, "alice"); // host
+    await join(room, b, "bob");
+    await setCap(room, b, 4);
+    expect(room.state.capacity).toBe(2);
+  });
+
+  it("clamps to [2, 6]", async () => {
+    const { room } = makeRoom();
+    const a = mockWs();
+    await join(room, a, "alice");
+    await setCap(room, a, 99);
+    expect(room.state.capacity).toBe(6);
+    await setCap(room, a, 0);
+    expect(room.state.capacity).toBe(2);
+  });
+
+  it("no evictions: lowering clamps to the seated count", async () => {
+    const { room } = makeRoom();
+    const [a, b, c] = [mockWs(), mockWs(), mockWs()];
+    await join(room, a, "alice");
+    await join(room, b, "bob");
+    await setCap(room, a, 3);
+    await join(room, c, "cara"); // seat 3 — queued
+    expect(room.state.players.find((p) => p.username === "cara")!.role).toBe("queued");
+    await setCap(room, a, 2); // 3 seated → floor is 3
+    expect(room.state.capacity).toBe(3);
+    expect(room.state.players.find((p) => p.username === "cara")!.role).toBe("queued");
+  });
+
+  it("raising promotes the longest-waiting spectators into the queue, join order", async () => {
+    const { room } = makeRoom();
+    const [a, b, c, d] = [mockWs(), mockWs(), mockWs(), mockWs()];
+    await join(room, a, "alice");
+    await join(room, b, "bob");
+    await join(room, c, "cara"); // spectator (capacity 2)
+    await join(room, d, "dan");  // spectator
+    await setCap(room, a, 3);    // one seat opens → cara only
+    expect(room.state.players.find((p) => p.username === "cara")!.role).toBe("queued");
+    expect(room.state.players.find((p) => p.username === "dan")!.role).toBe("spectator");
+    expect(room.state.queue).toEqual(["cara"]);
+    await setCap(room, a, 4);    // next seat → dan
+    expect(room.state.players.find((p) => p.username === "dan")!.role).toBe("queued");
+    expect(room.state.queue).toEqual(["cara", "dan"]);
+  });
+
+  it("lobby-only: rejected mid-game", async () => {
+    const { room } = makeRoom();
+    const a = mockWs();
+    await join(room, a, "alice");
+    room.state.phase = "playing";
+    await setCap(room, a, 4);
+    expect(room.state.capacity).toBe(2);
+  });
+
+  it("ignored outside duel rooms (challenge)", async () => {
+    const { room } = makeRoom();
+    const a = mockWs();
+    await join(room, a, "alice");
+    room.state.challengeId = "abc12";
+    await setCap(room, a, 4);
+    expect(room.state.capacity).toBe(2);
+  });
+});

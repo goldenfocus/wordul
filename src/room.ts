@@ -7,7 +7,7 @@ import { planKeystrokes, NOOB_HAND, SHARP_HAND, type KeyStep } from "./rhythm.ts
 import { projectPlayerForClient, dueWotdPersonas } from "./bots.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { everyoneReady, COUNTDOWN_MS } from "./duel.ts";
-import { nextSeatRole, applyKothRotation } from "./rotation.ts";
+import { nextSeatRole, applyKothRotation, MAX_DUELISTS } from "./rotation.ts";
 import { buildGameRecords, summarizeRoomGame, encodeSolveGrid, encodeSolveWords } from "./records.ts";
 import { normalizeSlug } from "./identity.ts";
 import { pointsEarned, goldFromPoints, speedBonusPoints, POINTS, settle, settleParts, DAILY_GOLD_RATE } from "./economy.ts";
@@ -435,6 +435,8 @@ export class Room extends DurableObject<Env> {
         return this.onSetLength(ws, msg.wordLength);
       case "set_rows":
         return this.onSetRows(ws, msg.rows);
+      case "set_capacity":
+        return this.onSetCapacity(ws, msg.capacity);
       case "set_edition":
         return this.onSetEdition(ws, msg.edition);
       case "set_mode":
@@ -827,6 +829,43 @@ export class Room extends DurableObject<Env> {
     this.state.maxGuesses = clamped;
     const who = this.userFor(ws) ?? "someone";
     this.pushSystem(`${who} set rows to ${clamped}`);
+    await this.persistAndBroadcast();
+  }
+
+  // Seats are HOST authority — the first server-enforced setting gate (size/theme stay
+  // shared control by design: they're cosmetic, capacity seats people). Lobby-only, duel
+  // rooms only (seeded rooms keep seed.capacity; daily/challenge have no table). Clamped
+  // to [max(2, seated), 6]: lowering never evicts (the floor is the seated count); raising
+  // promotes the longest-waiting spectators into the rotation in join order (players[]
+  // order IS join order — the roster only ever appends).
+  private async onSetCapacity(ws: WebSocket, capacityRaw: number): Promise<void> {
+    if (!this.isDuelRoom()) return;
+    if (this.state.phase !== "lobby") {
+      this.send(ws, { type: "error", message: "can't change seats mid-game" });
+      return;
+    }
+    const who = this.userFor(ws);
+    if (!who || who !== this.state.hostId) {
+      this.send(ws, { type: "error", message: "only the host can change seats" });
+      return;
+    }
+    if (typeof capacityRaw !== "number" || !Number.isFinite(capacityRaw)) {
+      this.send(ws, { type: "error", message: "unsupported seat count" });
+      return;
+    }
+    const seated = () => this.state.players.filter((p) => p.role !== "spectator").length;
+    const next = Math.max(Math.max(2, seated()), Math.min(6, Math.round(capacityRaw)));
+    if (next === this.state.capacity) return;
+    this.state.capacity = next;
+    // Promote-on-raise: each newly opened seat goes to the longest-waiting spectator.
+    for (const p of this.state.players) {
+      if (p.role !== "spectator") continue;
+      if (seated() >= next) break;
+      const duelists = this.state.players.filter((q) => q.role === "duelist").length;
+      p.role = duelists < MAX_DUELISTS ? "duelist" : "queued";
+      if (p.role === "queued") this.state.queue.push(p.username);
+    }
+    this.pushSystem(`${who} set the table to ${next} seats`);
     await this.persistAndBroadcast();
   }
 
