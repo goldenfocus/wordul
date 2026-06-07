@@ -18,7 +18,8 @@ import { normalizeVoiceOverrides } from "./voice-overrides.ts";
 import { WordStats } from "./wordstats-do.ts";
 import { activeDate } from "./daily-core.ts";
 import type { World } from "./daily-core.ts";
-import { buildDailyMeta, buildDailyJsonLd, dailyPrevNext, dailyDateFromPathname, dailySitemapUrls } from "./daily-seo.ts";
+import { buildDailyMeta, buildDailyJsonLd, buildGiftMeta, dailyPrevNext, dailyDateFromPathname, dailyOgFromPathname, giftPatternFromSearch, dailySitemapUrls } from "./daily-seo.ts";
+import { renderGiftPng } from "./gift-png.ts";
 import { buildWeeklyScienceSummary, type SciencePublicDailySummary } from "./science.ts";
 import { buildDailyPost, buildWeeklyPost, type FeedPost } from "./feed.ts";
 import { BRAIN_NOTES } from "./brain-notes.ts";
@@ -532,6 +533,21 @@ export default {
         .on('[data-meta="description"]', new AttrSetter("content", "How the world played today's Wordul — solve rate, averages, and the day's Studio theme."))
         .on('[data-meta="canonical"]', new AttrSetter("href", url.origin + url.pathname))
         .transform(shell);
+    }
+
+    // Dare-ritual gift image: /daily/og/<date>/<pattern>.png — the sharer's board,
+    // letters hidden. Pattern is colors-only (validated), so the route is public,
+    // spoiler-free, and immutable-cacheable: one render per board per colo.
+    const ogGift = dailyOgFromPathname(url.pathname);
+    if (ogGift && req.method === "GET") {
+      const cached = await caches.default.match(req);
+      if (cached) return cached;
+      const png = await renderGiftPng(ogGift.date, ogGift.pattern);
+      const res = new Response(png.buffer as ArrayBuffer, {
+        headers: { "content-type": "image/png", "cache-control": "public, max-age=31536000, immutable" },
+      });
+      ctx.waitUntil(caches.default.put(req, res.clone()));
+      return res;
     }
 
     // Dated permalink — the eternal artifact. /daily/<YYYY-MM-DD>
@@ -1137,7 +1153,13 @@ async function injectDailyMeta(env: Env, url: URL, date: string): Promise<Respon
     `<a href="${url.origin}/daily/archive">archive</a> · ` +
     `<a href="${url.origin}/daily/${next}">${next} →</a></nav>`;
 
-  return new HTMLRewriter()
+  // A ?g=<pattern> link is a dare: override the teaser meta and point og:image at
+  // the masked-board gift. Registered AFTER the base setters — same selector, later
+  // registration runs later, so the gift values win. Canonical stays the bare
+  // /daily/<date> (meta.canonical), so ?g= never fragments search indexing.
+  const gift = giftPatternFromSearch(url.search);
+  const giftMeta = gift ? buildGiftMeta(gift) : null;
+  let rw = new HTMLRewriter()
     .on('[data-meta="title"]', new TextSetter(meta.title))
     .on('[data-meta="og:title"]', new AttrSetter("content", meta.title))
     .on('[data-meta="description"]', new AttrSetter("content", meta.description))
@@ -1145,8 +1167,14 @@ async function injectDailyMeta(env: Env, url: URL, date: string): Promise<Respon
     .on('[data-meta="canonical"]', new AttrSetter("href", meta.canonical))
     .on('[data-meta="og:url"]', new AttrSetter("content", meta.canonical))
     .on('[data-daily-jsonld]', new RawHtmlSetter(jsonld.replace(/</g, "\\u003c")))
-    .on('[data-daily-prose]', new RawHtmlSetter(prose))
-    .transform(shell);
+    .on('[data-daily-prose]', new RawHtmlSetter(prose));
+  if (gift && giftMeta) {
+    rw = rw
+      .on('[data-meta="og:title"]', new AttrSetter("content", giftMeta.title))
+      .on('[data-meta="og:description"]', new AttrSetter("content", giftMeta.description))
+      .on('[data-meta="og:image"]', new AttrSetter("content", `${url.origin}/daily/og/${date}/${gift}.png`));
+  }
+  return rw.transform(shell);
 }
 
 function escapeHtml(s: string): string {
