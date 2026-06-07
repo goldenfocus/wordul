@@ -2248,22 +2248,28 @@ function onServerMessage(msg) {
         const guessIndex = me.guesses.length - 1;
         const flipDoneMs = me.guesses[guessIndex].word.length * REVEAL_STAGGER_MS + REVEAL_FLIP_HALF_MS;
 
-        // Loss penalty (C2): reusing a known-dead letter (proven wrong by a PRIOR guess,
-        // duplicate-letter safe) drains gold per wasted letter, capped per guess. Repeat
-        // the SAME mistake and it escalates via game.deadLetterReuse. We read-then-increment
-        // the Map NOW (deterministic, once per accepted guess); the drain itself is deferred
-        // so it lands AFTER the win payout finishes — never racing the HUD tween.
+        // Loss penalty (C2) — HARD MODE ONLY: reusing a known-dead letter (proven wrong by
+        // a PRIOR guess, duplicate-letter safe) drains gold per wasted letter, capped per
+        // guess. Repeat the SAME mistake and it escalates via game.deadLetterReuse. We
+        // read-then-increment the Map NOW (deterministic, once per accepted guess); the
+        // drain itself is deferred so it lands AFTER the win payout finishes — never racing
+        // the HUD tween. Off hard mode the reuse still gets companion commentary (below)
+        // but costs nothing and triggers no mistakeFx — the drain+buzz felt punishing for
+        // casual play (user call, Jun 7 2026; per-world config may re-open this later).
+        // Twin contract: the server's pointsEarned gates on the same flag (sent per guess).
         const wasted = wastedDeadLettersInLast(me.guesses);
         let penalty = 0;
         const penaltyLines = [];
-        for (const letter of wasted.letters) {
-          const reuse = game.deadLetterReuse.get(letter) ?? 0;
-          const pen = escalatedPenalty(GOLD.wastedLetterPenalty, reuse);
-          penalty += pen;
-          penaltyLines.push(`${"bad ".repeat(reuse + 1).trim()}  ${letter}  −${pen}`);
-          game.deadLetterReuse.set(letter, reuse + 1);
+        if (getSettings().hardMode) {
+          for (const letter of wasted.letters) {
+            const reuse = game.deadLetterReuse.get(letter) ?? 0;
+            const pen = escalatedPenalty(GOLD.wastedLetterPenalty, reuse);
+            penalty += pen;
+            penaltyLines.push(`${"bad ".repeat(reuse + 1).trim()}  ${letter}  −${pen}`);
+            game.deadLetterReuse.set(letter, reuse + 1);
+          }
+          penalty = Math.min(penalty, GOLD.wastedCapPerGuess);
         }
-        penalty = Math.min(penalty, GOLD.wastedCapPerGuess);
         // §A everywhere (settlement spec): in EVERY mode the payout/drain choreography
         // drives the EPHEMERAL #roundScore — the sacred ◆ wallet moves only at settlement.
         const payoutOpts = { wallet: roundScoreWallet, hud: $("#roundScore"), prefix: SCORE_PREFIX() };
@@ -4030,7 +4036,9 @@ function submitGuess() {
       return;
     }
   }
-  send({ type: "guess", word: game.pending });
+  // `hard` rides along so the server's pointsEarned applies the dead-letter penalty
+  // only for hard-mode players — keeps settlement in lockstep with the client drain.
+  send({ type: "guess", word: game.pending, hard: !!s.hardMode });
 }
 
 function checkHardMode(guess, prevGuesses) {

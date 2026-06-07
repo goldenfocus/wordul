@@ -126,7 +126,9 @@ export function wastedDeadLettersInLast(guesses: GuessRow[]): { letters: string[
 
 // Deterministic total Points earned across a whole guess sequence (no spends).
 // Walks guess-by-guess so wasted-letter penalties escalate exactly like the client.
-export function pointsEarned(guesses: GuessRow[], maxGuesses: number): number {
+// opts.hardMode gates the dead-letter penalty — it bites ONLY in hard mode (twin
+// contract with the client drain in app.js, which gates on the same setting).
+export function pointsEarned(guesses: GuessRow[], maxGuesses: number, opts: { hardMode?: boolean } = {}): number {
   if (!guesses || guesses.length === 0) return 0;
   let pts = 0;
   const reuse = new Map<string, number>();
@@ -140,14 +142,16 @@ export function pointsEarned(guesses: GuessRow[], maxGuesses: number): number {
     // (An all-green row is the solve; POINTS.solve owns that moment.)
     const rowMask = guesses[k].mask || [];
     if (!(rowMask.length > 0 && rowMask.every((c) => c === "hot"))) pts += POINTS.validWord;
-    const wasted = wastedDeadLettersInLast(upto);
-    let pen = 0;
-    for (const letter of wasted.letters) {
-      const c = reuse.get(letter) ?? 0;
-      pen += escalatedPenalty(POINTS.wastedLetterPenalty, c);
-      reuse.set(letter, c + 1);
+    if (opts.hardMode) {
+      const wasted = wastedDeadLettersInLast(upto);
+      let pen = 0;
+      for (const letter of wasted.letters) {
+        const c = reuse.get(letter) ?? 0;
+        pen += escalatedPenalty(POINTS.wastedLetterPenalty, c);
+        reuse.set(letter, c + 1);
+      }
+      pts -= Math.min(pen, POINTS.wastedCapPerGuess);
     }
-    pts -= Math.min(pen, POINTS.wastedCapPerGuess);
   }
   const last = guesses[guesses.length - 1];
   if (last && last.mask.length > 0 && last.mask.every((c) => c === "hot")) {

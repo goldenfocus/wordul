@@ -80,11 +80,17 @@ describe("pointsEarned", () => {
     const guesses = [row("CRANE", "ggggg")];
     expect(pointsEarned(guesses, 6)).toBe(1500 + 500 + 1500);
   });
-  it("subtracts capped, escalating wasted-letter penalties", () => {
+  it("subtracts capped, escalating wasted-letter penalties IN HARD MODE", () => {
     // guess1 all cold (C,R,A,N,E dead), guess2 "CRUMB" reuses C and R (2 dead letters),
     // no discoveries -> 50 + 50 = 100 penalty; +2× valid-word bonus (25 each) → -50.
     const guesses = [row("CRANE", "xxxxx"), row("CRUMB", "xxxxx")];
-    expect(pointsEarned(guesses, 6)).toBe(-100 + 2 * POINTS.validWord);
+    expect(pointsEarned(guesses, 6, { hardMode: true })).toBe(-100 + 2 * POINTS.validWord);
+  });
+  it("dead-letter reuse costs NOTHING outside hard mode (default)", () => {
+    // Same reuse as above — without the hard-mode flag only the valid-word ticks land.
+    const guesses = [row("CRANE", "xxxxx"), row("CRUMB", "xxxxx")];
+    expect(pointsEarned(guesses, 6)).toBe(2 * POINTS.validWord);
+    expect(pointsEarned(guesses, 6, { hardMode: false })).toBe(2 * POINTS.validWord);
   });
 });
 

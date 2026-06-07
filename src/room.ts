@@ -433,7 +433,7 @@ export class Room extends DurableObject<Env> {
       case "ready":
         return this.onReady(ws, msg.ready);
       case "guess":
-        return this.onGuess(ws, msg.word);
+        return this.onGuess(ws, msg.word, msg.hard);
       case "typing":
         return this.onTyping(ws, msg.len);
       case "rematch_propose":
@@ -1147,7 +1147,7 @@ export class Room extends DurableObject<Env> {
     if (res.throne) this.pushSystem(`👑 ${res.throne.username} holds the throne — ${res.throne.streak} in a row`);
   }
 
-  private async onGuess(ws: WebSocket, wordRaw: string): Promise<void> {
+  private async onGuess(ws: WebSocket, wordRaw: string, hard?: boolean): Promise<void> {
     if (this.state.phase !== "playing" || !this.state.word) {
       this.send(ws, { type: "error", message: "game not in progress" });
       return;
@@ -1171,6 +1171,10 @@ export class Room extends DurableObject<Env> {
       return;
     }
 
+    // Hard mode is a client-side setting (localStorage); the flag rides each guess so
+    // pointsEarned can gate the dead-letter penalty. Self-reported and only ever a
+    // handicap (penalties subtract), so there's no cheat in misreporting it.
+    player.hardMode = !!hard;
     await this.applyGuess(player, word);
     await this.persistAndBroadcast();
   }
@@ -1254,7 +1258,7 @@ export class Room extends DurableObject<Env> {
     player.guessAts.push(off);
     // Spend accounting (spec §A): in WOTD power-ups cost real gold only, NOT round score —
     // so the daily round score EXCLUDES pointsSpent. Race rooms still net out the spend.
-    const earned = pointsEarned(player.guesses, this.state.maxGuesses);
+    const earned = pointsEarned(player.guesses, this.state.maxGuesses, { hardMode: player.hardMode });
     player.points = this.state.isDaily ? earned : earned - player.pointsSpent;
     const allGreen = mask.every((c) => c === "hot");
     if (allGreen) {

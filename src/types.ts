@@ -65,6 +65,7 @@ export type PlayerState = {
   goldAwarded?: number;    // daily: gold actually minted on a confirmed (res.ok) ledger write
   receipt?: SettlementReceipt; // race + daily: settlement receipt, set ONLY after a confirmed (res.ok) mint
   resigned?: boolean;      // gave up (vs ran out of guesses) — both land status "lost"
+  hardMode?: boolean;      // client-reported hard mode (rides each guess msg) — gates the dead-letter penalty in scoring; bots never set it
   firstGuessAt?: number;   // daily: epoch ms of this player's first guess (start of solve clock)
   finishedAt?: number;     // daily: epoch ms this player finished (won/lost/resigned) — solve clock end
   nextGuessAt?: number;    // bot-only: epoch ms this bot is next due to guess (per-bot heartbeat, Inc.2)
@@ -141,7 +142,7 @@ export type ClientMessage =
   | { type: "hello"; username: string; wordLength?: number; mode?: RoomMode; edition?: string; lane?: LaneName; scienceOptOut?: boolean; public?: boolean; sessionToken?: string }
   | { type: "start" }
   | { type: "ready"; ready: boolean } // duel: toggle ready / "Challenge 👑"; gates the countdown
-  | { type: "guess"; word: string }
+  | { type: "guess"; word: string; hard?: boolean } // hard: client hard-mode flag — gates the dead-letter penalty in pointsEarned
   | { type: "typing"; len: number } // ephemeral: how many letters are in my current row (no letters sent)
   | { type: "rematch_propose" }
   | { type: "rematch_accept" }
