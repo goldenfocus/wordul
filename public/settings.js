@@ -231,6 +231,13 @@ export function openHub(opts = {}) {
     addItem("🏆", "Scoreboard", opts.onScoreboard);
   }
 
+  // Admin — studio tools, shown only when the super code is stored locally (set by any
+  // /studio-* page's token field). A normal player never has it. The server still gates
+  // every write on the token, so this is just a convenience shortcut, not the auth boundary.
+  if (localStorage.getItem("wordul.admin.token")) {
+    addItem("🎙️", "Studio · Voice", () => { location.href = "/studio-voice.html"; });
+  }
+
   hubEl = menu;
   document.body.appendChild(menu);
   positionHub(menu, anchor);
