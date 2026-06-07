@@ -1872,7 +1872,9 @@ export class Room extends DurableObject<Env> {
       personaIcon: "👤",         // humans have no emoji persona; neutral marker
       edition: this.state.edition,
       wordLength: this.state.wordLength,
-      seats: "1/2",
+      // Real occupancy: seated (non-spectator) over the host-set capacity. This is what
+      // makes the rail's isHot "last seat" glow honest for tables bigger than a 1v1.
+      seats: `${this.state.players.filter((p) => p.role !== "spectator").length}/${this.state.capacity}`,
       mintedAt: Date.now(),
       status: "registered" as const,
     };

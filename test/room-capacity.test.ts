@@ -279,3 +279,40 @@ describe("set_capacity", () => {
     expect(room.state.queue).toEqual([]); // seated, not queued
   });
 });
+
+describe("publishArena seats label", () => {
+  it("publishes seated/capacity instead of the hardcoded 1/2", async () => {
+    const bodies: string[] = [];
+    const sockets: WebSocket[] = [];
+    const ctx = {
+      storage: { get: async () => undefined, put: async () => {}, setAlarm: () => {}, deleteAlarm: () => {} },
+      blockConcurrencyWhile: (fn: () => Promise<void>) => fn(),
+      getWebSockets: () => sockets,
+      acceptWebSocket: (ws: WebSocket) => sockets.push(ws),
+      waitUntil: (p: Promise<unknown>) => { void p; },
+    };
+    const stub = { idFromName: (n: string) => n, get: () => ({ fetch: okFetch }) };
+    const arena = {
+      idFromName: (n: string) => n,
+      get: () => ({
+        fetch: async (req: Request) => { bodies.push(await req.text()); return { ok: true } as Response; },
+      }),
+    };
+    const env = {
+      DIRECTORY: { put: async () => {}, get: async () => null },
+      USER: stub, WORDSTATS: stub, SCIENCE: stub, ARENA: arena, CHALLENGE: stub, DAILY: stub,
+    };
+    const room = new Room(ctx as never, env as never) as unknown as AnyRoom;
+    room.state.path = "alice/pub";
+    room.state.owner = "alice";
+    room.state.slug = "pub";
+    room.state.name = "pub";
+    await join(room, mockWs(), "alice");
+    room.state.publicArena = true;
+    room.state.capacity = 4;
+    (room as unknown as { publishArena: () => void }).publishArena();
+    await flush();
+    expect(bodies.length).toBeGreaterThan(0);
+    expect(JSON.parse(bodies[bodies.length - 1]).seats).toBe("1/4");
+  });
+});
