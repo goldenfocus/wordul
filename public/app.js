@@ -9,6 +9,7 @@ import { pickGuessEvent } from "/roomConfig.js";
 import { playVoice } from "/voice.js";
 import { loadVoiceConfig, setActiveVoiceId } from "/voice-config.js";
 import { newGreensInLast, orderedDiscoveriesInLast, wastedDeadLettersInLast } from "/celebrate.js";
+import { typingHints } from "/hints.js";
 import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGoldHud, playPayoutSequence, dailyCashOutReady } from "/gold.js";
 import { createHacklog } from "/hacklog.js";
 import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, surfaceGiveUp, checkBankruptcy } from "/powerups.js";
@@ -3723,6 +3724,11 @@ function renderBoards(snap, me) {
       const guess = p.guesses[r];
       const isCurrentRow = !guess && r === p.guesses.length;
       const isFresh = r === freshRowIdx && !replayMyBoard;
+      // Easy mode: the typing row wears a live "knowledge lens" — classes derived
+      // from what prior guesses PROVED (hints.js). Same facts the keyboard colors
+      // show, surfaced where the eyes are. Result fills stay settled-rows-only.
+      const rowHints = isMe && isCurrentRow && activeDifficulty() === "easy"
+        ? typingHints(pending, p.guesses) : null;
       for (let c = 0; c < cols; c++) {
         const tile = document.createElement("div");
         tile.className = "tile";
@@ -3739,6 +3745,7 @@ function renderBoards(snap, me) {
           }
         } else if (isMe && isCurrentRow && pending[c]) {
           tile.classList.add("filled", "pop");
+          if (rowHints?.[c]) tile.classList.add(`hint-${rowHints[c]}`);
           tile.textContent = pending[c];
         } else if (
           isMe && isCurrentRow && c === pending.length &&
@@ -3871,6 +3878,8 @@ function syncMyInputRow(board, snap, me) {
   const inputRow = board.querySelectorAll(".grid-row")[me.guesses.length];
   if (!inputRow) return;
   const pending = game.pending;
+  // Easy-mode knowledge lens — must match the full-render path (renderBoards).
+  const hints = activeDifficulty() === "easy" ? typingHints(pending, me.guesses) : null;
   inputRow.querySelectorAll(".tile").forEach((tile, c) => {
     const want = pending[c] ?? "";
     const isCursor = c === pending.length;
@@ -3880,7 +3889,11 @@ function syncMyInputRow(board, snap, me) {
     }
     tile.className = "tile";
     tile.textContent = "";
-    if (want) { tile.classList.add("filled", "pop"); tile.textContent = want; }
+    if (want) {
+      tile.classList.add("filled", "pop");
+      if (hints?.[c]) tile.classList.add(`hint-${hints[c]}`, "hint-fresh");
+      tile.textContent = want;
+    }
     else if (isCursor) tile.classList.add("cursor");
   });
 }

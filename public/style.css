@@ -934,6 +934,35 @@ body.reduced-motion .tile.ghost-cursor {
 .tile.warm { background: var(--warm); border-color: var(--warm); color: white; }
 .tile.cold { background: var(--cold); border-color: var(--cold); color: white; }
 
+/* Easy-mode typing hints (spec 2026-06-07): knowledge wears SHAPES, results wear FILLS.
+   Hues reuse the result tokens (so body.cb colorblind overrides apply for free) but a
+   pending tile never gets a solid fill — the flip reveal keeps its drama.
+   hint-dead      letter proven absent  → dimmed + red, shake-blink on keystroke entry only
+   hint-confirmed letter proven green HERE → green ring
+   hint-present   letter proven in-word → yellow underline dot
+   The blink rides hint-fresh (added only by syncMyInputRow, the keystroke path) so full
+   board re-renders (renderBoards) get the static dim+red without replaying the animation. */
+.tile.hint-dead {
+  color: color-mix(in srgb, var(--error) 70%, var(--fg));
+  opacity: 0.55;
+}
+.tile.hint-dead.hint-fresh { /* blink only on entry (keystroke path), not on board re-renders */
+  animation: hint-dead-blink 0.45s ease-in-out;
+}
+@keyframes hint-dead-blink {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); border-color: var(--error); }
+  50% { transform: translateX(3px); border-color: var(--error); }
+  75% { transform: translateX(-2px); border-color: var(--error); }
+}
+.tile.hint-confirmed {
+  border-color: var(--hot);
+  box-shadow: inset 0 0 0 2px var(--hot);
+}
+.tile.hint-present {
+  box-shadow: inset 0 -4px 0 0 var(--warm);
+}
+
 /* Reveal: tile starts in "filled" look (no color yet), flips edge-on, and we swap
    to the colored class at the 50% mark — this is what gives the board its signature
    "the answer is REVEALED through the flip" feel. The stagger is set via JS by
@@ -1841,6 +1870,7 @@ body.cb {
 }
 
 /* Reduced Motion — disable the expensive animations. */
+body.reduced-motion .tile.hint-dead,
 body.reduced-motion .tile.reveal,
 body.reduced-motion .tile.explode,
 body.reduced-motion .tile.pop,
@@ -2219,6 +2249,12 @@ html[data-edition="tactile"] body {
 html[data-edition="tactile"] .tile { border-radius: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 4px 10px rgba(0,0,0,.25); }
 html[data-edition="tactile"] .tile.hot,
 html[data-edition="tactile"] .tile.warm { border-color: transparent; }
+html[data-edition="tactile"] .tile.hint-present { /* keep the easy-hint underline under the tactile shadow */
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 4px 10px rgba(0,0,0,.25), inset 0 -4px 0 0 var(--warm);
+}
+html[data-edition="tactile"] .tile.hint-confirmed { /* keep the easy-hint ring under the tactile shadow */
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 4px 10px rgba(0,0,0,.25), inset 0 0 0 2px var(--hot);
+}
 /* Glassy panels for the chrome, without touching layout. */
 html[data-edition="tactile"] .lobby-bar,
 html[data-edition="tactile"] .scoreboard {
@@ -2243,6 +2279,12 @@ html[data-edition="robot"] body {
 html[data-edition="robot"] .tile {
   border-radius: 12px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 2px 5px rgba(95,77,52,.18);
+}
+html[data-edition="robot"] .tile.hint-present { /* keep the easy-hint underline under the robot shadow */
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 2px 5px rgba(95,77,52,.18), inset 0 -4px 0 0 var(--warm);
+}
+html[data-edition="robot"] .tile.hint-confirmed { /* keep the easy-hint ring under the robot shadow */
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 2px 5px rgba(95,77,52,.18), inset 0 0 0 2px var(--hot);
 }
 /* Light bg → white tile letters only survive on the saturated green.
    Yellow and absent tiles need dark ink to stay legible. */
