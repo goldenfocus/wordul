@@ -33,4 +33,12 @@ describe("buildReplaySteps", () => {
     expect(buildReplaySteps([], true)).toEqual({ steps: [], total: 0 });
     expect(buildReplaySteps(undefined, true)).toEqual({ steps: [], total: 0 });
   });
+
+  it("a custom timing override drives the cadence (big-board replay)", () => {
+    const slow = { TYPE_MS: 100, FLIP_STAGGER_MS: 110, FLIP_MS: 400, ROW_BEAT_MS: 280 };
+    const { steps, total } = buildReplaySteps(["xyg"], true, slow);
+    expect(steps.filter((s) => s.kind === "type").map((s) => s.t)).toEqual([0, 100, 200]);
+    expect(steps.filter((s) => s.kind === "flip").map((s) => s.t)).toEqual([300, 410, 520]);
+    expect(total).toBe(300 + 2 * 110 + 400); // last flip start + flip duration
+  });
 });

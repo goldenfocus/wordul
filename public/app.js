@@ -35,6 +35,7 @@ import { pickInspire, pickForfeit } from "/inspire.js";
 import { renderSettlement, dailyReceiptLines } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
+import { autoPlayBoardOnce, boardReplayActive } from "/board-replay.js";
 import { seatModel, ghostSeatModel } from "/lobby-view.js";
 import { encodeLocalSolve, needsDailyRecovery, recoverDailyArtifacts } from "/daily-recover.js";
 
@@ -3510,9 +3511,9 @@ function renderBoards(snap, me) {
   // the waiting lobby calm; everyone's full board reappears the moment the game starts.
   const lobbyOrdered = snap.phase === "lobby" && me ? [me] : ordered;
   // While my board's tiles are mid-explosion OR mid-payout (glow/floater anchored to
-  // them), preserve the existing DOM so the animations don't get nuked by a snapshot
-  // from another player's guess. Update everyone else's boards as normal.
-  const preserveMine = game.exploding || game.payingOut;
+  // them) OR mid-replay (finished daily playing itself back), preserve the existing
+  // DOM so the animations don't get nuked by a snapshot. Everyone else updates as normal.
+  const preserveMine = game.exploding || game.payingOut || boardReplayActive();
   if (preserveMine) {
     for (const board of root.querySelectorAll(".player-board")) {
       if (board.dataset.player !== getUsername()) board.remove();
@@ -3575,6 +3576,13 @@ function renderBoards(snap, me) {
     const pending = (isMe && snap.phase === "playing" && p.status === "playing") ? game.pending : "";
     const prevCount = game.lastGuessCounts.get(p.username) ?? 0;
     const freshRowIdx = p.guesses.length > prevCount ? p.guesses.length - 1 : -1;
+    // Cold render of YOUR already-finished daily (page load / return visit): don't
+    // leave the solved board sitting flat — board-replay re-types and re-flips it,
+    // once per page load (the same self-demo the home recap stamp does). The rows
+    // still paint flat below (the replay veils them itself); only the lone last-row
+    // flip is suppressed so its scheduleReveal timers don't fight the replay's veil.
+    const replayMyBoard = isMe && game.isDaily && p.status !== "playing" &&
+      prevCount === 0 && p.guesses.length > 0 && !getSettings().reducedMotion;
 
     for (let r = 0; r < rowsToDraw; r++) {
       const row = document.createElement("div");
@@ -3582,7 +3590,7 @@ function renderBoards(snap, me) {
       row.style.setProperty("--cols", String(cols));
       const guess = p.guesses[r];
       const isCurrentRow = !guess && r === p.guesses.length;
-      const isFresh = r === freshRowIdx;
+      const isFresh = r === freshRowIdx && !replayMyBoard;
       for (let c = 0; c < cols; c++) {
         const tile = document.createElement("div");
         tile.className = "tile";
@@ -3626,6 +3634,7 @@ function renderBoards(snap, me) {
     }
     board.appendChild(grid);
     root.appendChild(board);
+    if (replayMyBoard) autoPlayBoardOnce(grid, p.guesses);
     game.lastGuessCounts.set(p.username, p.guesses.length);
   }
 }
