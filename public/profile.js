@@ -12,8 +12,9 @@
 // the viewer has played, then renders letterless — UNLESS the viewer FINISHED today, in
 // which case their finisher token (server-validated) unlocks this profile's letter rows
 // via the daily leaderboard API. See profile-core.js for the rules.
-import { recentGameView, formatLedgerRow } from "/profile-core.js";
-import { renderStamp } from "/daily-card.js";
+import { recentGameView, formatLedgerRow, ledgerBalances } from "/profile-core.js";
+import { renderStamp, boardRows, goldValue } from "/daily-card.js";
+import { GLYPH } from "/hub-glyphs.js";
 import { t } from "/i18n.js";
 
 // Friendly i18n label for a gold-history part leg ("score"/"daily"/"speed"); unknown legs
@@ -85,41 +86,33 @@ export async function renderProfile(username, mountEl) {
   const todayWords = playedToday && hasLiveDaily ? await fetchTodayWords(username, today) : null;
 
   const recent = (p.games || [])
-    .map((g) => renderRecentGame(recentGameView(g, { today, playedToday, todayWords })))
+    .map((g) => renderGameCard(recentGameView(g, { today, playedToday, todayWords })))
     .join("");
 
+  // The ledger's running-balance column: walked backwards from the current gold total.
+  // No total on the payload → no column (rows render without balances, never NaN).
+  const totalGold = Number(p.balances?.gold);
+  const balances = Number.isFinite(totalGold) ? ledgerBalances(p.goldHistory || [], totalGold) : [];
   const goldRows = (p.goldHistory || [])
-    .map((tx) => renderGoldRow(formatLedgerRow(tx)))
+    .map((tx, i) => renderGoldRow(formatLedgerRow(tx), balances[i]))
     .join("");
 
   mountEl.innerHTML = `
-    <h1 class="profile-name">@${escapeHtml(username)}${p.claimed ? ' <span class="claimed-badge" title="Secured account">🔒</span>' : ""}${p.verified ? ' <span class="verified-badge" title="Verified">✔</span>' : ""}</h1>
+    <h1 class="profile-name">@${escapeHtml(username)}${p.claimed ? ` <span class="claimed-badge" title="Secured account">${GLYPH.lock}</span>` : ""}${p.verified ? ` <span class="verified-badge" title="Verified">${GLYPH.check}</span>` : ""}</h1>
     <div class="profile-stats">
       <div class="pstat"><span class="pstat-num">${games}</span><span class="pstat-label">Games</span></div>
       <div class="pstat"><span class="pstat-num">${wins}</span><span class="pstat-label">Wins</span></div>
       <div class="pstat"><span class="pstat-num">${winRate}%</span><span class="pstat-label">Win rate</span></div>
-      <div class="pstat"><span class="pstat-num">🔥 ${curStreak}</span><span class="pstat-label">Streak (best ${bestStreak})</span></div>
+      <div class="pstat"><span class="pstat-num">${GLYPH.flame} ${curStreak}</span><span class="pstat-label">Streak (best ${bestStreak})</span></div>
     </div>
     <h2 class="profile-h2">Rooms</h2>
     <ul class="profile-list">${rooms || '<li class="muted">No rooms yet</li>'}</ul>
     <h2 class="profile-h2">Recent games</h2>
     <ul class="profile-list profile-games">${recent || '<li class="muted">No games yet</li>'}</ul>
     <section id="gold-history">
-      <h2 class="profile-h2">${escapeHtml(t("gold.history.title"))}</h2>
+      <h2 class="profile-h2 ledger-h2"><span>${escapeHtml(t("gold.history.title"))}</span>${Number.isFinite(totalGold) ? `<span class="ledger-balance">${goldValue(totalGold)}</span>` : ""}</h2>
       <ul class="profile-list gold-history">${goldRows || `<li class="muted">${escapeHtml(t("gold.history.empty"))}</li>`}</ul>
     </section>`;
-
-  // Tap a daily row to expand that player's letterless board (or the "play first" prompt).
-  mountEl.querySelectorAll(".profile-game-row").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const board = btn.nextElementSibling;
-      if (!board) return;
-      const opening = board.hidden;
-      board.hidden = !opening;
-      btn.setAttribute("aria-expanded", String(opening));
-      btn.classList.toggle("is-open", opening);
-    });
-  });
 
   // Honor a #gold-history deep-link (e.g. from the tappable ◆ HUD): the section is rendered
   // async after fetch, so the browser's native anchor jump has already missed — scroll now.
@@ -140,17 +133,20 @@ export async function renderProfile(username, mountEl) {
   });
 }
 
-// One "Gold history" row from a formatLedgerRow() view-model. A row WITH valid parts is a
-// tappable button (▸) that expands into component legs; a flat earning is a static line.
-//   date · 🎁/🏁 label · +N   [▸]
+// One "Gold ledger" row from a formatLedgerRow() view-model + its running balance.
+// A row WITH valid parts is a tappable button (›) that expands into component legs;
+// a flat earning is a static line. Chain-explorer columns, faded glyphs, never emoji:
+//   date · ⛀ label · +N · balance   [›]
 //     └ score +28 · daily +100 · speed +5
-function renderGoldRow(v) {
+function renderGoldRow(v, balance) {
+  const glyph = v.kind === "cashout" ? GLYPH.flag : GLYPH.coin;
   const head =
     `<span class="gold-date">${escapeHtml(v.date)}</span>` +
-    `<span class="gold-label">${v.icon} ${escapeHtml(v.label)}</span>` +
-    `<span class="gold-amount">${escapeHtml(v.amount)}</span>`;
+    `<span class="gold-label">${glyph}<span class="gold-label-text">${escapeHtml(v.label)}</span></span>` +
+    `<span class="gold-amount">${escapeHtml(v.amount)}</span>` +
+    `<span class="gold-balance">${Number.isFinite(balance) ? Number(balance).toLocaleString() : ""}</span>`;
   if (!v.parts.length) {
-    return `<li class="gold-row"><span class="gold-row-static">${head}</span></li>`;
+    return `<li class="gold-row"><span class="gold-row-static">${head}<span class="gold-chev"></span></span></li>`;
   }
   const legs = v.parts
     .map((p) => `${escapeHtml(partLabel(p.label))} +${Number(p.delta) || 0}`)
@@ -164,31 +160,44 @@ function renderGoldRow(v) {
     </li>`;
 }
 
-// One "Recent games" row, built from a recentGameView() view-model.
-//   • locked (today's daily, not yet played) → tap reveals a "play today first" prompt
-//   • has grid → tap reveals that player's board — with LETTERS when words shipped, else
-//     letterless (today's daily ships no letters by design; past games + rooms do)
-//   • legacy room with no stored board → a link into the room
-//   • legacy daily with no board → static line, nothing to expand
-function renderRecentGame(v) {
-  const head = `${v.icon} ${escapeHtml(v.label)} · ${escapeHtml(v.result)}`;
-  let body = "";
+// A glyph-less board shell (all empty cells) — the constant frame behind a locked or
+// legacy (no stored board) game card. aria-hidden: the caption carries the meaning.
+function emptyBoard(rows, cols) {
+  const row = `<div class="stamp-row">${`<span class="stamp-cell is-empty"></span>`.repeat(cols)}</div>`;
+  return `<div class="daily-stamp" aria-hidden="true">${row.repeat(rows)}</div>`;
+}
+
+// One "Recent games" card, built from a recentGameView() view-model. Every card is the
+// SAME constant frame (boardRows pads a solve-in-2 and a miss-in-6 alike) so the list
+// reads as a uniform grid of little board avatars. Tapping a stamp replays it in place —
+// stamp-replay.js's delegated listener picks up any rendered .daily-stamp for free.
+//   • locked (today's daily, viewer hasn't played) → empty shell + faded lock, links home
+//   • has grid → the stamp, with LETTERS when words legitimately shipped
+//   • legacy game with no stored board → empty shell; rooms keep their link caption
+function renderGameCard(v) {
+  const rows = boardRows(v.wordLength);
+  const cols = Number(v.wordLength) || 5;
+  const mark = v.won
+    ? `<span class="pgame-in">in ${Number(v.guesses) || 0}</span>`
+    : `<span class="pgame-mark" role="img" aria-label="missed" title="missed">${GLYPH.cross}</span>`;
+  const name = v.roomHref
+    ? `<a class="pgame-name" href="${escapeHtml(v.roomHref)}">${escapeHtml(v.shortLabel)}</a>`
+    : `<span class="pgame-name">${escapeHtml(v.shortLabel)}</span>`;
+  const cap = `<div class="pgame-cap">${name}${mark}</div>`;
   if (v.locked) {
-    body = `<a class="link" href="/">Play today's Wordul</a> to compare boards`;
-  } else if (Array.isArray(v.grid) && v.grid.length) {
-    body = renderStamp(v.grid, Array.isArray(v.words) ? v.words : undefined);
-  } else if (v.roomHref) {
-    return `<li class="profile-game"><a class="link profile-game-link" href="${escapeHtml(v.roomHref)}">${head}</a></li>`;
-  } else {
-    return `<li class="profile-game"><span class="profile-game-static">${head}</span></li>`;
+    // The result stays visible (it was never a spoiler) — only the board hides behind
+    // the lock until the viewer has played today. Tapping the veil goes home to play.
+    return `<li class="pgame is-locked">
+        <a class="pgame-veil" href="/" title="Play today's Wordul to unlock" aria-label="Play today's Wordul to unlock this board">
+          ${emptyBoard(rows, cols)}
+          <span class="pgame-lock">${GLYPH.lock}</span>
+        </a>${cap}
+      </li>`;
   }
-  return `<li class="profile-game">
-      <button class="profile-game-row" type="button" aria-expanded="false">
-        <span class="profile-game-label">${head}</span>
-        <span class="profile-game-chev" aria-hidden="true">›</span>
-      </button>
-      <div class="profile-game-board" hidden>${body}</div>
-    </li>`;
+  const board = Array.isArray(v.grid) && v.grid.length
+    ? renderStamp(v.grid, Array.isArray(v.words) ? v.words : undefined, rows)
+    : emptyBoard(rows, cols);
+  return `<li class="pgame">${board}${cap}</li>`;
 }
 
 function escapeHtml(s) {

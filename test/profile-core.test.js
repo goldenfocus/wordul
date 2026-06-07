@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { recentGameView, prettyRoomLabel, humanizeReason, formatLedgerRow } from "../public/profile-core.js";
+import { recentGameView, prettyRoomLabel, humanizeReason, formatLedgerRow, ledgerBalances } from "../public/profile-core.js";
 
 const daily = (date, over = {}) => ({
   roomPath: `daily/${date}`, finishedAt: 1, wordLength: 5, result: "won", guesses: 3,
@@ -23,9 +23,24 @@ describe("recentGameView", () => {
     const v = recentGameView(daily("2026-06-01"), { today, playedToday: true });
     expect(v.kind).toBe("daily");
     expect(v.label).toBe("Daily · 2026-06-01");
-    expect(v.icon).toBe("✅");
+    expect(v.won).toBe(true);
     expect(v.result).toBe("solved in 3");
+    expect(v.guesses).toBe(3);
     expect(v.roomHref).toBeNull();           // never navigate to /@daily/<date> (that shows YOUR board)
+  });
+
+  it("ships a card-sized shortLabel: 'Daily' for today, a short date for past dailies", () => {
+    expect(recentGameView(daily(today), { today, playedToday: true }).shortLabel).toBe("Daily");
+    const past = recentGameView(daily("2026-06-01"), { today, playedToday: true }).shortLabel;
+    expect(past).toBeTruthy();
+    expect(past).not.toContain("2026-06-01"); // never the raw ISO date on a tiny caption
+  });
+
+  it("carries wordLength so the card can pad every stamp to one constant frame", () => {
+    expect(recentGameView(daily("2026-06-01"), { today, playedToday: true }).wordLength).toBe(5);
+    // Legacy record without wordLength: infer from the grid, default 5.
+    const legacy = recentGameView(daily("2026-06-01", { wordLength: undefined, solveGrid: ["ggggggg"] }), { today, playedToday: true });
+    expect(legacy.wordLength).toBe(7);
   });
 
   it("shows a past daily's FULL letter-card (that day is over — letters are fair game)", () => {
@@ -78,6 +93,8 @@ describe("recentGameView", () => {
     const v = recentGameView(room("crane/snappy-moose", { solveGrid: ["xyxxx"], words: ["AUDIO"] }), { today, playedToday: true });
     expect(v.kind).toBe("room");
     expect(v.label).toBe("Snappy Moose");
+    expect(v.shortLabel).toBe("Snappy Moose");
+    expect(v.won).toBe(false);
     expect(v.result).toBe("missed");
     expect(v.grid).toEqual(["xyxxx"]);
     expect(v.words).toEqual(["AUDIO"]);
@@ -109,13 +126,13 @@ describe("humanizeReason", () => {
 describe("formatLedgerRow", () => {
   const now = Date.UTC(2026, 5, 5, 12, 0, 0); // 2026-06-05 noon UTC
 
-  it("formats a daily earning with valid parts (icon, label, +amount, parts)", () => {
+  it("formats a daily earning with valid parts (kind, label, +amount, parts)", () => {
     const tx = {
       token: "gold", delta: 133, reason: "mint:daily", ts: now,
       parts: [{ label: "score", delta: 28 }, { label: "daily", delta: 100 }, { label: "speed", delta: 5 }],
     };
     const row = formatLedgerRow(tx, now);
-    expect(row.icon).toBe("🎁");
+    expect(row.kind).toBe("daily");
     expect(row.label).toBe("Daily solve");
     expect(row.amount).toBe("+133");
     expect(row.parts).toEqual([
@@ -125,10 +142,10 @@ describe("formatLedgerRow", () => {
     ]);
   });
 
-  it("formats a race win flat (🏁, no parts)", () => {
+  it("formats a race win flat (cashout kind, no parts)", () => {
     const tx = { token: "gold", delta: 40, reason: "mint:cashout", ts: now };
     const row = formatLedgerRow(tx, now);
-    expect(row.icon).toBe("🏁");
+    expect(row.kind).toBe("cashout");
     expect(row.label).toBe("Race win");
     expect(row.amount).toBe("+40");
     expect(row.parts).toEqual([]);
@@ -158,6 +175,21 @@ describe("formatLedgerRow", () => {
     expect(formatLedgerRow(today, now).date).toBe("Today");
     expect(formatLedgerRow(older, now).date).not.toBe("Today");
     expect(formatLedgerRow(older, now).date).toBeTruthy();
+  });
+});
+
+describe("ledgerBalances", () => {
+  it("walks the running balance backwards from the current total (newest-first history)", () => {
+    const history = [{ delta: 320 }, { delta: 19 }, { delta: 127 }]; // newest → oldest
+    // total 534: after the +320 row the holder sits at 534; before it, 214; before +19, 195.
+    expect(ledgerBalances(history, 534)).toEqual([534, 214, 195]);
+  });
+  it("handles spends (negative deltas) and junk rows", () => {
+    expect(ledgerBalances([{ delta: -50 }, { delta: 100 }], 50)).toEqual([50, 100]);
+    expect(ledgerBalances([{}, { delta: 10 }], 10)).toEqual([10, 10]);
+  });
+  it("returns [] for missing history", () => {
+    expect(ledgerBalances(null, 100)).toEqual([]);
   });
 });
 

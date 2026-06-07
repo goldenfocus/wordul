@@ -2071,38 +2071,64 @@ body.reduced-motion .gold-floater { display: none !important; }
 .profile-list li { font-size: 15px; }
 .profile-loading { padding: 20px 0; }
 
-/* Recent games — daily rows expand to that player's letterless board; rooms stay links. */
-.profile-games .profile-game { font-size: 15px; }
-.profile-game-link, .profile-game-static { display: inline-block; }
-.profile-game-static { color: var(--fg); }
-.profile-game-row {
-  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
-  width: 100%; text-align: left; padding: .35rem .5rem; margin: 0;
-  background: var(--bg-card); border: none; border-radius: .5rem;
-  color: var(--fg); font: inherit; cursor: pointer;
-}
-.profile-game-row:hover { background: color-mix(in oklab, var(--accent) 10%, var(--bg-card)); }
-.profile-game-chev { color: var(--muted); transition: transform .15s ease; }
-.profile-game-row.is-open .profile-game-chev { transform: rotate(90deg); }
-.profile-game-board { padding: .5rem 0 .25rem; display: flex; justify-content: center; }
-.profile-game-board .muted, .profile-game-board p { margin: 0; }
+/* Faded badge glyphs next to the @name (lock = secured, check = verified) — quiet, never emoji. */
+.profile-name .claimed-badge, .profile-name .verified-badge { display: inline-grid; place-items: center; vertical-align: -2px; color: var(--muted); opacity: .8; }
+.profile-name .glyph { width: 17px; height: 17px; }
+/* Streak flame — a faded ember next to the number, warm but not loud. */
+.pstat-num { display: flex; align-items: center; justify-content: center; gap: .25em; }
+.pstat-num .glyph { width: .85em; height: .85em; color: #e9b23d; opacity: .75; }
 
-/* Gold history — read-only earnings; rows WITH parts expand into their component legs. */
-.gold-history .gold-row { font-size: 15px; }
+/* Recent games — a uniform grid of crystallized board stamps ("little avatars"): every
+   card the same constant frame regardless of solve length. Tapping a stamp replays it in
+   place (stamp-replay.js's document-level listener — no wiring here). Locked = today's
+   daily before the viewer has played: an empty shell under a faded lock, linking home. */
+.profile-games { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 8px; }
+.pgame {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: var(--bg-card); border-radius: 10px; padding: 10px 6px 8px;
+}
+.pgame .daily-stamp { margin: 0; cursor: pointer; transition: filter .2s ease; }
+.pgame .daily-stamp:hover { filter: drop-shadow(0 4px 14px rgba(233,178,61,.18)); }
+/* One cell size whether the stamp carries letters or not — uniformity beats legibility
+   here; the replay is the way to actually read a board. */
+.pgame .daily-stamp.has-letters .stamp-cell { width: 18px; height: 18px; border-radius: 3px; }
+.pgame .stamp-ch { font-size: 10px; }
+.pgame-cap { display: flex; align-items: center; justify-content: center; gap: .4em; font-size: 12px; color: var(--muted); max-width: 100%; }
+.pgame-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.pgame-name { color: var(--muted); }
+.pgame-in { color: #f0c14b; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pgame-mark { display: inline-grid; place-items: center; opacity: .65; }
+.pgame-mark .glyph { width: 12px; height: 12px; }
+.pgame-veil { position: relative; display: block; }
+.pgame-lock { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+.pgame-lock .glyph { width: 22px; height: 22px; opacity: .85; filter: drop-shadow(0 0 7px rgba(233,178,61,.25)); }
+.pgame.is-locked .daily-stamp { cursor: inherit; }
+
+/* Gold ledger — the public chain: every mint on the record, chain-explorer calm.
+   Columns: date · faded glyph + reason · gold delta · running balance · (›).
+   Rows WITH parts expand into their component legs. */
+.gold-history .gold-row { font-size: 14px; }
 .gold-row-static, .gold-row-btn {
-  display: flex; align-items: center; gap: .5rem;
+  display: grid; grid-template-columns: 3.2rem minmax(0, 1fr) auto 3.6rem .8rem;
+  align-items: center; gap: .5rem;
   width: 100%; text-align: left; padding: .35rem .5rem; margin: 0;
   background: var(--bg-card); border: none; border-radius: .5rem;
-  color: var(--fg); font: inherit;
+  color: var(--fg); font: inherit; font-variant-numeric: tabular-nums;
 }
 .gold-row-btn { cursor: pointer; }
 .gold-row-btn:hover { background: color-mix(in oklab, var(--accent) 10%, var(--bg-card)); }
-.gold-date { color: var(--muted); min-width: 3.5rem; }
-.gold-label { flex: 1; }
-.gold-amount { font-weight: 700; }
+.gold-date { color: var(--muted); font-size: 13px; }
+.gold-label { display: flex; align-items: center; gap: .45em; min-width: 0; }
+.gold-label .glyph { width: 14px; height: 14px; flex: none; color: var(--muted); opacity: .75; }
+.gold-label-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gold-amount { color: #f0c14b; font-weight: 600; text-align: right; }
+.gold-balance { color: var(--muted); font-size: 13px; text-align: right; }
 .gold-chev { color: var(--muted); transition: transform .15s ease; }
 .gold-row-btn.is-open .gold-chev { transform: rotate(90deg); }
-.gold-row-legs { padding: .25rem .5rem .35rem 4rem; color: var(--muted); font-size: 14px; }
+.gold-row-legs { padding: .25rem .5rem .35rem 4.2rem; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* Section header doubles as the balance line: GOLD LEDGER ……… 534 ◆ */
+.ledger-h2 { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+.ledger-balance { color: #f0c14b; font-weight: 600; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; letter-spacing: 0; text-transform: none; }
 
 @media (max-width: 480px) {
   .profile-stats { grid-template-columns: repeat(2, 1fr); }

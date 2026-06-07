@@ -39,23 +39,37 @@ function ledgerDate(ts, now = Date.now()) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-// View-model for one gold-history row. The server ships { delta, reason, ts, ref?, parts? }
+// View-model for one gold-ledger row. The server ships { delta, reason, ts, ref?, parts? }
 // with Σ parts === delta when present; we re-verify that invariant on the client and DROP a
 // malformed parts (show the flat total only) — defense-in-depth against a bad/old record.
-//   → { icon, label, date, amount, parts }
+//   → { kind, label, date, amount, parts }   (kind picks the faded glyph: "cashout" | "daily")
 export function formatLedgerRow(tx, now = Date.now()) {
   const delta = Number(tx?.delta) || 0;
-  const icon = tx?.reason === "mint:cashout" ? "🏁" : "🎁";
+  const kind = tx?.reason === "mint:cashout" ? "cashout" : "daily";
   const raw = Array.isArray(tx?.parts) ? tx.parts : [];
   const sum = raw.reduce((s, p) => s + (Number(p?.delta) || 0), 0);
   const parts = raw.length && sum === delta ? raw : [];
   return {
-    icon,
+    kind,
     label: humanizeReason(tx?.reason),
     date: ledgerDate(tx?.ts, now),
     amount: `+${delta}`,
     parts,
   };
+}
+
+// Running balance per ledger row — the chain-explorer column. `history` is newest-first;
+// balances[i] is the holder's gold right AFTER row i landed, walked BACKWARDS from the
+// current total. That keeps the 50-row public window honest: rows older than the window
+// never need to be summed, only subtracted away.
+export function ledgerBalances(history, total) {
+  const out = [];
+  let bal = Number(total) || 0;
+  for (const tx of Array.isArray(history) ? history : []) {
+    out.push(bal);
+    bal -= Number(tx?.delta) || 0;
+  }
+  return out;
 }
 
 // Turn a room slug ("snappy-moose") into a spaced Title Case label ("Snappy Moose").
@@ -67,6 +81,15 @@ export function prettyRoomLabel(slug) {
     .join(" ");
 }
 
+// Card-sized caption for a daily stamp: today reads "Daily"; a past day reads as a short
+// local date ("Jun 1") — the raw ISO string is too wide for a tiny caption.
+function dailyShortLabel(date, isToday) {
+  if (isToday) return "Daily";
+  const [y, m, d] = String(date).split("-").map(Number);
+  if (!y || !m || !d) return String(date);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
 // Build the view-model for one recent game.
 //   game: a PublicGameRecord ({ roomPath, result, guesses, solveGrid?, words?, ... }) — NO word.
 //   ctx:  { today: "YYYY-MM-DD", playedToday: boolean, todayWords?: string[] | null }
@@ -74,16 +97,19 @@ export function prettyRoomLabel(slug) {
 //     the token-gated leaderboard (only a viewer who FINISHED today holds that token — at
 //     that point the answer isn't a secret to them). Used only when the record itself
 //     shipped no words, and only when it aligns row-for-row with the color grid.
-// Returns { kind, icon, label, result, date, grid, words, locked, roomHref }.
+// Returns { kind, won, guesses, label, shortLabel, result, date, wordLength, grid, words,
+// locked, roomHref }. wordLength sizes the card's constant board frame (boardRows pads a
+// solve-in-2 and a miss-in-6 to the same height); legacy records infer it from the grid.
 export function recentGameView(game, ctx = {}) {
   const { today = "", playedToday = false, todayWords = null } = ctx;
   const roomPath = String(game.roomPath || "");
   const won = game.result === "won";
-  const icon = won ? "✅" : "❌";
   const guesses = Number(game.guesses) || 0;
   const result = won ? `solved in ${guesses}` : "missed";
   const rawGrid = Array.isArray(game.solveGrid) ? game.solveGrid : null;
   const rawWords = Array.isArray(game.words) ? game.words : null; // letters, when shipped
+  const wordLength =
+    Number(game.wordLength) || (rawGrid && rawGrid[0] ? String(rawGrid[0]).length : 5);
 
   if (roomPath.startsWith("daily/")) {
     const date = roomPath.slice("daily/".length);
@@ -99,7 +125,7 @@ export function recentGameView(game, ctx = {}) {
         ? todayWords
         : null);
     return {
-      kind: "daily", icon, label, result, date,
+      kind: "daily", won, guesses, label, shortLabel: dailyShortLabel(date, isToday), result, date, wordLength,
       grid: locked ? null : rawGrid,
       words: locked ? null : unlockedWords,
       locked,
@@ -110,8 +136,9 @@ export function recentGameView(game, ctx = {}) {
   // Room game: render the stored letter-card if we have one; legacy records with no board
   // fall back to a link into the room.
   const slug = roomPath.includes("/") ? roomPath.split("/")[1] || "" : roomPath;
+  const label = prettyRoomLabel(slug);
   return {
-    kind: "room", icon, label: prettyRoomLabel(slug), result, date: null,
+    kind: "room", won, guesses, label, shortLabel: label, result, date: null, wordLength,
     grid: rawGrid,
     words: rawWords,
     locked: false,

@@ -16,4 +16,11 @@ export const GLYPH = {
   // currentColor stroke so it themes; never an OS emoji.
   skull: `<svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 11a6 6 0 0 1 12 0c0 2.2-1 3.6-2.2 4.4v2.2a1.4 1.4 0 0 1-1.4 1.4H9.6a1.4 1.4 0 0 1-1.4-1.4v-2.2C7 14.6 6 13.2 6 11Z"/><circle cx="9.5" cy="11" r="1.6"/><circle cx="14.5" cy="11" r="1.6"/><path d="M12 13.4l-.9 1.5h1.8z"/><path d="M10.5 19v-1.3M12 19v-1.3M13.5 19v-1.3"/></svg>`,
   share: `<svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M8.5 7.5 12 4l3.5 3.5"/><path d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></svg>`,
+  // Profile vocabulary (faded line art, never OS emoji): lock = spoiler-locked board /
+  // secured account; flame = streak; flag = race win; coin = a struck mint (the ◆ diamond
+  // echoes the gold HUD) for ledger entries.
+  lock: `<svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`,
+  flame: `<svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21a6 6 0 0 1-6-6c0-3.4 2.4-5 3.4-7.4.8 1 1.2 2.1 1.1 3.4C12.3 9.2 13.4 6.4 13 3c3 2.4 5 5.9 5 9a6 6 0 0 1-6 6Z"/><path d="M12 21c-1.7 0-2.8-1.3-2.8-2.9 0-1.5 1.4-2.4 1.9-3.8.8.9 3.7 1.7 3.7 3.8 0 1.6-1.1 2.9-2.8 2.9Z"/></svg>`,
+  flag: `<svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h13l-2.6 4L18 12H5"/><path d="M9.3 4v8M13.7 4v8M5 8h13"/></svg>`,
+  coin: `<svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.2"/><path d="M12 8.4 14.6 12 12 15.6 9.4 12Z"/></svg>`,
 };
