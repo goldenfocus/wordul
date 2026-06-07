@@ -13,7 +13,11 @@
 const SETTINGS_KEY = "wr.settings";
 
 export const DEFAULT_SETTINGS = {
-  hardMode: false,
+  // Difficulty tiers (spec 2026-06-07): easy = live typing hints, medium = the classic
+  // game (no hints, no penalties), hard = must-use-hints + dead-letter drain + bankruptcy.
+  // Default EASY while the new-player features land (Yan, Jun 7 2026). Legacy hardMode
+  // is migrated in getSettings and the old key is left in storage, ignored (cheap rollback).
+  difficulty: "easy",
   colorBlind: false,
   reducedMotion: false,
   communityScience: true,
@@ -28,12 +32,27 @@ export const DEFAULT_SETTINGS = {
   keyboardLayout: "auto",
 };
 
+const DIFFICULTIES = ["easy", "medium", "hard"];
+
 export function getSettings() {
   try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };
+    const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+    const s = { ...DEFAULT_SETTINGS, ...stored };
+    // Migration: pre-tier saves have hardMode but no (valid) difficulty.
+    if (!DIFFICULTIES.includes(stored.difficulty)) {
+      s.difficulty = stored.hardMode === true ? "hard" : "easy";
+    }
+    return s;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
+}
+
+// THE difficulty resolver — every consumer reads through this (never getSettings()
+// directly) so the future per-world/room override layer can interpose here
+// (spec §5: a world forcing hard replaces the player's local pick).
+export function activeDifficulty() {
+  return getSettings().difficulty;
 }
 
 export function saveSettings(s) {
