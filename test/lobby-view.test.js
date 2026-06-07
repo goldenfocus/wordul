@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { triesFor, seatModel, compactRowProps, ghostSeatModel, railPillLabel, railTitleCount, emptySeatActions, yourTableRowProps, shouldChimeOnJoin } from "../public/lobby-view.js";
+import { triesFor, seatModel, compactRowProps, ghostSeatModel, railPillLabel, railTitleCount, emptySeatActions, yourTableRowProps, shouldChimeOnJoin, shouldShowRoundScore } from "../public/lobby-view.js";
 
 describe("triesFor (mirrors server guessesFor)", () => {
   it("is length+1, plateauing at 8", () => {
@@ -161,6 +161,26 @@ describe("shouldChimeOnJoin (join sound decision, iter3 §1)", () => {
   it("never chimes outside the lobby phase", () => {
     expect(shouldChimeOnJoin(1, 2, "playing")).toBe(false);
     expect(shouldChimeOnJoin(1, 2, "finished")).toBe(false);
+  });
+});
+
+describe("shouldShowRoundScore (iter3 §2 — no 'Score 0' in duel lobbies)", () => {
+  it("never shows in the lobby phase, whatever the tally", () => {
+    expect(shouldShowRoundScore("lobby", "playing", 0)).toBe(false);
+    expect(shouldShowRoundScore("lobby", "playing", 120)).toBe(false);
+  });
+  it("never shows a zero (or missing) score", () => {
+    expect(shouldShowRoundScore("playing", "playing", 0)).toBe(false);
+    expect(shouldShowRoundScore("playing", "playing", undefined)).toBe(false);
+    expect(shouldShowRoundScore("playing", "playing", null)).toBe(false);
+  });
+  it("shows while solving with a non-zero tally — negatives (penalty drains) included", () => {
+    expect(shouldShowRoundScore("playing", "playing", 25)).toBe(true);
+    expect(shouldShowRoundScore("playing", "playing", -50)).toBe(true);
+  });
+  it("hides once you're done (the settlement screen owns the end state)", () => {
+    expect(shouldShowRoundScore("playing", "won", 120)).toBe(false);
+    expect(shouldShowRoundScore("playing", undefined, 120)).toBe(false);
   });
 });
 

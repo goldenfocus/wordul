@@ -38,7 +38,7 @@ import { renderSettlement, dailyReceiptLines } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
 import { autoPlayBoardOnce, playBoardReplay, boardReplayActive } from "/board-replay.js";
-import { seatModel, ghostSeatModel, railPillLabel, railTitleCount, emptySeatActions, yourTableRowProps, shouldChimeOnJoin } from "/lobby-view.js";
+import { seatModel, ghostSeatModel, railPillLabel, railTitleCount, emptySeatActions, yourTableRowProps, shouldChimeOnJoin, shouldShowRoundScore } from "/lobby-view.js";
 import { createChatPill, chatHasUserText } from "/chat-pill.js";
 import { encodeLocalSolve, needsDailyRecovery, recoverDailyArtifacts } from "/daily-recover.js";
 
@@ -1373,7 +1373,6 @@ function renderRoomHeader() {
     nameEl.textContent = game.name || game.slug;
     nameEl.onclick = copyRoomLink;
   }
-  renderRoomLink();
   renderChatTabLabel();
   renderHeaderIdentity();
   renderGoldHud();
@@ -1386,33 +1385,6 @@ function renderRoomHeader() {
 function renderChatTabLabel() {
   const label = $("#chatTabTableLabel");
   if (label) label.textContent = game.name || game.slug || "Table";
-}
-
-// The header room copy-link (@<owner>/<slug> + chain-link icon). Tap copies the room
-// link (reuses copyRoomLink) and flashes a "copied" affordance. Owner/slug come from
-// game state — never hardcoded. Hidden until there's a real owner (e.g. a bare challenge
-// has no slug, so we fall back to the display name and keep it copyable).
-function renderRoomLink() {
-  const btn = $("#roomLinkBtn");
-  if (!btn) return;
-  const slugEl = $("#roomLinkSlug");
-  if (slugEl) {
-    // A normal room: @owner/slug. A challenge (no slug) reads as its display name.
-    slugEl.textContent = game.owner && game.slug
-      ? `@${game.owner}/${game.slug}`
-      : (game.name || game.owner || "");
-  }
-  if (!btn.dataset.wired) {
-    btn.dataset.wired = "1";
-    btn.addEventListener("click", async () => {
-      await copyRoomLink();
-      btn.classList.add("copied");
-      clearTimeout(btn._flashTimer);
-      btn._flashTimer = setTimeout(() => btn.classList.remove("copied"), 1500);
-    });
-  }
-  // Real rooms only — a bare challenge has no @owner/slug, so there's nothing to copy here.
-  btn.hidden = !(game.owner && game.slug);
 }
 
 // Copy the room link with a subtle confirmation. The whole share/copy surface
@@ -1451,8 +1423,6 @@ function clearHeaderIdentity() {
   if (header) header.textContent = "";
   const nameEl = $("#avatarName");
   if (nameEl) { nameEl.textContent = ""; nameEl.hidden = true; }
-  const linkBtn = $("#roomLinkBtn");
-  if (linkBtn) { linkBtn.hidden = true; linkBtn.classList.remove("copied"); }
 }
 
 // Rename the current room. Shared (anyone present can rename) and reachable from
@@ -3011,11 +2981,14 @@ function render() {
   // §A: the ephemeral round-score chip rides ABOVE the board while you're still solving,
   // in EVERY mode. The payout animation tweens its number; this paints/refreshes the
   // static value and hides it once you're done (the settlement screen owns the end state).
+  // iter3 §2: pure gate in lobby-view.js — never in the lobby phase (it leaked there as a
+  // stray "Score 0"), never a zero tally. The chip stays hidden until the first payout
+  // tween reveals it (animateCount in gold.js unhides the hud it writes).
   {
     const rs = $("#roundScore");
     if (rs) {
-      const playing = me && me.status === "playing";
-      if (playing) renderRoundScore(); else rs.hidden = true;
+      if (shouldShowRoundScore(snap.phase, me && me.status, game.goldThisRound)) renderRoundScore();
+      else rs.hidden = true;
     }
   }
 
@@ -3124,7 +3097,10 @@ function render() {
   const chatPanel = $("#chatPanel");
   const chatTopBtn = $("#chatTopBtn");
   if (chatPanel) chatPanel.hidden = !showSocial;
-  if (chatTopBtn) chatTopBtn.hidden = !showSocial;
+  // iter3 §2: the topbar 💬 is the MOBILE PLAY-PHASE sheet trigger only. In the lobby
+  // the chat panel (and its chevron pill) is already on screen in the right zone, so a
+  // second topbar entry point is clutter — hide it there, keep it during play.
+  if (chatTopBtn) chatTopBtn.hidden = !showSocial || inLobbyPhase;
   if (!showSocial) closeChatSheet();
   // The Global/Table tabs + the Global "coming soon" placeholder are a LOBBY-ONLY
   // affordance. Outside the lobby (an active 2-player race, or a finished daily) there's
@@ -5297,7 +5273,6 @@ function leaveRoom() {
   document.body.classList.remove("playing"); // restore full chrome outside a room
   document.body.classList.remove("daily");
   document.body.classList.remove("lobby"); // drop the two-zone lobby layout outside a room
-  // The header room-link mirrors #roomHeader — hidden on home by clearHeaderIdentity() above.
   game.isDaily = false; game.dailyDate = null;
   settlementShown = false; // discard stale latch so a different already-finished room can show
 }

@@ -79,3 +79,22 @@ describe("lobby v2 rail pill", () => {
     expect(css).toMatch(/\.lobby-rail:not\(\.expanded\)[\s\S]{0,120}\.lobby-rail-list \{ display: none; \}/);
   });
 });
+
+describe("iter3 §2 top chrome de-clutter", () => {
+  it("an EMPTY message row collapses (no ghost pill under the header); populated rows still show", () => {
+    expect(css).toMatch(/\.message-row:empty\s*\{[^}]*display:\s*none/);
+  });
+  it("the topbar share/link button is gone — Invite (lobby pair) owns sharing", () => {
+    expect(html).not.toContain("roomLinkBtn");
+    expect(app).not.toContain("roomLinkBtn");
+    expect(css).not.toContain(".room-link ");
+  });
+  it("the 💬 bubble hides in the lobby phase but survives as the play-phase sheet trigger", () => {
+    expect(app).toContain("chatTopBtn.hidden = !showSocial || inLobbyPhase");
+    // the play-phase mobile sheet entry point stays wired
+    expect(app).toContain("topBtn.onclick = openChatSheet");
+  });
+  it("the round-score chip routes through the pure shouldShowRoundScore gate", () => {
+    expect(app).toContain("shouldShowRoundScore(snap.phase");
+  });
+});

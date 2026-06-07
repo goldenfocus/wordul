@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from "vitest";
-import { GOLD, comboMultiplier, playPayoutSequence } from "/gold.js";
+import { GOLD, comboMultiplier, playPayoutSequence, awardGold } from "/gold.js";
 import { getGold, setGold } from "/edition.js";
 
 // Build the discovery shape app.js hands to playPayoutSequence: warms first, then
@@ -184,5 +184,15 @@ describe("playPayoutSequence — gold-sum invariant (no double-award, no drift)"
       const tones = lines.map((l) => l.o.tone);
       expect(tones).toEqual(["warm", "hot", "combo"]);
     }
+  });
+});
+
+describe("awardGold reveals a hidden hud (iter3 §2 — round-score starts hidden at 0)", () => {
+  it("the tween unhides the target hud so the first tick is visible", () => {
+    const hud = document.createElement("div");
+    hud.hidden = true;
+    document.body.appendChild(hud);
+    awardGold(25, true, { wallet: { _v: 0, get() { return this._v; }, add(d) { this._v += d; } }, hud, prefix: "Score " });
+    expect(hud.hidden).toBe(false);
   });
 });

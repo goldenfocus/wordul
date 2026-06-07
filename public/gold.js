@@ -112,6 +112,9 @@ export function goldDrain(amount, reducedMotion, playChime, opts = {}) {
 // `dur` is tunable so per-beat payout ticks can climb faster than the lump bump.
 function animateCount(el, from, to, dur = 650, prefix = "◆ ") {
   if (!el) return;
+  // A balance worth tweening is worth seeing: #roundScore starts hidden while the tally
+  // is zero (iter3 §2 — never paint "Score 0"), so the first payout tick reveals it.
+  el.hidden = false;
   const start = performance.now();
   function step(now) {
     const t = Math.min(1, (now - start) / dur);

@@ -114,3 +114,12 @@ export function compactRowProps(game) {
     edition: game.edition,
   };
 }
+
+// The ephemeral round-score chip (iter3 §2). Per its own charter it rides above the
+// board only WHILE you're solving — but it had leaked into duel lobbies as a stray
+// "Score 0". Pure gate: never in the lobby phase, never a zero/missing tally, only
+// while my status is still "playing" (the settlement screen owns the end state).
+// Negative tallies (penalty drains can dip below zero) still show — that's real news.
+export function shouldShowRoundScore(phase, status, score) {
+  return phase !== "lobby" && status === "playing" && (Number(score) || 0) !== 0;
+}

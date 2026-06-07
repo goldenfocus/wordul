@@ -68,14 +68,8 @@
   <div class="topbar-left">
     <button id="brandBtn" class="brand" type="button" title="Home" aria-label="Wordul — home">Wordul<span class="brand-dot">.</span></button>
     <nav id="crumbs" class="crumbs" aria-label="Breadcrumb" hidden></nav>
-    <!-- In a room, the room shows as a copyable slug link with a chain-link icon
-         (@<owner>/<slug>). Tap to copy the room link — reuses copyRoomLink. Revealed
-         in a room by renderRoomHeader; hidden on home/profile via clearHeaderIdentity. -->
-    <button id="roomLinkBtn" class="room-link" type="button" title="Copy room link" aria-label="Copy room link" hidden>
-      <span class="room-link-slug" id="roomLinkSlug"></span>
-      <svg class="room-link-ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07l-1 1"/><path d="M14 11a5 5 0 0 0-7.07 0l-2.83 2.83a5 5 0 0 0 7.07 7.07l1-1"/></svg>
-      <span class="room-link-flash" aria-hidden="true">copied ✦</span>
-    </button>
+    <!-- The old topbar copy-link button lived here (removed iter3 §2): sharing belongs
+         to the lobby Invite pair now; tapping the room name still copies the link. -->
   </div>
   <!-- Immersive in-game header (C5): avatar + username + gold only. The avatar IS
        the hub — one tap opens settings / theme / mute / stats (+ share / rename /
