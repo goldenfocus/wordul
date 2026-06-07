@@ -3115,8 +3115,11 @@ function arrangeLobbyLayout(isLobby) {
   }
   if (isLobby) {
     if (controls) left.appendChild(controls);   // Start under the board / badge / your-table
-    if (rail) right.appendChild(rail);          // floor on the right
-    if (chat) right.appendChild(chat);          // chat on the right, under the floor
+    // Mobile-first DOM order (≤880px single column): chat comes right after the left
+    // zone, the tables rail (a collapsed pill on mobile, Task 9) last. Desktop (≥881px)
+    // lifts the rail above chat via flex order — the two-zone look is unchanged.
+    if (chat) right.appendChild(chat);          // chat first in the right zone
+    if (rail) right.appendChild(rail);          // floor after it
   } else {
     for (const el of [controls, rail, chat]) {
       if (el && el._origParent) {

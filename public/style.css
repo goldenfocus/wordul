@@ -3301,6 +3301,11 @@ body.lobby .lobby-right {
 @media (max-width: 880px) {
   body.lobby .lobby-grid { grid-template-columns: 1fr; }
 }
+/* Desktop two-zone: rail above chat. The DOM order is mobile-first (chat before rail —
+   the §3 order: … → CHAT → tables pill), so desktop restores rail-on-top with flex order. */
+@media (min-width: 881px) {
+  body.lobby .lobby-rail { order: -1; }
+}
 /* In lobby the header owns the room name + the two-zone layout owns the screen,
    so the in-bar title card + the Play/Games/Players tabs collapse away.
    (JS already sets #roomTabs.hidden; this is belt-and-suspenders.) */

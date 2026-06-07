@@ -53,3 +53,17 @@ describe("lobby v2 seat strip wiring", () => {
     expect(fn).toContain("MAX_CAPACITY");
   });
 });
+
+describe("lobby v2 mobile order", () => {
+  it("arrangeLobbyLayout appends chat BEFORE the rail (mobile-first DOM)", () => {
+    const fn = app.slice(app.indexOf("function arrangeLobbyLayout"), app.indexOf("function arrangeLobbyLayout") + 1600);
+    const chatAt = fn.indexOf("right.appendChild(chat)");
+    const railAt = fn.indexOf("right.appendChild(rail)");
+    expect(chatAt).toBeGreaterThan(-1);
+    expect(railAt).toBeGreaterThan(-1);
+    expect(chatAt).toBeLessThan(railAt);
+  });
+  it("desktop lifts the rail above chat via flex order", () => {
+    expect(css).toMatch(/min-width: 881px[\s\S]{0,200}\.lobby-rail \{ order: -1; \}/);
+  });
+});
