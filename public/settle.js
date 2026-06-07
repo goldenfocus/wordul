@@ -444,8 +444,12 @@ async function supernova(receipt, opts = {}) {
         })(),
       ];
       const order = orders[Math.floor(Math.random() * orders.length)];
-      const stagger = 55 + Math.random() * 75;   // ms between letters
-      const dur = 520 + Math.random() * 280;     // per-letter animation length
+      const stagger = 28 + Math.random() * 38;   // ms between letters — rapid-fire
+      const dur = 280 + Math.random() * 150;     // per-letter animation length
+
+      // The word IS the supernova — announce it with a jolt.
+      shake = 14;
+      ringBurst("#f0c14b", 4);
 
       // The answer earns headline size; capLine is rebuilt by teardown, so no restore needed.
       capLine.style.fontSize = "clamp(30px,7vw,54px)";
@@ -464,18 +468,24 @@ async function supernova(receipt, opts = {}) {
           --wr-rot:${(Math.random() - 0.5) * 70}deg;
           --wr-dx:${(Math.random() - 0.5) * 240}px;
           --wr-dy:${(Math.random() - 0.5) * 180}px;
-          animation:settle-wr-${anim} ${dur}ms cubic-bezier(.2,.9,.3,1.2) ${delay}ms both;
+          animation:settle-wr-${anim} ${dur}ms cubic-bezier(.18,1.4,.3,1) ${delay}ms both;
         `;
         capLine.appendChild(span);
         // Rising chime per letter, timed to its entrance.
         setTimeout(() => {
-          if (running && !skipFired) playChime?.([[620 + order(i) * 55, 0]]);
+          if (running && !skipFired) playChime?.([[620 + order(i) * 80, 0]]);
         }, delay);
       }
       capLine.style.opacity = "1";
       capLine.style.transform = "none";
-      // Let the letters mostly land before the payout beat takes over.
-      await Promise.race([sleep(maxDelay + dur * 0.6), skipRace]);
+      // Let the letters mostly land, then punch: shake + rings + a glow pulse on the word.
+      await Promise.race([sleep(maxDelay + dur * 0.5), skipRace]);
+      if (!skipFired) {
+        shake = 10;
+        ringBurst("#f0c14b", 3);
+        playChime?.([[988, 0], [1319, 0.07]]);
+        capLine.style.animation = "settle-wr-pulse .45s cubic-bezier(.2,.9,.3,1.2)";
+      }
     }
 
     function countTo(from, to, ms) {
@@ -543,10 +553,10 @@ async function supernova(receipt, opts = {}) {
         if (i % 2 === 0) ringBurst("#f0c14b", 1);
         playChime?.([[620 + i * 16, 0]]);
         shake = Math.min(6, 2 + i * 0.1);
-        await Promise.race([sleep(70), skipRace]);
+        await Promise.race([sleep(32), skipRace]);
         if (skipFired) break;
       }
-      if (!skipFired) await Promise.race([sleep(450), skipRace]);
+      if (!skipFired) await Promise.race([sleep(220), skipRace]);
 
       // Beat 2: multiplier (skipped when mult===1)
       if (!skipFired && receipt.mult > 1) {
@@ -572,7 +582,7 @@ async function supernova(receipt, opts = {}) {
           if (!running || skipFired) break;
           for (let j = 1; j < receipt.mult; j++) mkCoin(p.x, p.y, 3);
           playChime?.([[880 + Math.random() * 400, 0]]);
-          await Promise.race([sleep(32), skipRace]);
+          await Promise.race([sleep(16), skipRace]);
         }
         // Fix 1: cap VISUAL coin count at 60; captions already show the honest number.
         const earnedCap = Math.min(receipt.earned, 60);
@@ -580,7 +590,7 @@ async function supernova(receipt, opts = {}) {
         while (coins.length < earnedCap) mkCoin(c.x, c.y, 2);
         playChime?.([[523, 0.05]]);
         shake = 10;
-        if (!skipFired) await Promise.race([sleep(620), skipRace]);
+        if (!skipFired) await Promise.race([sleep(320), skipRace]);
       }
 
       // Beat 3: spends — red coins ripped away
@@ -595,12 +605,12 @@ async function supernova(receipt, opts = {}) {
           const k = coins[coins.length - 1 - i];
           if (!k) break;
           k.hue = 1;
-          flyTo(k, -60 * DPR(), H * 0.7, 600);
+          flyTo(k, -60 * DPR(), H * 0.7, 400);
           playChime?.([[300 - i * 12, 0]]);
-          await Promise.race([sleep(70), skipRace]);
+          await Promise.race([sleep(35), skipRace]);
         }
         coins = coins.filter((k) => !k.gone);
-        if (!skipFired) await Promise.race([sleep(420), skipRace]);
+        if (!skipFired) await Promise.race([sleep(200), skipRace]);
       }
 
       // Beat 4: bonus — shooting stars
@@ -621,9 +631,9 @@ async function supernova(receipt, opts = {}) {
             born: performance.now(), hue: 0, gone: false,
           });
           playChime?.([[1046 + i * 60, 0]]);
-          await Promise.race([sleep(90), skipRace]);
+          await Promise.race([sleep(45), skipRace]);
         }
-        if (!skipFired) await Promise.race([sleep(450), skipRace]);
+        if (!skipFired) await Promise.race([sleep(220), skipRace]);
       }
 
       // Beat 5: supernova → wallet
@@ -654,10 +664,10 @@ async function supernova(receipt, opts = {}) {
       const netAbs = Math.abs(receipt.net);
       payS.textContent = `${payLabel} · ${tFn("settle.net", "net")} ${netSign}${netAbs}`;
 
-      if (!skipFired) await Promise.race([sleep(350), skipRace]);
+      if (!skipFired) await Promise.race([sleep(170), skipRace]);
 
       payoutEl.style.opacity = "1";
-      payoutEl.style.transition = "opacity .4s";
+      payoutEl.style.transition = "opacity .25s";
 
       if (isWin && !skipFired) {
         shake = 20;
@@ -666,7 +676,7 @@ async function supernova(receipt, opts = {}) {
 
         // Count payout figure 0 → payout
         const payT0 = performance.now();
-        const payDur = 1100;
+        const payDur = 600;
         (function f(n) {
           if (!running) return;
           const t2 = Math.min(1, (n - payT0) / payDur);
@@ -682,26 +692,26 @@ async function supernova(receipt, opts = {}) {
         let fi = 0;
         for (const k of flock) {
           if (!running) break;
-          flyTo(k, walletX, walletY, 650);
+          flyTo(k, walletX, walletY, 420);
           if (fi % 2 === 0) playChime?.([[523 * Math.pow(2, (fi % 16) / 16), 0]]);
           fi++;
-          await Promise.race([sleep(36), skipRace]);
+          await Promise.race([sleep(18), skipRace]);
         }
         // Wallet count-up: walletBefore → finalWallet
-        countTo(walletBefore, finalWallet, flock.length * 36 + 700);
-        if (!skipFired) await Promise.race([sleep(flock.length * 36 + 720), skipRace]);
+        countTo(walletBefore, finalWallet, flock.length * 18 + 400);
+        if (!skipFired) await Promise.race([sleep(flock.length * 18 + 420), skipRace]);
         playChime?.([[784, 0]]);
       } else {
         // Bust: coins collapse to center
         for (const k of coins) {
           if (!running) break;
-          flyTo(k, c.x, c.y, 900);
+          flyTo(k, c.x, c.y, 550);
         }
         playChime?.([[196, 0], [147, 0.3]]);
         onWalletTick?.(finalWallet); // payout=0 but still call so HUD is true
       }
 
-      if (!skipFired) await Promise.race([sleep(800), skipRace]);
+      if (!skipFired) await Promise.race([sleep(420), skipRace]);
       teardown();
     })().catch(() => teardown());
   });
@@ -743,6 +753,11 @@ if (typeof document !== "undefined" && !document.getElementById("settle-styles")
     @keyframes settle-wr-scatter {
       0%   { opacity:0; transform:translate(var(--wr-dx,0px),var(--wr-dy,0px)) rotate(var(--wr-rot,0deg)) scale(.4) }
       100% { opacity:1; transform:none }
+    }
+    @keyframes settle-wr-pulse {
+      0%   { transform:scale(1) }
+      35%  { transform:scale(1.12) }
+      100% { transform:scale(1) }
     }
     #settleOverlay {
       position:fixed; inset:0; z-index:10000;
