@@ -109,3 +109,27 @@ describe("iter3 §2 top chrome de-clutter", () => {
     expect(gold).toMatch(/if \(t < 1\) return requestAnimationFrame\(step\);[\s\S]{0,400}onDone\?\.\(\);/);
   });
 });
+
+describe("iter3 review: lobby pill unread + blink decay", () => {
+  it("renderChat counts the lobby pill's open state as visible (no unread accrual while reading)", () => {
+    // anchor on the exact signature — "function renderChat" alone first matches renderChatTabLabel
+    const fn = app.slice(app.indexOf("function renderChat(snap)"), app.indexOf("function renderChat(snap)") + 8000);
+    expect(fn).toContain('document.body.classList.contains("lobby")');
+    expect(fn).toContain('panel?.classList.contains("chat-open")');
+    expect(fn).toMatch(/const visible = pillOpen \|\|/);
+  });
+  it("opening the pill zeroes any existing unread (chatPill sync callback)", () => {
+    const cb = app.slice(app.indexOf("const chatPill = createChatPill"), app.indexOf("const chatPill = createChatPill") + 900);
+    expect(cb).toContain("game.unreadChat = 0");
+    expect(cb).toContain("updateChatBadge()");
+  });
+  it("the blink decays — finite iterations, not infinite", () => {
+    expect(css).toMatch(/animation: chat-pill-blink 1\.6s ease-in-out 6;/);
+    expect(css).not.toContain("chat-pill-blink 1.6s ease-in-out infinite");
+  });
+  it("a finished blink re-arms: animationend drops .blinking so a later add restarts it", () => {
+    const wire = app.slice(app.indexOf("function wireChat"), app.indexOf("function wireChat") + 2500);
+    expect(wire).toContain('e.animationName === "chat-pill-blink"');
+    expect(wire).toContain('pillBtn.classList.remove("blinking")');
+  });
+});

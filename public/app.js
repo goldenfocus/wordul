@@ -1743,6 +1743,11 @@ const chatPill = createChatPill(
     $("#chatPill")?.setAttribute("aria-expanded", String(open));
     if (open) {
       $("#chatPill")?.classList.remove("blinking");
+      // Pill open = the chat is on screen; nothing stays "unread". This is what
+      // keeps the in-game 💬 badge honest — it's hidden in the lobby, so a count
+      // accrued while reading the open pill would resurface stale at race start.
+      game.unreadChat = 0;
+      updateChatBadge();
       scrollChatToBottom();
     }
   },
@@ -1762,6 +1767,12 @@ function wireChat() {
   if (pillBtn && !pillBtn.dataset.wired) {
     pillBtn.dataset.wired = "1";
     pillBtn.addEventListener("click", () => chatPill.toggle());
+    // The blink is finite (6 pulses, style.css). Drop the class when the run ends
+    // so a LATER message's classList.add restarts the animation — re-adding to an
+    // element still carrying .blinking is a no-op and would never re-pulse.
+    pillBtn.addEventListener("animationend", (e) => {
+      if (e.animationName === "chat-pill-blink") pillBtn.classList.remove("blinking");
+    });
   }
 
   if (form) {
@@ -3336,7 +3347,13 @@ function renderChat(snap) {
   if (appended > 0) {
     const panel = $("#chatPanel");
     const sheetOpen = panel?.classList.contains("sheet-open");
-    const visible = isMobile() ? sheetOpen : !game.chatCollapsed;
+    // In the lobby the chat lives in the pill, so its .chat-open state IS
+    // visibility there — the mobile sheet / desktop collapse don't apply. Without
+    // this, messages read in the expanded pill still count as unread and the 💬
+    // button (hidden in lobby) reappears at race start wearing a stale badge.
+    const pillOpen = document.body.classList.contains("lobby") &&
+      !!panel?.classList.contains("chat-open");
+    const visible = pillOpen || (isMobile() ? sheetOpen : !game.chatCollapsed);
     if (visible) {
       scrollChatToBottom();
     } else if (notifyCount > 0) {

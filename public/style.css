@@ -3775,12 +3775,14 @@ body.lobby #chatPanel:not(.chat-open) {
 }
 body.lobby #chatPanel:not(.chat-open) .chat-pill { color: var(--fg); font-size: 13px; }
 /* §4 blink: a real message arriving while the manual-close latch holds pulses the
-   collapsed "▸ Chat" row toward the accent — never force-opens. app.js removes
-   .blinking the moment the pill expands. Reduced-motion safe: the animation only
-   exists inside the no-preference query (plus the body.reduced-motion kill below). */
+   collapsed "▸ Chat" row toward the accent — never force-opens. Finite (6 pulses
+   ≈ 10s), then the pill rests; app.js drops .blinking on animationend so a later
+   message can re-arm it, and removes it the moment the pill expands. Reduced-motion
+   safe: the animation only exists inside the no-preference query (plus the
+   body.reduced-motion kill below). */
 @media (prefers-reduced-motion: no-preference) {
   body.lobby #chatPanel:not(.chat-open) .chat-pill.blinking {
-    animation: chat-pill-blink 1.6s ease-in-out infinite;
+    animation: chat-pill-blink 1.6s ease-in-out 6;
   }
 }
 @keyframes chat-pill-blink {
