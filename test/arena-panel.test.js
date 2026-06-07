@@ -149,4 +149,29 @@ describe("renderYourTableRow (pinned 'Your table' rail row, iter3 §1)", () => {
   it("tolerates a missing mount node", () => {
     expect(() => renderYourTableRow(null, { avatar: "P", host: "x", dim: "5×6", seats: "1/2" })).not.toThrow();
   });
+  it("null props CLEAR the mount — challenge lobbies / teardown must not leak a stale row", () => {
+    const el = { innerHTML: "" };
+    renderYourTableRow(el, { avatar: "P", host: "Your table", dim: "5×6", seats: "2/3" });
+    renderYourTableRow(el, null);
+    expect(el.innerHTML).toBe(""); // .lobby-rail-you:empty CSS then hides the mount
+  });
+});
+
+describe("count surfaces once per viewport (iter3 §1 review fixes)", () => {
+  const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+  it("the lobby rail's onCount feeds BOTH the mobile pill and the desktop title count", () => {
+    expect(app).toContain("#lobbyRailPillCount");
+    expect(app).toContain("#lobbyRailTitleCount");
+    expect(html).toContain('id="lobbyRailTitleCount"');
+  });
+  it("the standalone Arena title carries the open count (the in-list line is gone)", () => {
+    expect(app).toContain("arenaTitleCount");
+  });
+  it("teardown AND the challenge path clear the pinned Your-table row (stale-row leak)", () => {
+    // Both call renderYourTableRow(..., null): teardownLobbyRail on leaving the lobby
+    // phase/room, and mountLobbyRailIfNeeded's challenge branch (rail is static DOM).
+    const clears = app.match(/renderYourTableRow\(\$\("#lobbyRailYou"\), null\)/g) || [];
+    expect(clears.length).toBeGreaterThanOrEqual(2);
+  });
 });

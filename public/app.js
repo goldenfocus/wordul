@@ -38,7 +38,7 @@ import { renderSettlement, dailyReceiptLines } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
 import { autoPlayBoardOnce, playBoardReplay, boardReplayActive } from "/board-replay.js";
-import { seatModel, ghostSeatModel, railPillLabel, emptySeatActions, yourTableRowProps, shouldChimeOnJoin } from "/lobby-view.js";
+import { seatModel, ghostSeatModel, railPillLabel, railTitleCount, emptySeatActions, yourTableRowProps, shouldChimeOnJoin } from "/lobby-view.js";
 import { createChatPill, chatHasUserText } from "/chat-pill.js";
 import { encodeLocalSolve, needsDailyRecovery, recoverDailyArtifacts } from "/daily-recover.js";
 
@@ -1619,6 +1619,9 @@ function teardownLobbyRail() {
   if (lobbyRailStop) { lobbyRailStop(); lobbyRailStop = null; }
   const el = $("#lobbyRail");
   if (el) el.hidden = true;
+  // #lobbyRail is static DOM that survives room navigations — clear the pinned "Your
+  // table" row so a previous room's seats can't leak into the next lobby it mounts in.
+  renderYourTableRow($("#lobbyRailYou"), null);
 }
 function mountLobbyRailIfNeeded() {
   const el = $("#lobbyRail");
@@ -1632,6 +1635,10 @@ function mountLobbyRailIfNeeded() {
   // seat math is fiction (the ghost strip is their counter).
   if (!game.challengeId && game.snapshot) {
     renderYourTableRow($("#lobbyRailYou"), yourTableRowProps(game.snapshot, getUsername()));
+  } else if (game.challengeId) {
+    // Belt-and-braces with teardownLobbyRail: a previous room's row must never leak
+    // into a challenge lobby. Null props clear the mount (CSS :empty then hides it).
+    renderYourTableRow($("#lobbyRailYou"), null);
   }
   if (lobbyRailStop) return; // already polling — don't restart on every render()
   const mine = `/@${game.owner}/${game.slug}`;
@@ -1640,10 +1647,14 @@ function mountLobbyRailIfNeeded() {
     // Defect: leave this room and jump into the tapped one. showRoom()→leaveRoom() closes
     // the current socket; the 45s abandon-grace then delists the table I bailed from.
     onJoin: (routePath) => { pendingArenaOrigin = true; navigate(routePath); },
-    // Mobile pill header rides the same poll — "▸ N tables open" stays live while collapsed.
+    // One live count per viewport, riding the same poll: the mobile pill says
+    // "▸ N tables open"; the desktop "Tables" title carries a muted "N open"
+    // (mobile hides the title, desktop hides the pill — never two counts at once).
     onCount: (n) => {
       const c = $("#lobbyRailPillCount");
       if (c) c.textContent = railPillLabel(n);
+      const t = $("#lobbyRailTitleCount");
+      if (t) t.textContent = railTitleCount(n);
     },
   });
 }
@@ -1683,7 +1694,7 @@ function showArena() {
   content.innerHTML =
     `<section class="hub-panel arena-view">
       <button id="arenaBack" class="hub-textlink" type="button">← Back</button>
-      <h1 class="pvp-title">Arena</h1>
+      <h1 class="pvp-title">Arena <span id="arenaTitleCount" class="rail-title-count"></span></h1>
       <p class="arena-blurb muted">Jump into an open game — beat a worduler or take on whoever's waiting.</p>
       <div id="arenaList" class="arena-mount"></div>
       <button id="arenaHost" class="btn block">Host a public game →</button>
@@ -1694,6 +1705,11 @@ function showArena() {
   if (host) host.addEventListener("click", () => { stopArenaPoll(); enterNewRoom({ autoStart: false, publicArena: true }); });
   arenaPollStop = mountArenaList(document.getElementById("arenaList"), {
     onJoin: (routePath) => { pendingArenaOrigin = true; navigate(routePath); }, // navigate() calls stopArenaPoll()
+    // The in-list "N open" line is gone (iter3 §1) — the Arena title carries the count.
+    onCount: (n) => {
+      const t = document.getElementById("arenaTitleCount");
+      if (t) t.textContent = railTitleCount(n);
+    },
   });
 }
 

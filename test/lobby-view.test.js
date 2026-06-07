@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { triesFor, seatModel, compactRowProps, ghostSeatModel, railPillLabel, emptySeatActions, yourTableRowProps, shouldChimeOnJoin } from "../public/lobby-view.js";
+import { triesFor, seatModel, compactRowProps, ghostSeatModel, railPillLabel, railTitleCount, emptySeatActions, yourTableRowProps, shouldChimeOnJoin } from "../public/lobby-view.js";
 
 describe("triesFor (mirrors server guessesFor)", () => {
   it("is length+1, plateauing at 8", () => {
@@ -101,6 +101,18 @@ describe("railPillLabel", () => {
     expect(railPillLabel(0)).toBe("0 tables open");
     expect(railPillLabel(1)).toBe("1 table open");
     expect(railPillLabel(7)).toBe("7 tables open");
+  });
+});
+
+describe("railTitleCount (desktop header count, iter3 §1 review fix)", () => {
+  it("renders 'N open' — the noun lives in the Tables/Arena title", () => {
+    expect(railTitleCount(0)).toBe("0 open");
+    expect(railTitleCount(1)).toBe("1 open");
+    expect(railTitleCount(7)).toBe("7 open");
+  });
+  it("coerces junk to 0 (loading/error states never paint NaN)", () => {
+    expect(railTitleCount(undefined)).toBe("0 open");
+    expect(railTitleCount("nope")).toBe("0 open");
   });
 });
 

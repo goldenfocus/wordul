@@ -53,8 +53,12 @@ export function isHot(game) {
 // lobby-view.js yourTableRowProps (the LIVE snapshot, not the open-games feed); the
 // caller re-renders on every snapshot so ＋/✕ and joins tick the seats immediately.
 // A non-navigating div, not a button — you're already sitting here.
+// Null props CLEAR the mount: #lobbyRail is static DOM that survives room navigations,
+// so callers that must not show the row (challenge lobbies, rail teardown) pass null and
+// the `.lobby-rail-you:empty` CSS rule hides the empty mount.
 export function renderYourTableRow(el, props) {
   if (!el) return;
+  if (!props) { el.innerHTML = ""; return; }
   el.innerHTML =
     `<div class="arena-row your-table" aria-current="true">` +
     `<span class="arena-row-avatar" aria-hidden="true">${props.avatar}</span>` +

@@ -2043,6 +2043,16 @@ body.reduced-motion .gold-floater { display: none !important; }
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
   color: var(--muted, #888); margin: 0 0 10px;
 }
+/* The header's quiet open-tables count ("Tables · 3 open" / "Arena · 3 open") — the only
+   desktop count now that the in-list "N open" line is gone (iter3 §1: one count per
+   panel). Lives inside the title, so mobile's display:none on .lobby-rail-title hides it
+   where the pill already carries the number. */
+.rail-title-count {
+  margin-left: var(--space-1, 4px);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted, #888); opacity: 0.85;
+}
+.rail-title-count:not(:empty)::before { content: "· "; }
 .lobby-rail-list { display: flex; flex-direction: column; gap: 8px; }
 /* FOMO: a bigger table one seat from full glows in the accent + a soft pulse. */
 .arena-row.is-hot {

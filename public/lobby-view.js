@@ -53,6 +53,14 @@ export function railPillLabel(n) {
   return `${c} table${c === 1 ? "" : "s"} open`;
 }
 
+// Desktop header count: the in-list "N open" line is gone (iter3 §1 — never two counts
+// in one panel), so the rail's "Tables" title and the standalone Arena title carry the
+// open-tables count instead. The noun lives in the title, so this is just "N open".
+export function railTitleCount(n) {
+  const c = Number(n) || 0;
+  return `${c} open`;
+}
+
 // Challenge rooms are solo-vs-ghosts (one DO per player): the seat strip shows the
 // real ghost field, not the fictional 1/8 the default capacity would suggest.
 export function ghostSeatModel(tape) {

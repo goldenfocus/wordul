@@ -275,7 +275,9 @@
           <span class="lobby-rail-pill-arrow" aria-hidden="true">▸</span>
           <span id="lobbyRailPillCount">0 tables open</span>
         </button>
-        <h3 class="lobby-rail-title">Tables</h3>
+        <!-- Desktop's one count: "Tables · N open" (fed by the same onCount as the pill);
+             mobile hides the whole title — the pill carries the count there. -->
+        <h3 class="lobby-rail-title">Tables <span id="lobbyRailTitleCount" class="rail-title-count"></span></h3>
         <div id="lobbyRailYou" class="lobby-rail-you"></div>
         <div id="lobbyRailList" class="lobby-rail-list"></div>
       </aside>
