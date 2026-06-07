@@ -90,16 +90,16 @@ import { houseWorld, resolveWorld, normalizeWorld } from "../src/daily-core.ts";
 import type { World } from "../src/daily-core.ts";
 
 describe("houseWorld", () => {
-  it("wraps the deterministic fallback word in a coherent house World (edition agrees with voice)", () => {
+  it("wraps the deterministic fallback word in the base-look house World", () => {
     const w = houseWorld("2026-06-02", 1_700_000_000_000);
     expect(w.date).toBe("2026-06-02");
     expect(w.word).toMatch(/^[A-Z]+$/);
     expect(w.word.length).toBe(5); // fallback uses the 5-letter pool
-    // House vibe must be a coherent bundle — gold edition + gold voice — so the
-    // unauthored day never ships the old default(UV)+yang(gold) clash.
-    expect(w.edition).toBe("yang");
+    // Unauthored days wear the signature Wordul edition so the daily expands the
+    // home page in place; only a curated World re-themes the day. Voice stays yang
+    // (text companion, decoupled from visuals).
+    expect(w.edition).toBe("default");
     expect(w.voice).toBe("yang");
-    expect(w.edition).toBe(w.voice);
     expect(typeof w.story.title).toBe("string");
     expect(typeof w.story.body).toBe("string");
     expect(houseWorld("2026-06-02", 1).word).toBe(w.word); // deterministic word
@@ -125,7 +125,7 @@ describe("resolveWorld", () => {
   });
   it("falls back to a house World for an unscheduled date", () => {
     const w = resolveWorld({}, "2026-06-05", 99);
-    expect(w.edition).toBe("yang");
+    expect(w.edition).toBe("default");
     expect(w.word.length).toBe(5);
   });
   it("empty/omitted salt reproduces the unsalted house word; a curated date ignores salt", () => {

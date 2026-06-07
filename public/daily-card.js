@@ -179,12 +179,12 @@ export function renderLeaderboard(view, me) {
     `<ul class="daily-top-list">${medals}${pinned}</ul>${hint}`;
 }
 
-// Deterministic featured edition for a date: rotates the non-default editions so
-// every day has a theme with no server. Same UTC day -> same theme for everyone.
-export function dayTheme(date, editionIds) {
-  const pool = editionIds.filter((id) => id !== "default");
-  if (pool.length === 0) return "default";
-  return pool[Math.floor(date.getTime() / 86400000) % pool.length];
+// The daily wears the base Wordul theme unless the day is configured otherwise —
+// the authoritative edition arrives in the room snapshot (a curated World from the
+// Studio). No client-side rotation: starting the WOTD expands the home page in
+// place instead of cutting to a randomly-skinned screen. (Signature kept for callers.)
+export function dayTheme(_date, _editionIds) {
+  return "default";
 }
 
 // ── Countdown to the next Wordul (UTC midnight, mirroring server activeDate()) ──

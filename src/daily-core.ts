@@ -89,9 +89,11 @@ export function houseWorld(date: string, nowMs: number, salt = ""): World {
   return {
     date,
     word,
-    // Coherent house vibe: gold edition + gold voice. (Was default(UV)+yang(gold),
-    // which clashed with the warm companion and the daily-unlock chrome.)
-    edition: "yang",
+    // Unauthored days wear the signature Wordul look: launching the WOTD then
+    // EXPANDS the home page in place instead of cutting to a different skin. Only a
+    // curated World (schedule) re-themes the day. Voice stays yang — the warm
+    // companion is text-only, decoupled from visuals (see VOICE_EDITION in edition.js).
+    edition: "default",
     voice: "yang",
     story: {
       title: `Today's word`,
