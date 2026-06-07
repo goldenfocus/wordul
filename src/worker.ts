@@ -13,6 +13,8 @@ import { normalizeUsername, normalizeSlug, isValidUsername } from "./identity.ts
 import { isWordPage, slugFor, wordOfTheDay, ANSWER_WORDS } from "./words.ts";
 import { getEffectiveWorlds, getEffectiveWorld, WORLDS, WORLD_OVERRIDES_KEY } from "./worlds.ts";
 import { normalizeOverrides } from "./world-overrides.ts";
+import { getEffectiveVoice, knownClipSets, builtinClipSets, VOICE_OVERRIDES_KEY } from "./voice.ts";
+import { normalizeVoiceOverrides } from "./voice-overrides.ts";
 import { WordStats } from "./wordstats-do.ts";
 import { activeDate } from "./daily-core.ts";
 import type { World } from "./daily-core.ts";
@@ -403,6 +405,44 @@ export default {
         return new Response(JSON.stringify({ error: result.reason }), { status: 400, headers: { "content-type": "application/json" } });
       }
       await env.DIRECTORY.put(WORLD_OVERRIDES_KEY, JSON.stringify(result.value));
+      return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+    }
+
+    // Public effective voice map (code base silent-default + admin KV overrides).
+    if (url.pathname === "/voice-config.json" && req.method === "GET") {
+      const map = await getEffectiveVoice(env);
+      return new Response(JSON.stringify(map), {
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
+      });
+    }
+
+    // Admin: read effective map + base (world list + available clip sets) for the editor.
+    if (url.pathname === "/admin/voice" && req.method === "GET") {
+      const denied = requireAdmin(req, env);
+      if (denied) return denied;
+      const effective = await getEffectiveVoice(env);
+      const clipSets = await knownClipSets(env);
+      return new Response(JSON.stringify({ base: { worlds: WORLDS, clipSets, builtin: builtinClipSets() }, effective }), {
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
+      });
+    }
+
+    // Admin: write the voice override map.
+    if (url.pathname === "/admin/voice" && req.method === "POST") {
+      const denied = requireAdmin(req, env);
+      if (denied) return denied;
+      const len = Number(req.headers.get("content-length") ?? "0");
+      if (len > 64 * 1024) {
+        return new Response(JSON.stringify({ error: "payload_too_large" }), { status: 413, headers: { "content-type": "application/json" } });
+      }
+      let raw: unknown;
+      try { raw = await req.json(); }
+      catch { return new Response(JSON.stringify({ error: "bad_json" }), { status: 400, headers: { "content-type": "application/json" } }); }
+      const result = normalizeVoiceOverrides(raw, WORLDS, await knownClipSets(env));
+      if (!result.ok) {
+        return new Response(JSON.stringify({ error: result.reason }), { status: 400, headers: { "content-type": "application/json" } });
+      }
+      await env.DIRECTORY.put(VOICE_OVERRIDES_KEY, JSON.stringify(result.value));
       return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
     }
 
