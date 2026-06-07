@@ -21,6 +21,7 @@
 // (affordablePowerups / cheapestAvailableCost / isStuck) are exported for unit tests.
 import { GOLD, isBankrupt } from "/gold.js";
 import { powerUpsOn } from "/lane.js";
+import { activeDifficulty } from "/settings.js";
 
 // The catalogue. `icon` is what the popover shows; `cost` comes from gold.js; the
 // `available` predicate decides whether the power-up still has anything to offer this
@@ -292,13 +293,13 @@ export function giveUp(ctx) {
 }
 
 // Hard-Mode bankruptcy check — fires after any drain. Ends the game once gold sinks past
-// the threshold. Non-hard-mode never dies (gold just goes negative). Guarded fire-once
+// the threshold. Easy/medium never die (gold just goes negative). Guarded fire-once
 // via game.hasShownEndStats so a balance already in the red can't re-trigger.
 export function checkBankruptcy(ctx) {
-  const { game, getGold, getSettings } = ctx;
+  const { game, getGold } = ctx;
   const snap = game.snapshot;
   if (!snap || snap.phase !== "playing" || game.hasShownEndStats) return;
-  if (!isBankrupt(getGold(), getSettings().hardMode)) return;
+  if (!isBankrupt(getGold(), activeDifficulty() === "hard")) return;
   const me = snap.players.find((p) => p.username === ctx.getUsername?.());
   if (!me || me.status !== "playing") return;
   ctx.forfeit("bankrupt");

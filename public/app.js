@@ -13,7 +13,7 @@ import { GOLD, comboMultiplier, awardGold, goldDrain, escalatedPenalty, renderGo
 import { createHacklog } from "/hacklog.js";
 import { renderPowerups, resetPowerHints, handlePowerupMessage, bumpErrorCount, surfaceGiveUp, checkBankruptcy } from "/powerups.js";
 import { activeLayoutId, buildKeyboard, renderKeyboard, renderLayoutPicker, detectLayout } from "/keyboard.js";
-import { getSettings, saveSettings, applySettings, openSettings, openHub } from "/settings.js";
+import { getSettings, saveSettings, applySettings, openSettings, openHub, activeDifficulty } from "/settings.js";
 import { wireMuteBtn, toggleMuted } from "/mute-btn.js";
 import { buildShareCardModel, renderShareCard } from "/share-card.js";
 import { shareTargetUrl } from "/share-links.js";
@@ -2274,7 +2274,7 @@ function onServerMessage(msg) {
         const wasted = wastedDeadLettersInLast(me.guesses);
         let penalty = 0;
         const penaltyLines = [];
-        if (getSettings().hardMode) {
+        if (activeDifficulty() === "hard") {
           for (const letter of wasted.letters) {
             const reuse = game.deadLetterReuse.get(letter) ?? 0;
             const pen = escalatedPenalty(GOLD.wastedLetterPenalty, reuse);
@@ -4070,8 +4070,7 @@ function submitGuess() {
     bumpErrorCount(powerupsCtx); // still counts toward the 💀 offer — they're stuck
     return;
   }
-  const s = getSettings();
-  if (s.hardMode) {
+  if (activeDifficulty() === "hard") {
     const me = game.snapshot?.players.find((p) => p.username === getUsername());
     const violation = checkHardMode(game.pending, me?.guesses ?? []);
     if (violation) {
@@ -4083,7 +4082,7 @@ function submitGuess() {
   }
   // `hard` rides along so the server's pointsEarned applies the dead-letter penalty
   // only for hard-mode players — keeps settlement in lockstep with the client drain.
-  send({ type: "guess", word: game.pending, hard: !!s.hardMode });
+  send({ type: "guess", word: game.pending, hard: activeDifficulty() === "hard" });
 }
 
 function checkHardMode(guess, prevGuesses) {

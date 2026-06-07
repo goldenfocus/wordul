@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { GOLD, isBankrupt, BANKRUPTCY_THRESHOLD } from "/gold.js";
 import {
   affordablePowerups,
@@ -182,31 +182,23 @@ describe("💀 DOM wiring (surface + tap to give up)", () => {
 });
 
 describe("checkBankruptcy (Hard Mode only → forfeit 'bankrupt')", () => {
+  afterEach(() => localStorage.removeItem("wr.settings")); // a throwing test must not leak difficulty
   it("forfeits in Hard Mode once past the threshold", () => {
+    localStorage.setItem("wr.settings", JSON.stringify({ difficulty: "hard" }));
     const forfeit = vi.fn();
-    checkBankruptcy(makeCtx({
-      forfeit,
-      getGold: () => BANKRUPTCY_THRESHOLD - 50,
-      getSettings: () => ({ hardMode: true }),
-    }));
+    checkBankruptcy(makeCtx({ forfeit, getGold: () => BANKRUPTCY_THRESHOLD - 50 }));
     expect(forfeit).toHaveBeenCalledWith("bankrupt");
   });
   it("never forfeits in normal mode, even deeply negative", () => {
+    localStorage.setItem("wr.settings", JSON.stringify({ difficulty: "medium" }));
     const forfeit = vi.fn();
-    checkBankruptcy(makeCtx({
-      forfeit,
-      getGold: () => -99999,
-      getSettings: () => ({ hardMode: false }),
-    }));
+    checkBankruptcy(makeCtx({ forfeit, getGold: () => -99999 }));
     expect(forfeit).not.toHaveBeenCalled();
   });
   it("does not forfeit while still above the Hard-Mode threshold", () => {
+    localStorage.setItem("wr.settings", JSON.stringify({ difficulty: "hard" }));
     const forfeit = vi.fn();
-    checkBankruptcy(makeCtx({
-      forfeit,
-      getGold: () => BANKRUPTCY_THRESHOLD + 1,
-      getSettings: () => ({ hardMode: true }),
-    }));
+    checkBankruptcy(makeCtx({ forfeit, getGold: () => BANKRUPTCY_THRESHOLD + 1 }));
     expect(forfeit).not.toHaveBeenCalled();
   });
 });
