@@ -40,6 +40,23 @@ deployments-cicd, etc.) — they do not apply here.
 
 ---
 
+## Code organization — keep the hub files thin
+
+`public/app.js`, `src/room.ts`, and `src/worker.ts` are the files every feature wires
+into, which makes them the main merge-conflict surface across parallel tabs. Rules:
+
+- **New feature logic goes in its own module with its own test** — `public/<feature>.js`
+  for client code (pattern: `gold.js`, `powerups.js`, `keyboard.js`, `celebrate.js`),
+  `src/<feature>.ts` for worker code. The hub file gets only imports + wiring.
+- **Don't grow existing `// --- section ---` blocks in app.js** with new logic; extract
+  instead. When you're already editing a large self-contained section, extracting it
+  into a module is a welcome drive-by.
+- `test/loc-ratchet.test.ts` enforces a soft ceiling on the hub files (current size +
+  headroom). If it trips, **extract a module — don't raise the cap.** Raise a cap only
+  with a commit message explaining why extraction doesn't make sense.
+
+---
+
 ## Multi-tab rule (READ THIS FIRST)
 
 Many Claude tabs run against this repo at once. To stop tabs from overwriting each
