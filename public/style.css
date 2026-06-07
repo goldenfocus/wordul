@@ -3463,6 +3463,28 @@ body.playing .room-icon-btn { display: none; }
   font-family: var(--font-display); font-weight: 700; font-size: 15px;
   white-space: nowrap;
 }
+/* Capacity steppers — the host resizes the table right where the count lives.
+   Same control language as the dimpop .step buttons. */
+.cap-step {
+  width: 24px; height: 24px; flex: none; border-radius: var(--r-sm);
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--border));
+  background: color-mix(in oklab, var(--bg-card) 60%, transparent);
+  color: var(--accent); font-size: 14px; cursor: pointer;
+  display: grid; place-items: center; transition: 0.12s;
+}
+.cap-step:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 16%, transparent); }
+.cap-step:disabled { opacity: 0.3; cursor: default; }
+.cap-step[hidden] { display: none; }
+/* Watchers are company, not seats — a quiet chip after the count. */
+.mytable-watch {
+  font-family: var(--font-body); font-size: 11px; font-weight: 600;
+  color: var(--muted); white-space: nowrap;
+}
+/* Spectator's stand-in for the hidden Ready button. */
+.spectator-hint {
+  margin: 0; font-family: var(--font-body); font-size: 13px; font-weight: 600;
+  color: var(--muted); text-align: center;
+}
 
 /* 4 ── Compact floor rows (the existing .arena-row / .lobby-rail base stays). */
 .arena-row-dim { color: var(--accent); font-weight: 600; }

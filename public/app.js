@@ -2849,6 +2849,27 @@ function renderMyTable(snap) {
       ? `vs ${nGhosts} ghost${nGhosts === 1 ? "" : "s"}`
       : `${model.taken}/${model.capacity}`;
   }
+  // Capacity steppers — host-only, lobby-only, duel-only (the server enforces the same
+  // gate; these just don't render for anyone else). Bounds mirror onSetCapacity's clamp.
+  const capMinus = $("#capMinus");
+  const capPlus = $("#capPlus");
+  if (capMinus && capPlus) {
+    const editable = canEditCapacity(snap);
+    capMinus.hidden = capPlus.hidden = !editable;
+    if (editable) {
+      const lo = Math.max(MIN_CAPACITY, model.taken);
+      capMinus.disabled = model.capacity <= lo;
+      capPlus.disabled = model.capacity >= MAX_CAPACITY;
+    }
+    wireCapSteppers();
+  }
+  // Watchers are company, not seats — a quiet chip after the count.
+  const watchEl = $("#myTableWatch");
+  if (watchEl) {
+    const n = model.watching || 0;
+    watchEl.hidden = !n;
+    watchEl.textContent = n ? `+${n} watching` : "";
+  }
 }
 
 function render() {
@@ -2914,6 +2935,7 @@ function render() {
     syncLobbySetup(snap);
     if (snap.isDuel) applyDuelReadyButton(startBtn, snap, me);
     else startBtn.hidden = false;
+    applySpectatorHint(snap, me);
   } else if (snap.phase === "countdown") {
     lobby.hidden = true;
     endControls.hidden = true;
@@ -3343,6 +3365,43 @@ function canEditLength(snap) {
   if (!snap || snap.phase !== "lobby" || game.isDaily) return false;
   if (game.challengeId) return false;
   return !snap.hostId || snap.hostId === getUsername();
+}
+
+// Capacity is HOST authority — server-enforced (onSetCapacity), unlike the shared-control
+// size settings — so there is no un-hosted fallback here: no host, no steppers. Mirrors
+// the server clamp [max(2, seated), 6]; the snapshot repaints, we never desync optimistically.
+const MIN_CAPACITY = 2;
+const MAX_CAPACITY = 6;
+function canEditCapacity(snap) {
+  if (!snap || snap.phase !== "lobby" || game.isDaily || game.challengeId) return false;
+  if (!snap.isDuel) return false;
+  return !!snap.hostId && snap.hostId === getUsername();
+}
+function stepCapacity(d) {
+  const snap = game.snapshot;
+  if (!canEditCapacity(snap)) return;
+  const seated = (snap.players || []).filter((p) => p && p.role !== "spectator").length;
+  const lo = Math.max(MIN_CAPACITY, seated);
+  const clamped = Math.max(lo, Math.min(MAX_CAPACITY, (Number(snap.capacity) || MIN_CAPACITY) + d));
+  if (clamped === snap.capacity) return;
+  send({ type: "set_capacity", capacity: clamped });
+}
+function wireCapSteppers() {
+  for (const [id, d] of [["#capMinus", -1], ["#capPlus", 1]]) {
+    const btn = $(id);
+    if (btn && !btn.dataset.wired) {
+      btn.dataset.wired = "1";
+      btn.addEventListener("click", (e) => { e.stopPropagation(); stepCapacity(d); });
+    }
+  }
+}
+
+// Spectator's lobby view: the Ready button is hidden (role gate in applyDuelReadyButton);
+// this quiet line fills the hole so "no button" reads as a state, not a bug.
+function applySpectatorHint(snap, me) {
+  const hint = $("#spectatorHint");
+  if (!hint) return;
+  hint.hidden = !(snap.phase === "lobby" && snap.isDuel && me && me.role === "spectator");
 }
 
 // Dimension-control bounds. Cols mirror SUPPORTED_LENGTHS' ends; rows mirror the server

@@ -175,6 +175,7 @@
         </div>
         <button type="button" id="lobbySetup" class="lobby-setup" aria-label="Room setup" title="Length · theme" hidden>⚙</button>
         <button id="startBtn" class="btn primary small" hidden>Start game</button>
+        <p id="spectatorHint" class="spectator-hint" hidden>watching — table full</p>
       </div>
       <div id="endControls" class="lobby-controls" hidden>
         <button id="rematchBtn" class="btn primary small" hidden>Play again</button>
@@ -239,7 +240,10 @@
           <div class="mytable" id="myTable" hidden aria-label="Your table">
             <span class="mytable-lab"></span>
             <div class="mytable-seats" id="myTableSeats"></div>
+            <button type="button" class="cap-step" id="capMinus" aria-label="Fewer seats" hidden>−</button>
             <span class="mytable-cnt" id="myTableCount">1/2</span>
+            <button type="button" class="cap-step" id="capPlus" aria-label="More seats" hidden>+</button>
+            <span class="mytable-watch" id="myTableWatch" hidden></span>
           </div>
           <!-- Setup · Invite pair, sits BELOW the Start button (CSS order). Setup opens
                room settings (length · theme); Invite shares the room link. Wired once in

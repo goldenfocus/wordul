@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 
 const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const css = readFileSync(new URL("../public/style.css", import.meta.url), "utf8");
+const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 
 describe("lobby gating wiring", () => {
   it("canEditLength is host-gated and challenge-locked", () => {
@@ -32,5 +33,23 @@ describe("lobby v2 structural tokens", () => {
     expect(css).toContain("border-radius: var(--r-md)");
     expect(css).toContain("border-radius: var(--r-sm)");
     expect(css).toContain("gap: var(--space-2)");
+  });
+});
+
+describe("lobby v2 seat strip wiring", () => {
+  it("the seat strip carries capacity steppers, a watching chip, and the spectator hint", () => {
+    for (const id of ["capMinus", "capPlus", "myTableWatch", "spectatorHint"]) {
+      expect(html).toContain(`id="${id}"`);
+    }
+  });
+  it("canEditCapacity is strictly host-gated (server enforces; no un-hosted fallback)", () => {
+    const fn = app.slice(app.indexOf("function canEditCapacity"), app.indexOf("function canEditCapacity") + 400);
+    expect(fn).toContain("snap.hostId === getUsername()");
+    expect(fn).toContain("snap.isDuel");
+  });
+  it("stepCapacity clamps and sends set_capacity", () => {
+    const fn = app.slice(app.indexOf("function stepCapacity"), app.indexOf("function stepCapacity") + 600);
+    expect(fn).toContain('send({ type: "set_capacity"');
+    expect(fn).toContain("MAX_CAPACITY");
   });
 });
