@@ -3040,22 +3040,6 @@ html[data-themed] .daily-vibe-title {
   display: flex; flex-direction: column; align-items: center; gap: 12px;
   margin-top: 4px;
 }
-.daily-bridge-btn {
-  text-decoration: none; text-align: center;
-  /* a softly breathing glow, echoing .hero-btn / #dailyPlay */
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent) inset,
-              0 0 28px -8px color-mix(in srgb, var(--accent) 90%, transparent);
-  animation: daily-bridge-breathe 4.5s ease-in-out infinite;
-}
-.daily-bridge-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent) inset,
-              0 0 44px -6px color-mix(in srgb, var(--accent) 100%, transparent);
-}
-@keyframes daily-bridge-breathe {
-  0%,100% { box-shadow: 0 0 0 1px color-mix(in srgb,var(--accent) 12%,transparent) inset, 0 0 24px -10px color-mix(in srgb,var(--accent) 80%,transparent); }
-  50%     { box-shadow: 0 0 0 1px color-mix(in srgb,var(--accent) 20%,transparent) inset, 0 0 46px -6px color-mix(in srgb,var(--accent) 100%,transparent); }
-}
 /* The action rail under the Challenge CTA: Wiki · Recap · Past days · Home — quiet
    ghost chips, one row (wraps on tiny screens). Anchors wear .btn, so normalize them. */
 .daily-bridge-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
@@ -3065,19 +3049,15 @@ html[data-themed] .daily-vibe-title {
    calm and legible. (gold-coin/gold-floater rain is suppressed in JS too.) */
 body.reduced-motion .daily-unlock,
 body.reduced-motion .daily-unlock > *,
-body.reduced-motion .daily-reveal > *,
-body.reduced-motion .daily-bridge-btn {
+body.reduced-motion .daily-reveal > * {
   animation: none !important;
   opacity: 1 !important;
   transform: none !important;
 }
-body.reduced-motion .daily-bridge-btn:hover { transform: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .daily-unlock,
   .daily-unlock > *,
-  .daily-reveal > *,
-  .daily-bridge-btn { animation: none !important; opacity: 1 !important; }
-  .daily-bridge-btn:hover { transform: none !important; }
+  .daily-reveal > * { animation: none !important; opacity: 1 !important; }
 }
 
 /* --- The Living Lab reader (in-app blog-style discoveries) --- */
