@@ -279,6 +279,19 @@ export default {
       ));
     }
 
+    // Real-solve tape: /api/daily/<YYYY-MM-DD>/tape?u=<player>&t=<finisher token>.
+    // Proxies to the day's Room DO; the room enforces the token gate (tapes contain letters).
+    const dailyTape = url.pathname.match(/^\/api\/daily\/(\d{4}-\d{2}-\d{2})\/tape$/);
+    if (dailyTape && req.method === "GET") {
+      const u = normalizeUsername(url.searchParams.get("u") ?? "");
+      const t = url.searchParams.get("t") ?? "";
+      const stub = env.ROOM.get(env.ROOM.idFromName(`daily/${dailyTape[1]}`));
+      return stub.fetch(new Request(
+        `https://do/tape?u=${encodeURIComponent(u)}&t=${encodeURIComponent(t)}`,
+        { method: "GET" },
+      ));
+    }
+
     // Mint a challenge: POST /api/challenge
     if (url.pathname === "/api/challenge" && req.method === "POST") {
       const id = makeChallengeId();
