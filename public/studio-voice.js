@@ -19,23 +19,30 @@ async function load() {
   render();
 }
 
+function escapeAttr(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 function render() {
   const tb = $("#rows tbody"); tb.innerHTML = "";
   for (const w of BASE.worlds) {
     const e = working[w.id] ?? {};
     const tr = document.createElement("tr");
+    const wid = escapeAttr(w.id);
+    const wname = escapeAttr(w.name);
     tr.innerHTML = `
-      <td>${w.name}<br><span class="muted">${w.id}</span></td>
-      <td><input type="checkbox" ${e.on ? "checked" : ""} data-on="${w.id}"></td>
-      <td><select data-kind="${w.id}">
+      <td>${wname}<br><span class="muted">${wid}</span></td>
+      <td><input type="checkbox" ${e.on ? "checked" : ""} data-on="${wid}"></td>
+      <td><select data-kind="${wid}">
         <option value="">— silent —</option>
         <option value="ai" ${e.source?.kind === "ai" ? "selected" : ""}>AI voice</option>
         <option value="clips" ${e.source?.kind === "clips" ? "selected" : ""}>Clip set</option>
         <option value="record" disabled>Record (soon)</option>
         <option value="clone-sample" disabled>Clone from sample (soon)</option>
       </select></td>
-      <td data-detail="${w.id}"></td>
-      <td><button data-clear="${w.id}">Remove</button></td>`;
+      <td data-detail="${wid}"></td>
+      <td><button data-clear="${wid}">Remove</button></td>`;
     tb.appendChild(tr);
     renderDetail(w.id);
   }
@@ -43,15 +50,16 @@ function render() {
 }
 
 function renderDetail(id) {
-  const cell = $(`[data-detail="${id}"]`); const e = working[id] ?? {};
+  const eid = escapeAttr(id);
+  const cell = $(`[data-detail="${eid}"]`); const e = working[id] ?? {};
   if (e.source?.kind === "ai") {
-    const opts = aiVoiceNames().map((n) => `<option ${n === e.source.voiceName ? "selected" : ""}>${n}</option>`).join("");
-    cell.innerHTML = `<select data-ai-voice="${id}">${opts}</select>
-      <label>rate <input type="number" step="0.1" min="0.5" max="2" value="${e.source.rate ?? 1}" data-ai-rate="${id}" style="width:4rem"></label>
-      <label>pitch <input type="number" step="0.1" min="0" max="2" value="${e.source.pitch ?? 1}" data-ai-pitch="${id}" style="width:4rem"></label>`;
+    const opts = aiVoiceNames().map((n) => `<option ${n === e.source.voiceName ? "selected" : ""}>${escapeAttr(n)}</option>`).join("");
+    cell.innerHTML = `<select data-ai-voice="${eid}">${opts}</select>
+      <label>rate <input type="number" step="0.1" min="0.5" max="2" value="${e.source.rate ?? 1}" data-ai-rate="${eid}" style="width:4rem"></label>
+      <label>pitch <input type="number" step="0.1" min="0" max="2" value="${e.source.pitch ?? 1}" data-ai-pitch="${eid}" style="width:4rem"></label>`;
   } else if (e.source?.kind === "clips") {
-    const sets = BASE.clipSets.map((s) => `<option ${s === e.source.clipSetId ? "selected" : ""}>${s}</option>`).join("");
-    cell.innerHTML = `reuse set <select data-clip-set="${id}">${sets}</select>
+    const sets = BASE.clipSets.map((s) => `<option ${s === e.source.clipSetId ? "selected" : ""}>${escapeAttr(s)}</option>`).join("");
+    cell.innerHTML = `reuse set <select data-clip-set="${eid}">${sets}</select>
       <span class="muted">(upload UI: POST /admin/voice/clips per line — v1 reuse only)</span>`;
   } else { cell.innerHTML = `<span class="muted">no voice</span>`; }
 }
@@ -85,6 +93,7 @@ $("#save").onclick = async () => {
 };
 
 $("#token").value = localStorage.getItem(TOKEN_LS) ?? "";
-$("#token").onchange = () => localStorage.setItem(TOKEN_LS, token());
+$("#token").addEventListener("input", () => localStorage.setItem(TOKEN_LS, token()));
+$("#token").addEventListener("change", () => { if (token()) load(); });
 if ($("#token").value) load();
 window.speechSynthesis?.addEventListener?.("voiceschanged", () => { for (const w of BASE.worlds) renderDetail(w.id); });
