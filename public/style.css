@@ -854,14 +854,6 @@ body.reduced-motion .tile.ghost-cursor {
   padding: 4px;
 }
 .lobby-controls { display: flex; align-items: center; gap: 10px; }
-/* The lobby gear — one bare ⚙ that opens Settings (length · theme live there). */
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 38px; height: 38px;
-  background: var(--bg); color: var(--fg);
-  border: 1px solid var(--border); border-radius: 999px;
-  cursor: pointer; font-size: 17px; line-height: 1;
-}
-.lobby-setup:hover { border-color: var(--accent); }
 
 /* Boards — hero + strip at EVERY width. Opponents collapse into a compact horizontal
    strip on top; YOUR board is the full-width hero below it. This used to be the
@@ -1301,17 +1293,6 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
   line-height: 1;
   text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
 }
-.chat-close-btn {
-  display: none;
-  background: transparent;
-  border: 0;
-  color: var(--fg);
-  font-size: 18px;
-  cursor: pointer;
-  padding: 4px 8px;
-  margin-left: auto;
-}
-
 /* === Mobile: chat becomes a slide-up bottom sheet === */
 @media (max-width: 520px) {
   /* Hide the inline chat panel; it'll be repositioned + animated. */
@@ -1335,10 +1316,9 @@ body.reduced-motion .grid-row.wipe .tile { animation: none; }
   .chat-panel:not(.sheet-open) { pointer-events: none; }
   .chat-panel.sheet-open { pointer-events: auto; }
 
-  /* The collapse caret + badge are desktop UI; on mobile we use the X close button. */
+  /* The collapse caret + badge are desktop UI; a header tap or backdrop tap closes. */
   .chat-toggle { padding: 14px 16px; }
   .chat-toggle-caret, .chat-badge { display: none; }
-  .chat-close-btn { display: inline-flex; }
 
   /* Always expanded on mobile — collapse is meaningless when the sheet hides itself. */
   .chat-panel.collapsed .chat-body { display: flex !important; }
@@ -1565,6 +1545,9 @@ html[data-edition="default"] .key.pressed {
 .mute-icon:hover { opacity: 1; }
 .mute-icon:active { transform: translateY(-50%) scale(0.92); }
 .mute-icon.is-muted { opacity: 0.9; }
+/* The lobby is quiet chrome — no floating speaker there ("looks off" feedback, Jun 7).
+   Sound still toggles in the avatar hub; the icon returns for play, where audio lives. */
+body.lobby .mute-icon { display: none; }
 .magic-popover {
   /* The magic-bar now sits ABOVE the board, so the popover opens DOWNWARD. */
   position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
@@ -3287,6 +3270,11 @@ body.reduced-motion .lobby-aura .lobby-aura-b { animation: none !important; }
    Default (NOT lobby): the wrappers vanish from the box tree so #boards and the
    reparented nodes flow exactly as they did pre-redesign during play/finished. */
 .lobby-grid, .lobby-left, .lobby-right { display: contents; }
+/* .screen.room is a centering flex column, so #tabPlay would otherwise shrink-wrap to
+   its content — making the grid (and the board, width:100%) GROW as the seat strip
+   gains seats ("the Wordle itself is expanding" feedback, Jun 7). Full width pins the
+   two-zone geometry; the grid below centers itself via margin:auto + max-width. */
+body.lobby #tabPlay { width: 100%; }
 body.lobby .lobby-grid {
   display: grid;
   grid-template-columns: 1.06fr 0.94fr;
@@ -3389,22 +3377,22 @@ body.lobby .lobby-left .lobby-controls .btn.primary:disabled {
 .lobby-pair { display: none; }
 .lobby-pair[hidden] { display: none; }
 body.lobby .lobby-left .lobby-pair {
-  display: flex; gap: var(--space-2);
+  display: flex; justify-content: center; gap: var(--space-5);
   width: 100%; max-width: 320px;
   order: 5; /* #lobbyControls is appended last in lobby (DOM order ~4); keep pair after it */
 }
 body.lobby .lobby-left .lobby-controls { order: 4; }
+/* Pure icons — no pill chrome ("over-peeled" feedback, Jun 7). The aria-label/title
+   carry the words; 44px hit area around a 20px glyph. */
 .lobby-pair-btn {
-  flex: 1; height: 42px;
-  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
-  border: 1px solid color-mix(in oklab, var(--fg) 9%, var(--border));
-  background: color-mix(in oklab, var(--bg-card) 40%, transparent);
-  color: var(--fg); border-radius: var(--r-sm); cursor: pointer;
-  font-family: var(--font-body); font-weight: 600; font-size: 13px;
-  transition: border-color 0.16s ease, color 0.16s ease;
+  flex: none; width: 44px; height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: none;
+  color: var(--muted); border-radius: var(--r-sm); cursor: pointer;
+  transition: color 0.16s ease;
 }
-.lobby-pair-btn:hover { border-color: var(--accent); color: var(--accent); }
-.lobby-pair-btn.invite:hover { border-color: var(--warm); color: var(--warm); }
+.lobby-pair-btn:hover { color: var(--accent); }
+.lobby-pair-btn.invite:hover { color: var(--warm); }
 .lobby-pair-btn svg { flex: none; }
 
 /* 6 ── Header icon buttons (share / gear). They share .icon-btn; add only the
@@ -3479,17 +3467,24 @@ body.playing .room-icon-btn { display: none; }
 
 /* 3 ── Your table seat strip ───────────────────────────────────────────────*/
 .mytable {
-  width: 100%; max-width: 340px;
+  width: 100%; max-width: 430px;
   display: flex; align-items: center; gap: var(--space-3);
   border-top: 1px solid var(--border); padding-top: var(--space-4);
 }
 /* Label trimmed to glyphs+count (aria-label="Your table" carries the meaning). */
 .mytable-lab { display: none; }
-/* Capacity is up to 8 — wrap so seats never overflow on mobile. */
+/* Seats stay ONE stable row at every capacity (2–6) — the strip is wide enough for
+   six 40px seats plus the count/steppers, so nothing wraps or resizes as the host
+   steps the table up and down ("five players goes to the second row" feedback). */
 .mytable-seats { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: 1; }
 .seat {
-  width: 44px; height: 44px; flex: none;
-  border-radius: var(--r-md); display: grid; place-items: center; font-size: 21px;
+  width: 40px; height: 40px; flex: none;
+  border-radius: var(--r-md); display: grid; place-items: center; font-size: 20px;
+}
+/* Phones: shrink seats so capacity 6 still fits one row beside the count. */
+@media (max-width: 520px) {
+  .seat { width: 32px; height: 32px; font-size: 16px; }
+  .mytable { gap: var(--space-2); }
 }
 .seat.you {
   background: linear-gradient(135deg, var(--accent), var(--warm));
@@ -3512,15 +3507,14 @@ body.playing .room-icon-btn { display: none; }
   white-space: nowrap;
 }
 /* Capacity steppers — the host resizes the table right where the count lives.
-   Same control language as the dimpop .step buttons. */
+   Bare glyphs, no pill chrome ("over-peeled" feedback, Jun 7). */
 .cap-step {
-  width: 24px; height: 24px; flex: none; border-radius: var(--r-sm);
-  border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--border));
-  background: color-mix(in oklab, var(--bg-card) 60%, transparent);
-  color: var(--accent); font-size: 14px; cursor: pointer;
+  width: 28px; height: 28px; flex: none; border-radius: var(--r-sm);
+  border: none; background: none;
+  color: var(--accent); font-size: 17px; cursor: pointer;
   display: grid; place-items: center; transition: 0.12s;
 }
-.cap-step:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 16%, transparent); }
+.cap-step:hover:not(:disabled) { background: color-mix(in oklab, var(--accent) 14%, transparent); }
 .cap-step:disabled { opacity: 0.3; cursor: default; }
 .cap-step[hidden] { display: none; }
 /* Watchers are company, not seats — a quiet chip after the count. */
@@ -3606,7 +3600,7 @@ body.lobby #chatPanel {
   transform: none;
   width: 100%;
   max-width: none;
-  max-height: 320px;
+  max-height: none;
   border-radius: 6px;
   border: 1px solid color-mix(in oklab, var(--fg) 7%, var(--border));
   background: color-mix(in oklab, var(--bg-card) 60%, transparent);
@@ -3615,7 +3609,14 @@ body.lobby #chatPanel {
   z-index: 1;
   pointer-events: auto;
 }
-body.lobby #chatLog { max-height: 200px; }
+/* No "CHAT" header in the lobby — the input ("Chat") is the whole affordance; the
+   channel tab row becomes the header. The log is a FIXED height so the panel never
+   grows as messages arrive (it scrolls internally) and the send button never clips. */
+body.lobby .chat-toggle { display: none; }
+body.lobby .chat-body { border-top: none; }
+/* With no header there is no collapse affordance — the lobby chat is always open. */
+body.lobby #chatPanel.collapsed .chat-body { display: flex; }
+body.lobby #chatLog { height: 150px; min-height: 0; max-height: none; flex: none; }
 
 /* 7 ── Bloom-on-start: stagger the full grid's rows in when leaving lobby. */
 .boards.blooming .grid-row {

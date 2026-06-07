@@ -1737,7 +1737,6 @@ function wireChat() {
   const form = $("#chatForm");
   const input = $("#chatInput");
   const toggle = $("#chatToggle");
-  const closeBtn = $("#chatCloseBtn");
   const backdrop = $("#chatBackdrop");
   const topBtn = $("#chatTopBtn");
 
@@ -1763,12 +1762,10 @@ function wireChat() {
     $("#chatTabTable")?.addEventListener("click", () => switchChatChannel("table"));
   }
 
-  // Desktop toggle: collapse/expand inline panel. Pointer events on the inner X close
-  // button still need to reach the close handler, so stop propagation there.
+  // Desktop toggle: collapse/expand inline panel.
   if (toggle) {
-    toggle.addEventListener("click", (e) => {
-      if (e.target?.id === "chatCloseBtn") return;
-      // On mobile we use the X close button — toggle taps in the header bar still close the sheet.
+    toggle.addEventListener("click", () => {
+      // On mobile a header-bar tap closes the sheet (backdrop tap does too).
       if (isMobile()) {
         closeChatSheet();
         return;
@@ -1785,12 +1782,6 @@ function wireChat() {
     });
   }
 
-  if (closeBtn) {
-    closeBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      closeChatSheet();
-    });
-  }
   if (backdrop) backdrop.addEventListener("click", closeChatSheet);
   // Visibility is owned by render() (gated on player count); we just wire the tap.
   if (topBtn) {
@@ -1830,7 +1821,7 @@ function renderChatChannel() {
   if (placeholder) placeholder.hidden = !isGlobal;
   if (input) {
     input.disabled = isGlobal;
-    input.placeholder = isGlobal ? "Global chat coming soon…" : "Message your table…";
+    input.placeholder = isGlobal ? "Global chat coming soon…" : "Chat";
   }
 }
 
@@ -2991,7 +2982,6 @@ function render() {
     lobby.hidden = false;
     endControls.hidden = true;
     syncModePicker(snap);
-    syncLobbySetup(snap);
     if (snap.isDuel) applyDuelReadyButton(startBtn, snap, me);
     else startBtn.hidden = false;
     applySpectatorHint(snap, me);
@@ -3537,18 +3527,6 @@ function wireDim() {
   $("#colPlus")?.addEventListener("click", (e) => { e.stopPropagation(); stepCols(1); });
   $("#rowMinus")?.addEventListener("click", (e) => { e.stopPropagation(); stepRows(-1); });
   $("#rowPlus")?.addEventListener("click", (e) => { e.stopPropagation(); stepRows(1); });
-}
-
-// The lobby gear — one bare ⚙ that opens Settings (where length + theme live). The
-// "5 letters · Theme" label is gone; the gear is the whole affordance.
-function syncLobbySetup() {
-  const btn = $("#lobbySetup");
-  if (!btn) return;
-  btn.hidden = false;
-  if (!btn.dataset.wired) {
-    btn.dataset.wired = "1";
-    btn.addEventListener("click", () => showSettings());
-  }
 }
 
 // Per-room cumulative scoreboard (wins/played across rounds), sorted by wins desc.
