@@ -1306,6 +1306,9 @@ function renderFeedPostBody(post, status) {
   const v = computeFeedPostView(post);
   const article = document.createElement("article"); article.className = "lab-post";
   const h1 = document.createElement("h1"); h1.className = "lab-post-title"; h1.textContent = v.title; article.appendChild(h1);
+  // Lab days are UTC days — say it, or a 9pm evening reads as the "wrong" date.
+  const utc = document.createElement("p"); utc.className = "muted small lab-utc-note";
+  utc.textContent = "Lab days tick over at midnight UTC."; article.appendChild(utc);
   if (v.intro) { const intro = document.createElement("p"); intro.className = "lab-post-intro"; intro.textContent = v.intro; article.appendChild(intro); }
   if (v.findings.length) {
     const ul = document.createElement("ul"); ul.className = "lab-findings";

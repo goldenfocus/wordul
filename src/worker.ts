@@ -912,10 +912,11 @@ function withJsonCache(res: Response, maxAge: number): Response {
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
-async function fetchSummary(env: Env, date: string, today: string): Promise<SciencePublicDailySummary> {
+async function fetchSummary(env: Env, date: string, today: string, answer?: string): Promise<SciencePublicDailySummary> {
   const includeWords = date < today;
   const stub = env.SCIENCE.get(env.SCIENCE.idFromName(date));
-  const res = await stub.fetch(`https://do/summary?date=${date}&includeWords=${includeWords ? "1" : "0"}`);
+  const answerParam = answer ? `&answer=${encodeURIComponent(answer)}` : "";
+  const res = await stub.fetch(`https://do/summary?date=${date}&includeWords=${includeWords ? "1" : "0"}${answerParam}`);
   return (await res.json()) as SciencePublicDailySummary;
 }
 
@@ -926,7 +927,10 @@ async function fetchWorld(env: Env, date: string): Promise<World> {
 
 async function feedDailyPost(env: Env, date: string): Promise<FeedPost> {
   const today = activeDate(Date.now());
-  const [summary, world] = await Promise.all([fetchSummary(env, date, today), fetchWorld(env, date)]);
+  // World first: its word keys the daily-only fallback bucket for days recorded before
+  // per-kind science scopes. buildDailyPost still gates what the active day may show.
+  const world = await fetchWorld(env, date);
+  const summary = await fetchSummary(env, date, today, world.word);
   return buildDailyPost(summary, world, BRAIN_NOTES, { todayUTC: today });
 }
 
@@ -968,7 +972,10 @@ function feedPostProse(post: FeedPost, origin: string): string {
     `<aside class="brain-note" data-pillar="${n.pillar}"><h3>${escapeHtml(n.title)}</h3>` +
     `<p>${escapeHtml(n.note)}</p>${n.citation ? `<cite>${escapeHtml(n.citation)}</cite>` : ""}</aside>`).join("");
   const ed = post.editorial?.intro ? `<p class="lab-intro">${escapeHtml(post.editorial.intro)}</p>` : "";
-  return `<article><h1>${escapeHtml(post.headline)}</h1>${ed}` +
+  // Lab days are UTC days — said out loud, because a 9pm evening in New York is
+  // already "tomorrow" in the Lab and the date reads off-by-one otherwise.
+  const utcNote = `<p class="muted small lab-utc-note">Lab days tick over at midnight UTC.</p>`;
+  return `<article><h1>${escapeHtml(post.headline)}</h1>${utcNote}${ed}` +
     `<ul class="findings">${findings}</ul>${notes}` +
     `<p class="pillars">${post.pillars.map(escapeHtml).join(" · ")}</p>` +
     `<nav><a href="${origin}/feed">← the Lab feed</a></nav></article>`;

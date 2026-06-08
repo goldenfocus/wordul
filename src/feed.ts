@@ -3,7 +3,7 @@
 // aggregates so the data block can never drift from truth. English-templated prose
 // (i18n of generated prose is a future layer).
 import type { World } from "./daily-core.ts";
-import type { SciencePublicDailySummary, ScienceWeeklySummary } from "./science.ts";
+import type { CounterMap, SciencePublicDailySummary, ScienceWeeklySummary } from "./science.ts";
 
 export type Pillar = "mind" | "body" | "spirit" | "soul";
 
@@ -78,10 +78,34 @@ function uniquePillars(notes: BrainNote[]): Pillar[] {
   return order.filter((p) => present.has(p));
 }
 
+/** The daily-race-only slice of a day's science. The pooled totals mix room races and
+ *  challenges (a race logs a loss for every non-winner), which crushed the daily solve
+ *  rate (Jun 7 2026: "32% found it" when both real daily players solved). Days recorded
+ *  before per-kind scopes fall back to the daily answer's own word bucket; guess-level
+ *  extras (openers, hints) exist only when the kind scope itself does. */
+type DailyScope = {
+  finishes: number;
+  wins: number;
+  guessDistribution: CounterMap;
+  openers?: { count: number; grayOnly: number };
+  revealHints?: CounterMap;
+};
+
+function dailyScope(s: SciencePublicDailySummary): DailyScope | null {
+  const k = s.kinds?.daily;
+  if (k && k.playerFinishes > 0) {
+    return { finishes: k.playerFinishes, wins: k.wins, guessDistribution: k.guessDistribution,
+      openers: k.openers, revealHints: k.revealHints };
+  }
+  const w = s.dailyWord;
+  if (w && w.finishes > 0) return { finishes: w.finishes, wins: w.wins, guessDistribution: w.guesses };
+  return null;
+}
+
 function buildHighlights(s: SciencePublicDailySummary, world: World): Highlight[] {
   const out: Highlight[] = [{ label: "Word", value: world.word }];
-  const sr = pct(s.totals.wins, s.totals.playerFinishes);
-  if (s.totals.playerFinishes > 0) out.push({ label: "Solve rate", value: `${sr}%` });
+  const scope = dailyScope(s);
+  if (scope) out.push({ label: "Solve rate", value: `${pct(scope.wins, scope.finishes)}%` });
   return out;
 }
 
@@ -103,7 +127,7 @@ export function buildDailyPost(
   // Privacy gate enforced HERE (Task 4 expands the teaser): the active/future day
   // exposes participation only — never solve rate, difficulty, or the answer word.
   if (!isPast) {
-    const finishes = summary.totals.playerFinishes;
+    const finishes = dailyScope(summary)?.finishes ?? 0;
     const findings: Finding[] = finishes > 0
       ? [{ kind: "participation", value: finishes, display: String(finishes), text: `${finishes} players are wordling today.` }]
       : [];
@@ -126,16 +150,17 @@ export function buildDailyPost(
   };
 }
 
-/** Share (%) of opening guesses that hit nothing (all gray), or null if no opener data. */
+/** Share (%) of daily opening guesses that hit nothing (all gray), or null if no opener data. */
 export function grayOpenerRate(s: SciencePublicDailySummary): number | null {
-  const g1 = s.guesses["1"];
-  if (!g1 || g1.count <= 0) return null;
-  return Math.round((g1.grayOnly / g1.count) * 100);
+  const o = dailyScope(s)?.openers;
+  if (!o || o.count <= 0) return null;
+  return Math.round((o.grayOnly / o.count) * 100);
 }
 
-/** Share (%) of finishes that revealed a letter, from the reveal-hint histogram, or null. */
+/** Share (%) of daily finishes that revealed a letter, from the reveal-hint histogram, or null. */
 export function letterRevealRate(s: SciencePublicDailySummary): number | null {
-  const hist = s.hintUsage.revealHints;
+  const hist = dailyScope(s)?.revealHints;
+  if (!hist) return null;
   const total = Object.values(hist).reduce((a, b) => a + b, 0);
   if (total <= 0) return null;
   const hinted = Object.entries(hist).reduce((a, [k, v]) => (k === "0" ? a : a + v), 0);
@@ -143,19 +168,20 @@ export function letterRevealRate(s: SciencePublicDailySummary): number | null {
 }
 
 function buildDailyFindings(s: SciencePublicDailySummary): Finding[] {
-  const finishes = s.totals.playerFinishes;
+  const scope = dailyScope(s);
   const out: Finding[] = [];
-  if (finishes <= 0) return out;
+  if (!scope) return out; // no daily-scoped source → publish honestly empty, never the pool
 
-  const solveRate = pct(s.totals.wins, finishes);
+  const finishes = scope.finishes;
+  const solveRate = pct(scope.wins, finishes);
   out.push({ kind: "solve_rate", value: solveRate, display: `${solveRate}%`, text: `${solveRate}% of players solved it.` });
 
-  const median = medianFromDistribution(s.outcomes.guessDistribution);
+  const median = medianFromDistribution(scope.guessDistribution);
   if (median != null) out.push({ kind: "median_guesses", value: median, display: String(median), text: `The middle player solved it in ${median} guesses.` });
 
   out.push({ kind: "participation", value: finishes, display: String(finishes), text: `${finishes} players finished the day.` });
 
-  const firstTry = s.outcomes.guessDistribution["1"] ?? 0;
+  const firstTry = scope.guessDistribution["1"] ?? 0;
   if (firstTry > 0) out.push({ kind: "first_try_solves", value: firstTry, display: String(firstTry), text: `${firstTry} nailed it on the very first guess.` });
 
   const gray = grayOpenerRate(s);

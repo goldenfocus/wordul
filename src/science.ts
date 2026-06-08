@@ -91,6 +91,22 @@ export type ScienceWordBucket = {
   averageGuesses: RunningStats;
 };
 
+// Per-roomKind slice of the day. The pooled totals mix daily, room races and
+// challenges — a race records a loss for every non-winner, which crushed the daily
+// post's solve rate (Jun 7 2026: "32% found it" when both real daily players solved).
+// The Lab's daily findings read kinds.daily and never the pool. Bot plays never land
+// here (and shouldn't reach science at all — see Room.scienceEnabled).
+export type ScienceKindScope = {
+  playerFinishes: number;
+  wins: number;
+  losses: number;
+  resigns: number;
+  guessDistribution: CounterMap;
+  openers: { count: number; grayOnly: number };
+  revealHints: CounterMap;
+  vowelHints: CounterMap;
+};
+
 export type ScienceDailyState = {
   schemaVersion: number;
   date: string;
@@ -130,6 +146,7 @@ export type ScienceDailyState = {
     revealHints: CounterMap;
     vowelHints: CounterMap;
   };
+  kinds: Partial<Record<ScienceRoomKind, ScienceKindScope>>;
   words: Record<string, ScienceWordBucket>;
 };
 
@@ -142,6 +159,11 @@ export type SciencePublicDailySummary = Omit<ScienceDailyState, "words"> & {
     wordStats: "withheld" | "k-anonymized";
   };
   words?: Record<string, ScienceWordBucket>;
+  /** The day's own answer bucket, attached only when the caller passes `dailyAnswer`
+   *  (a word it asserts is already public — i.e. a finished day's daily). Lets the Lab
+   *  show honest daily stats for days recorded before per-kind scopes existed, where
+   *  the K=3 word map would withhold a 2-player day entirely. */
+  dailyWord?: ScienceWordBucket;
 };
 
 export type ScienceWeeklySummary = {
@@ -195,6 +217,7 @@ export function emptyScienceState(date: string, now = Date.now()): ScienceDailyS
     },
     powerups: { reveal_letter: 0, vowel_count: 0 },
     hintUsage: { revealHints: {}, vowelHints: {} },
+    kinds: {},
     words: {},
   };
 }
@@ -247,12 +270,35 @@ export function applyScienceEvent(state: ScienceDailyState, event: ScienceEvent)
       break;
   }
 
+  applyToKindScope(state, event);
   return state;
+}
+
+/** Mirror the human guess/finish counters into the event's roomKind scope, so the
+ *  daily can be read without the room/challenge pool (see ScienceKindScope). */
+function applyToKindScope(state: ScienceDailyState, event: ScienceEvent): void {
+  if (event.isBot) return;
+  if (event.type !== "guess_accepted" && event.type !== "player_finished") return;
+  const scope = (state.kinds[event.roomKind] ??= emptyKindScope());
+  if (event.type === "guess_accepted") {
+    if (event.guessNumber === 1) {
+      scope.openers.count += 1;
+      if (event.gray === event.wordLength) scope.openers.grayOnly += 1;
+    }
+    return;
+  }
+  scope.playerFinishes += 1;
+  if (event.outcome === "won") scope.wins += 1;
+  else if (event.outcome === "resigned") scope.resigns += 1;
+  else scope.losses += 1;
+  inc(scope.guessDistribution, String(event.guesses));
+  inc(scope.revealHints, String(event.revealHints));
+  inc(scope.vowelHints, String(event.vowelHints));
 }
 
 export function publicScienceSummary(
   state: ScienceDailyState,
-  opts: { includeWords?: boolean; generatedAt?: number } = {},
+  opts: { includeWords?: boolean; generatedAt?: number; dailyAnswer?: string } = {},
 ): SciencePublicDailySummary {
   const includeWords = !!opts.includeWords;
   const { words: _privateWords, ...publicState } = state;
@@ -272,6 +318,11 @@ export function publicScienceSummary(
       if (bucket.finishes >= SCIENCE_WORD_K) words[answer] = bucket;
     }
     summary.words = words;
+  }
+  // The caller asserts dailyAnswer is already public (a finished day's word), so its
+  // bucket ships below the K line — counts only, still no usernames or timelines.
+  if (opts.dailyAnswer && state.words[opts.dailyAnswer]) {
+    summary.dailyWord = state.words[opts.dailyAnswer];
   }
   return summary;
 }
@@ -406,6 +457,19 @@ function emptyGuessBucket(): ScienceGuessBucket {
     yellowTiles: 0,
     maskPatterns: {},
     elapsedMs: emptyRunningStats(),
+  };
+}
+
+function emptyKindScope(): ScienceKindScope {
+  return {
+    playerFinishes: 0,
+    wins: 0,
+    losses: 0,
+    resigns: 0,
+    guessDistribution: {},
+    openers: { count: 0, grayOnly: 0 },
+    revealHints: {},
+    vowelHints: {},
   };
 }
 

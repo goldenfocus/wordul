@@ -2,25 +2,38 @@
 import { describe, expect, it } from "vitest";
 import { buildDailyPost, buildWeeklyPost, grayOpenerRate, letterRevealRate, matchBrainNotes } from "../src/feed.ts";
 import { BRAIN_NOTES } from "../src/brain-notes.ts";
-import type { SciencePublicDailySummary } from "../src/science.ts";
+import type { ScienceKindScope, SciencePublicDailySummary } from "../src/science.ts";
 import type { ScienceWeeklySummary } from "../src/science.ts";
 import type { World } from "../src/daily-core.ts";
+
+// The daily scope the post is ABOUT. Pooled `totals` in these fixtures are deliberately
+// different (999 finishes / 1 win) so any finding leaking from the cross-mode pool fails loudly.
+function dailyScope(over: Partial<ScienceKindScope> = {}): ScienceKindScope {
+  return {
+    playerFinishes: 100, wins: 64, losses: 30, resigns: 6,
+    guessDistribution: { "1": 4, "3": 30, "4": 40, "5": 20, "6": 6 },
+    openers: { count: 0, grayOnly: 0 },
+    revealHints: {}, vowelHints: {},
+    ...over,
+  };
+}
 
 function summary(date: string, over: Partial<SciencePublicDailySummary> = {}): SciencePublicDailySummary {
   return {
     schemaVersion: 1, date, createdAt: 0, updatedAt: 0,
-    totals: { events: 0, roundsStarted: 0, acceptedGuesses: 0, playerFinishes: 100,
-      wins: 64, losses: 30, resigns: 6, powerups: 0, botEvents: 0 },
+    totals: { events: 0, roundsStarted: 0, acceptedGuesses: 0, playerFinishes: 999,
+      wins: 1, losses: 990, resigns: 8, powerups: 0, botEvents: 0 },
     segments: { roomKind: {}, wordLength: {}, mode: {}, edition: {} },
     participants: { roundStarts: 0,
       observedHumansAtStart: { count: 0, sum: 0, min: null, max: null, mean: null },
       observedBotsAtStart: { count: 0, sum: 0, min: null, max: null, mean: null } },
     guesses: {},
-    outcomes: { byResult: {}, guessDistribution: { "1": 4, "3": 30, "4": 40, "5": 20, "6": 6 },
+    outcomes: { byResult: {}, guessDistribution: { "6": 999 },
       elapsedMs: { count: 0, sum: 0, min: null, max: null, mean: null },
       points: { count: 0, sum: 0, min: null, max: null, mean: null } },
     powerups: { reveal_letter: 0, vowel_count: 0 },
     hintUsage: { revealHints: {}, vowelHints: {} },
+    kinds: { daily: dailyScope() },
     generatedAt: 0,
     privacy: { noUsernames: true, noRawTimelines: true, wordStatsK: 3, wordStats: "k-anonymized" },
     ...over,
@@ -33,24 +46,22 @@ const world = (over: Partial<World> = {}): World => ({
 });
 
 describe("buildDailyPost — extended findings", () => {
-  it("adds first-try, gray-opener, and letter-reveal findings when data supports them", () => {
+  it("adds first-try, gray-opener, and letter-reveal findings from the DAILY scope", () => {
     const s = summary("2026-06-02", {
-      guesses: {
-        "1": { count: 90, solved: 4, grayOnly: 30, greenTiles: 0, yellowTiles: 0, maskPatterns: {},
-          elapsedMs: { count: 0, sum: 0, min: null, max: null, mean: null } },
-      },
-      hintUsage: { revealHints: { "0": 89, "1": 11 }, vowelHints: {} },
+      kinds: { daily: dailyScope({
+        openers: { count: 90, grayOnly: 30 },
+        revealHints: { "0": 89, "1": 11 },
+      }) },
     });
     const post = buildDailyPost(s, world(), [], { todayUTC: "2026-06-03" });
     const byKind = Object.fromEntries(post.findings.map((f) => [f.kind, f]));
-    expect(byKind.first_try_solves.value).toBe(4);          // guessDistribution["1"] = 4 of 100
-    expect(byKind.gray_opener_rate.value).toBe(33);          // 30 of 90 opening guesses all-gray
-    expect(byKind.letter_reveal_rate.value).toBe(11);        // 11 of 100 revealed a letter
+    expect(byKind.first_try_solves.value).toBe(4);          // daily guessDistribution["1"] = 4 of 100
+    expect(byKind.gray_opener_rate.value).toBe(33);          // 30 of 90 daily opening guesses all-gray
+    expect(byKind.letter_reveal_rate.value).toBe(11);        // 11 of 100 daily finishers revealed a letter
   });
 
   it("omits findings the data cannot support", () => {
-    const post = buildDailyPost(summary("2026-06-02", { guesses: {}, hintUsage: { revealHints: {}, vowelHints: {} } }),
-      world(), [], { todayUTC: "2026-06-03" });
+    const post = buildDailyPost(summary("2026-06-02"), world(), [], { todayUTC: "2026-06-03" });
     const kinds = post.findings.map((f) => f.kind);
     expect(kinds).not.toContain("gray_opener_rate");
     expect(kinds).not.toContain("letter_reveal_rate");
@@ -88,6 +99,7 @@ describe("privacy gate — active day", () => {
     expect(post.published).toBe(false);
     const kinds = post.findings.map((f) => f.kind);
     expect(kinds).toEqual(["participation"]);           // ONLY participation
+    expect(post.findings[0].value).toBe(100);            // daily players — never the 999 cross-mode pool
     expect(post.brainNotes).toEqual([]);
     expect(post.pillars).toEqual([]);
     expect(post.highlights).toEqual([]);
@@ -103,16 +115,48 @@ describe("privacy gate — active day", () => {
 });
 
 describe("buildDailyPost — past-day data block", () => {
-  it("computes an honest solve rate, median, and participation from the summary", () => {
+  it("computes solve rate, median, and participation from the DAILY scope, never pooled totals", () => {
     const post = buildDailyPost(summary("2026-06-02"), world(), [], { todayUTC: "2026-06-03" });
     expect(post.kind).toBe("daily-discovery");
     expect(post.slug).toBe("2026-06-02");
     expect(post.published).toBe(true);
     const byKind = Object.fromEntries(post.findings.map((f) => [f.kind, f]));
-    expect(byKind.solve_rate.value).toBe(64);
+    expect(byKind.solve_rate.value).toBe(64);    // daily 64/100 — NOT the pooled 1/999
     expect(byKind.solve_rate.display).toBe("64%");
-    expect(byKind.median_guesses.value).toBe(4); // weighted median of the distribution
+    expect(byKind.median_guesses.value).toBe(4); // weighted median of the daily distribution
     expect(byKind.participation.value).toBe(100);
+  });
+});
+
+// Jun 7 2026 incident: GOLLY's post said "32% found it" from pooled cross-mode totals
+// while the only two daily players both solved. Days recorded before per-kind scopes
+// fall back to the daily answer's own word bucket; with neither source, the post
+// publishes honestly empty rather than quoting the pool.
+describe("legacy days — recorded before per-kind scopes", () => {
+  const noStats = (over: Partial<SciencePublicDailySummary> = {}) =>
+    summary("2026-06-02", { kinds: {}, ...over });
+
+  it("falls back to the daily word's own bucket", () => {
+    const s = noStats({
+      dailyWord: { finishes: 2, wins: 2, losses: 0, resigns: 0, guesses: { "3": 1, "5": 1 },
+        averageGuesses: { count: 2, sum: 8, min: 3, max: 5, mean: 4 } },
+    });
+    const post = buildDailyPost(s, world({ word: "GOLLY" }), [], { todayUTC: "2026-06-03" });
+    const byKind = Object.fromEntries(post.findings.map((f) => [f.kind, f]));
+    expect(byKind.solve_rate.value).toBe(100);
+    expect(byKind.participation.value).toBe(2);
+    expect(byKind.median_guesses.value).toBe(3);
+    expect(post.headline).toContain("100% found it.");
+    const kinds = post.findings.map((f) => f.kind);
+    expect(kinds).not.toContain("gray_opener_rate");    // guess-level data can't be scoped retroactively
+    expect(kinds).not.toContain("letter_reveal_rate");
+  });
+
+  it("publishes no numbers at all when no daily-scoped source exists", () => {
+    const post = buildDailyPost(noStats(), world(), [], { todayUTC: "2026-06-03" });
+    expect(post.published).toBe(true);
+    expect(post.findings).toEqual([]);
+    expect(post.headline).not.toContain("%");
   });
 });
 

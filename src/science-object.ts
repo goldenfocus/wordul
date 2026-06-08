@@ -26,8 +26,12 @@ export class Science extends DurableObject<Env> {
     if (req.method === "GET" && url.pathname === "/summary") {
       const date = validDate(url.searchParams.get("date")) ?? activeDate(Date.now());
       const includeWords = url.searchParams.get("includeWords") === "1";
+      // Only the worker's feed builder passes `answer` (the day's word, public once the
+      // day is over) — it unlocks that single bucket below the K line for legacy days.
+      const answer = url.searchParams.get("answer") ?? "";
+      const dailyAnswer = /^[A-Z]+$/.test(answer) ? answer : undefined;
       const state = await this.load(date);
-      return Response.json(publicScienceSummary(state, { includeWords, generatedAt: Date.now() }), {
+      return Response.json(publicScienceSummary(state, { includeWords, dailyAnswer, generatedAt: Date.now() }), {
         headers: { "cache-control": "public, max-age=60" },
       });
     }
@@ -51,6 +55,7 @@ function backfill(state: ScienceDailyState, date: string): ScienceDailyState {
   if (!state.date) state.date = date;
   if (!state.powerups) state.powerups = { reveal_letter: 0, vowel_count: 0 };
   if (!state.hintUsage) state.hintUsage = { revealHints: {}, vowelHints: {} };
+  if (!state.kinds) state.kinds = {};
   if (!state.words) state.words = {};
   return state;
 }
