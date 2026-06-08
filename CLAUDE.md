@@ -97,11 +97,9 @@ have a private workspace; nothing you do can touch another tab's files.
    pulls in everyone else's work instead of overwriting it. `dev/ship.sh` does this for you.
 5. **Deploy only via `dev/ship.sh`** (or the `/push` skill). It tests, rebases, tags a backup
    of current prod, and fast-forwards main — then **CI deploys `origin/main`** automatically
-   (the `CLOUDFLARE_*` repo secrets are set, so CI's "Deploy to Cloudflare" step runs). ⚠️ The
-   step literally named **"Skipped deploy (no Cloudflare secret yet)"** is a *fallback* that only
-   runs when the secret is missing — it shows as **skipped** (a `-` glyph) when healthy. Read step
-   *conclusions* (`gh run view <id> --json jobs`), not the step's name, before concluding a deploy
-   was skipped. Never `wrangler deploy` by hand.
+   (the `CLOUDFLARE_*` repo secrets are set, so CI's "Deploy to Cloudflare" step runs). Confirm a
+   deploy by step *conclusions* (`gh run view <id> --json jobs`) + a prod smoke, never by step
+   names. Never `wrangler deploy` by hand.
 
 ### Ship when done
 
