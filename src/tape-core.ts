@@ -66,8 +66,9 @@ function validVoiceDescriptor(v: unknown): boolean {
   if (d.mode === "clips") {
     if (keys.length !== 2 || !keys.includes("clipBase")) return false;
     const b = d.clipBase;
+    // backslash normalizes to a slash in browser URL parsing ("/\evil.com/" → "//evil.com/")
     return typeof b === "string" && b.length <= 128 &&
-      b.startsWith("/") && !b.startsWith("//") && !b.includes("..");
+      b.startsWith("/") && !b.startsWith("//") && !b.includes("..") && !b.includes("\\");
   }
   return false;
 }

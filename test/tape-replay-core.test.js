@@ -55,7 +55,7 @@ describe("sanitizeVoiceLine", () => {
     expect(sanitizeVoiceLine(ai)).toMatchObject(ai);
   });
   it("nulls a clips line with an off-origin / protocol-relative / traversal clipBase", () => {
-    for (const clipBase of ["https://evil.example/", "//evil.example/", "/voice/../x/"]) {
+    for (const clipBase of ["https://evil.example/", "//evil.example/", "/voice/../x/", "/\\evil.com/"]) {
       expect(sanitizeVoiceLine({ ...good, voice: { mode: "clips", clipBase } })).toBeNull();
     }
   });

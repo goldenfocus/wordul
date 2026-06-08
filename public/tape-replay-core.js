@@ -98,7 +98,8 @@ function sanitizeVoice(v) {
   if (v.mode === "clips") {
     if (keys.length !== 2 || typeof v.clipBase !== "string") return null;
     const b = v.clipBase;
-    if (b.length > 128 || !b.startsWith("/") || b.startsWith("//") || b.includes("..")) return null;
+    // backslash normalizes to a slash in browser URL parsing ("/\evil.com/" → "//evil.com/")
+    if (b.length > 128 || !b.startsWith("/") || b.startsWith("//") || b.includes("..") || b.includes("\\")) return null;
     return { mode: "clips", clipBase: b };
   }
   return null;

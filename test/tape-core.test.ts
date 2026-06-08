@@ -43,6 +43,7 @@ describe("validateTapeEvents — v/p payloads", () => {
     expect(v(line({ mode: "clips", clipBase: "https://evil.example/" }))).toBeNull();
     expect(v(line({ mode: "clips", clipBase: "//evil.example/" }))).toBeNull();
     expect(v(line({ mode: "clips", clipBase: "/voice/../x/" }))).toBeNull();
+    expect(v(line({ mode: "clips", clipBase: "/\\evil.com/" }))).toBeNull();
   });
   it("rejects non-string raw, missing voice, and unknown modes", () => {
     expect(v({ raw: 7, text: "oof", voice: { mode: "silent" } })).toBeNull();
