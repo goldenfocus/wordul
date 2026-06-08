@@ -1,7 +1,7 @@
 // test/tape-recorder.test.js — the daily solve recorder: pure event buffer + crash mirror.
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  newTape, tapePush, TAPE_EVENT_CAP,
+  newTape, tapePush, TAPE_EVENT_CAP, TAPE_BYTE_CAP,
   tapeStart, tapeRecord, tapeForUpload, tapeMirror, tapeClear, tapeIsLive, tapeSuspend,
 } from "../public/tape-recorder.js";
 
@@ -19,10 +19,30 @@ describe("tape core", () => {
     expect(tape.events[1][0]).toBe(1000); // clamped to previous t
   });
   it("stops at the event cap and marks truncated", () => {
+    // The byte cap fires first for any organically-pushed tape (5000 × ≥8 bytes > 30KB),
+    // so exercise the event-cap branch directly with a pre-filled buffer.
     const tape = newTape(0);
-    for (let i = 0; i <= TAPE_EVENT_CAP + 5; i++) tapePush(tape, "k", "A", i);
+    tape.events = Array.from({ length: TAPE_EVENT_CAP }, (_, i) => [i, "b"]);
+    tapePush(tape, "k", "A", TAPE_EVENT_CAP);
     expect(tape.events.length).toBe(TAPE_EVENT_CAP);
     expect(tape.truncated).toBe(true);
+  });
+  it("stops at the byte cap and marks truncated", () => {
+    const tape = newTape(0);
+    const fat = "x".repeat(280); // each event ~600 bytes serialized; 200 ≈ 120KB → must trip 30KB
+    for (let i = 0; i < 200; i++) tapePush(tape, "v", { raw: fat, text: fat, voice: { mode: "silent" } }, i);
+    expect(tape.truncated).toBe(true);
+    expect(JSON.stringify(tape.events).length).toBeLessThanOrEqual(TAPE_BYTE_CAP);
+  });
+  it("recomputes bytes for a mirror that predates the field on resume", () => {
+    localStorage.setItem("wr.tape:2026-06-07", JSON.stringify({ v: 1, t0: 0, truncated: false, events: [[5, "k", "Z"]] }));
+    tapeStart("2026-06-07", 1000);
+    const big = "y".repeat(TAPE_BYTE_CAP); // a single push past the cap must trip immediately
+    tapeRecord("v", big, 1100);
+    const up = tapeForUpload("2026-06-07");
+    expect(up.truncated).toBe(true);
+    expect(up.events).toEqual([[5, "k", "Z"]]); // mirror kept, oversize event dropped
+    localStorage.removeItem("wr.tape:2026-06-07");
   });
 });
 

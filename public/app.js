@@ -806,6 +806,11 @@ function getMyFreshTile(colIndex) {
 }
 const REVEAL_STAGGER_MS = window.WordulMotion?.revealStaggerMs ?? 110;
 const REVEAL_FLIP_HALF_MS = window.WordulMotion?.flipHalfMs ?? 200; // matches the tile-reveal keyframe halfway point (0.4s flip)
+// Daily-tape upload deferral: the final guess's companion reaction is scheduled at
+// flipDoneMs (≈1.5s — word length × stagger + flip half) and records via tapeRecord;
+// the upload detaches the recorder, so it must wait past that or every tape loses its
+// climax line. 2s > worst-case flipDoneMs with margin.
+const TAPE_UPLOAD_DELAY_MS = 2000;
 
 function showRoom(owner, slug) {
   leaveRoom(); // tear down any prior room's socket so room->room nav can't leave a zombie WS
@@ -2484,9 +2489,20 @@ function onServerMessage(msg) {
     // File the tape exactly once when MY daily game reaches a terminal status. Covers
     // win, loss, AND resign; also files a crash-mirror from an earlier tab (the server
     // accepts the first write only, so a duplicate send is harmless).
+    // Deferred past flipDoneMs: the final guess's companion reaction fires inside the
+    // row-flip setTimeout (~1.5s above), and tapeForUpload detaches the live recorder —
+    // uploading synchronously here would drop every tape's climax line.
     if (game.isDaily && me && me.status !== "playing" && !game.tapeSent) {
-      const tape = tapeForUpload(game.dailyDate);
-      if (tape) { game.tapeSent = true; send({ type: "tape", events: tape.events, truncated: tape.truncated }); }
+      game.tapeSent = true; // sync, so repeat snapshots can't double-schedule
+      const tapeDate = game.dailyDate;
+      setTimeout(() => {
+        // Left the room (leaveRoom nulls dailyDate / clears isDaily) or switched days:
+        // don't touch the tape — tapeSuspend flushed it to the mirror, and the next
+        // visit's terminal snapshot files it via the crash-mirror path above.
+        if (!game.isDaily || game.dailyDate !== tapeDate) return;
+        const tape = tapeForUpload(tapeDate);
+        if (tape) send({ type: "tape", events: tape.events, truncated: tape.truncated });
+      }, TAPE_UPLOAD_DELAY_MS);
     }
     render();
   } else if (msg.type === "invalid_guess") {

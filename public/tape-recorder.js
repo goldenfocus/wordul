@@ -5,21 +5,31 @@
 // few events so a crashed tab can still file its tape on the next visit.
 // Pattern: src/ghost-core.ts (cap + monotonic clamp), kept DOM-free for tests.
 export const TAPE_EVENT_CAP = 5000; // backstop — a real solve is a few hundred events
+// Deliberately UNDER the server's 32KB TAPE_BYTE_CAP (src/tape-core.ts): the server
+// rejects oversize tapes wholesale, so the recorder must stop first — a tape that
+// passes the recorder can never bounce off the validator and be lost.
+export const TAPE_BYTE_CAP = 30 * 1024;
 const MIRROR_EVERY = 10;            // localStorage flush cadence (events)
 const LS_PREFIX = "wr.tape:";
 
 export function newTape(now = Date.now()) {
-  return { v: 1, t0: now, truncated: false, events: [] };
+  return { v: 1, t0: now, truncated: false, events: [], bytes: 2 }; // 2 = "[]" envelope
 }
 
-// Append [t, kind, data?]: clamp a skewed clock so t stays monotonic, drop past the cap.
+// Append [t, kind, data?]: clamp a skewed clock so t stays monotonic, drop past the
+// event cap OR the byte cap (approximate running serialized size of `events`).
 export function tapePush(tape, kind, data, now = Date.now()) {
   if (tape.truncated) return;
   if (tape.events.length >= TAPE_EVENT_CAP) { tape.truncated = true; return; }
   let t = Math.max(0, now - tape.t0);
   const last = tape.events[tape.events.length - 1];
   if (last && t < last[0]) t = last[0];
-  tape.events.push(data === undefined ? [t, kind] : [t, kind, data]);
+  const event = data === undefined ? [t, kind] : [t, kind, data];
+  tape.bytes ??= JSON.stringify(tape.events).length; // tape predates the field — recompute
+  const eventBytes = JSON.stringify(event).length + 1; // +1 = joining comma
+  if (tape.bytes + eventBytes > TAPE_BYTE_CAP) { tape.truncated = true; return; }
+  tape.bytes += eventBytes;
+  tape.events.push(event);
 }
 
 // --- the live singleton app.js records into -----------------------------------
@@ -42,6 +52,7 @@ export function tapeStart(date, now = Date.now()) {
   if (mirror) {
     const lastT = mirror.events.length ? mirror.events[mirror.events.length - 1][0] : 0;
     tape.t0 = now - lastT; // new events land at >= lastT
+    tape.bytes ??= JSON.stringify(tape.events).length; // mirror predates the byte cap — recompute
   }
   live = { tape, key: LS_PREFIX + date, dirty: 0 };
 }
