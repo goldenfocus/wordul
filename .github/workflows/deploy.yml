@@ -21,8 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      # Surfaced to step `if:` so we can skip the deploy (not hard-fail) until the
-      # repo secret is configured. Set it: see .github/workflows/README.md.
+      # Cloudflare deploy creds — GitHub Actions repo secrets, set 2026-06-05.
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
@@ -40,18 +39,9 @@ jobs:
         run: npm run check-graph && npm run typecheck && npm test
 
       - name: Deploy to Cloudflare
-        id: deploy
-        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         run: npx wrangler deploy
 
-      - name: Skipped deploy (no Cloudflare secret yet)
-        if: ${{ env.CLOUDFLARE_API_TOKEN == '' }}
-        run: |
-          echo "::warning title=Deploy skipped::CLOUDFLARE_API_TOKEN is not set, so prod was NOT deployed (tests still ran)."
-          echo "Add the secret to enable auto-deploy — see .github/workflows/README.md."
-
       - name: Smoke prod
-        if: ${{ steps.deploy.outcome == 'success' }}
         run: |
           set -e
           home=$(curl -s -o /dev/null -w '%{http_code}' https://wordul.com/)

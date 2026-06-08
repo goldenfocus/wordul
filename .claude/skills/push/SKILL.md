@@ -5,7 +5,7 @@ description: Full GitHub + Cloudflare prod sync for wordul, then a one-line live
 
 # push — sync wordul to GitHub + prod
 
-On wordul, **CI now wires GitHub → prod**: pushing to `main` triggers `.github/workflows/deploy.yml`, which deploys `origin/main` to Cloudflare. So this skill pushes to main and lets CI deploy — **no hand-run `wrangler deploy`** (that was the stale-deploy hazard: it ships your local files and can silently revert prod). Incidents this guards: "Wordle Race live on Cloudflare with no repo" (May 31 2026) and the stale-deploy reverts logged in `.claude/COLONY.md`. **Until the `CLOUDFLARE_API_TOKEN` repo secret is set** (see `.github/workflows/README.md`), CI skips the deploy and you fall back to `npm run deploy`.
+On wordul, **CI now wires GitHub → prod**: pushing to `main` triggers `.github/workflows/deploy.yml`, which deploys `origin/main` to Cloudflare. So this skill pushes to main and lets CI deploy — **no hand-run `wrangler deploy`** (that was the stale-deploy hazard: it ships your local files and can silently revert prod). Incidents this guards: "Wordle Race live on Cloudflare with no repo" (May 31 2026) and the stale-deploy reverts logged in `.claude/COLONY.md`. The `CLOUDFLARE_*` repo secrets are set, so CI deploys automatically — confirm a ship by the run's step *conclusions* + a prod smoke, never by step names.
 
 Run when Yan says **push / go / ship it / push it to GitHub prod smoke**. Tier-C frontend + worker only (no migrations, no `calculate_*`/`*_payout*`). If a change is Tier A, stop and confirm instead.
 
@@ -39,7 +39,6 @@ git push origin HEAD:main
 SHA="$(git rev-parse HEAD)"; RUN=""
 for _ in $(seq 1 30); do RUN="$(gh run list --workflow=deploy.yml --commit="$SHA" --limit=1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)"; [ -n "$RUN" ] && break; sleep 2; done
 gh run watch "$RUN" --exit-status
-# (If CLOUDFLARE_API_TOKEN isn't set yet, CI skips the deploy — fall back: npm run deploy)
 
 # 6. Smoke
 curl -s -o /dev/null -w 'home %{http_code}\n' https://wordul.com/
