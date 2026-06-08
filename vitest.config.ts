@@ -39,6 +39,8 @@ export default defineConfig({
       { find: /^\/daily-lb\.js$/, replacement: new URL("./public/daily-lb.js", import.meta.url).pathname },
       { find: /^\/stamp-replay-core\.js$/, replacement: new URL("./public/stamp-replay-core.js", import.meta.url).pathname },
       { find: /^\/stamp-replay\.js$/, replacement: new URL("./public/stamp-replay.js", import.meta.url).pathname },
+      { find: /^\/tape-replay-core\.js$/, replacement: new URL("./public/tape-replay-core.js", import.meta.url).pathname },
+      { find: /^\/tape-replay\.js$/, replacement: new URL("./public/tape-replay.js", import.meta.url).pathname },
       { find: /^\/race-copy\.js$/, replacement: new URL("./public/race-copy.js", import.meta.url).pathname },
       { find: /^\/vibe-studio-core\.js$/, replacement: new URL("./public/vibe-studio-core.js", import.meta.url).pathname },
       { find: /^\/studio-worlds-core\.js$/, replacement: new URL("./public/studio-worlds-core.js", import.meta.url).pathname },

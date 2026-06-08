@@ -27,6 +27,8 @@ export function buildTapeSchedule(events) {
     }
     prevTrue = t;
     playT += dt;
+    // "s" (solved flag) is reserved/unused by the recorder — the validator accepts
+    // it for forward-compat; this scheduler simply drops it (no matching branch).
     if (kind === "k") steps.push({ dt, trueT: t, kind: "type", letter: data });
     else if (kind === "b") steps.push({ dt, trueT: t, kind: "back" });
     else if (kind === "c") steps.push({ dt, trueT: t, kind: "clear" });
@@ -34,7 +36,7 @@ export function buildTapeSchedule(events) {
     else if (kind === "p") steps.push({ dt, trueT: t, kind: "power", what: data });
     else if (kind === "v") steps.push({ dt, trueT: t, kind: "voice", line: data });
     else if (kind === "e") {
-      if (rejected(evs, i)) continueWithoutStep(steps, dt, t);
+      if (rejected(evs, i)) emitNoop(steps, dt, t);
       else steps.push({ dt, trueT: t, kind: "commit", row: row++ });
     }
   }
@@ -51,8 +53,8 @@ function rejected(evs, i) {
   return false;
 }
 
-// A rejected e still spends its dt on the clock — fold it into the next step so
-// playback timing stays aligned without emitting a no-op step.
-function continueWithoutStep(steps, dt, t) {
+// A rejected e still spends its dt on the clock — emit a noop step that carries the
+// dt/trueT so playback timing stays aligned; the driver skips it visually.
+function emitNoop(steps, dt, t) {
   steps.push({ dt, trueT: t, kind: "noop" });
 }

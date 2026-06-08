@@ -1867,6 +1867,7 @@ body.reduced-motion .tile.pop,
 body.reduced-motion .lose-flash,
 body.reduced-motion .shard,
 body.reduced-motion .grid-row.shake,
+body.reduced-motion .tape-row.shake,
 body.reduced-motion .lose-shake {
   animation: none !important;
   transition: none !important;
@@ -3879,3 +3880,21 @@ body.reduced-motion .boards.blooming .grid-row { opacity: 1 !important; transfor
   font-size: 18px; line-height: 1; cursor: pointer; padding: 4px;
 }
 .daily-lb-modal-close:hover { color: #f4f2ec; }
+
+/* Real-solve replay stage (tape-replay.js) — lives inside .daily-lb-modal-card. Tile
+   colors reuse the site's --hot/--warm/--cold tokens (same vars as .tile.hot etc.);
+   the reject shake reuses the board's @keyframes shake. */
+.tape-stage { display: grid; gap: 10px; justify-items: center; }
+.tape-head { display: flex; gap: 10px; align-items: center; min-height: 22px; }
+.tape-timer { font-variant-numeric: tabular-nums; opacity: 0.8; font-size: 0.9rem; }
+.tape-think { font-size: 0.85rem; opacity: 0.7; }
+.tape-board { display: grid; gap: 4px; }
+.tape-row { display: grid; grid-auto-flow: column; gap: 4px; }
+.tape-row.shake { animation: shake 0.5s; }
+.tape-row .tile { width: 34px; height: 34px; display: grid; place-items: center;
+  border: 1px solid var(--border, #444); border-radius: 4px; font-weight: 700; }
+.tape-row .tile.hot { background: var(--hot, #538d4e); border-color: transparent; color: #fff; }
+.tape-row .tile.warm { background: var(--warm, #b59f3b); border-color: transparent; color: #fff; }
+.tape-row .tile.cold { background: var(--cold, #3a3a3c); border-color: transparent; color: #fff; }
+.tape-controls { display: flex; gap: 8px; }
+.tape-controls button { min-width: 40px; }
