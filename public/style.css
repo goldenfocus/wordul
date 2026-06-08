@@ -3898,3 +3898,10 @@ body.reduced-motion .boards.blooming .grid-row { opacity: 1 !important; transfor
 .tape-row .tile.cold { background: var(--cold, #3a3a3c); border-color: transparent; color: #fff; }
 .tape-controls { display: flex; gap: 8px; }
 .tape-controls button { min-width: 40px; }
+/* The mode switch under the synthetic stamp — quiet sibling of .daily-lb-showall. */
+.tape-mode-btn {
+  background: none; border: 1px solid rgba(240, 193, 75, 0.25); border-radius: 10px;
+  padding: 6px 12px; color: #f0c14b; font: inherit; font-size: 13px;
+  letter-spacing: 0.04em; cursor: pointer;
+}
+.tape-mode-btn:hover { border-color: rgba(240, 193, 75, 0.55); }

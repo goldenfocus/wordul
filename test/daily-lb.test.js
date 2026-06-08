@@ -2,7 +2,7 @@
 // The golden card's leaderboard: top-3+you medals, Show-all roster (scroll past 25),
 // and tap-a-row → modal replay (Task 7's describe lives here too).
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mountDailyLeaderboard } from "../public/daily-lb.js";
+import { mountDailyLeaderboard, openReplayModal } from "../public/daily-lb.js";
 
 const entry = (username, gold, over = {}) => ({
   username, gold, guesses: 3, won: true, grid: ["xxxxx", "ggggg"], words: ["SLOTH", "PENNE"], durationMs: 171000, ...over,
@@ -179,5 +179,35 @@ describe("replay popup", () => {
     expect(modals.length).toBe(1); // never stacks
     modals[0].click(); // scrim
     expect(document.getElementById("dailyLbModal")).toBeNull();
+  });
+});
+
+describe("real-solve tape mode", () => {
+  beforeEach(() => {
+    globalThis.matchMedia = () => ({ matches: false }); // playStampReplay's guard (jsdom has none)
+  });
+  // Closing through the modal's own ✕ keeps the keydown lifecycle clean between tests.
+  const dismiss = (overlay) => overlay.querySelector(".daily-lb-modal-close").click();
+
+  it("shows the watch-the-real-solve button only when the tape endpoint 200s", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ events: [[0, "k", "C"]] }) });
+    const overlay = openReplayModal(entry("yan", 120), null, { date: "2026-06-07", token: "secret-123" });
+    await flush(); // let the tape fetch settle
+    expect(String(globalThis.fetch.mock.calls[0][0])).toBe("/api/daily/2026-06-07/tape?u=yan&t=secret-123");
+    expect(overlay.querySelector(".tape-mode-btn")).toBeTruthy();
+    dismiss(overlay);
+  });
+
+  it("stays in synthetic mode when there is no tape (404) or no token", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    const withToken = openReplayModal(entry("bob", 0, { won: false }), null, { date: "2026-06-07", token: "secret-123" });
+    await flush();
+    expect(withToken.querySelector(".tape-mode-btn")).toBeNull();
+    dismiss(withToken);
+    const noOpts = openReplayModal(entry("bob", 0, { won: false }), null); // stats page path — no opts at all
+    await flush();
+    expect(noOpts.querySelector(".tape-mode-btn")).toBeNull();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1); // no token → no fetch
+    dismiss(noOpts);
   });
 });

@@ -7,6 +7,7 @@
 // Decoupling: NEVER imports app.js — i18n comes in via opts.t (settle.js pattern).
 import { renderLeaderboard, renderStamp, boardRows, goldValue, rosterRow, resultMark, fmtDuration } from "/daily-card.js";
 import { playStampReplay } from "/stamp-replay.js";
+import { playTapeReplay } from "/tape-replay.js";
 
 const SCROLL_AT = 25; // past this many rows the roster scrolls inside the card
 function escAttr(s) { return String(s).replace(/[^a-z0-9_-]/gi, ""); } // usernames are [a-z0-9_-]
@@ -21,7 +22,8 @@ let closeActive = null;
 // Lifecycle: closeActive tracks the live close fn so evicting a prior modal goes through
 // close() — this removes its document keydown listener and avoids orphaned listeners.
 // The refocus param lets eviction skip the focus-return (the incoming modal owns focus).
-export function openReplayModal(entry, opener) {
+// opts ({ date, token }) unlocks the real-solve tape mode — absent (stats page) it's synthetic-only.
+export function openReplayModal(entry, opener, opts = {}) {
   closeActive?.({ refocus: false }); // evict any existing modal cleanly (no orphaned keydown)
   const u = escAttr(entry.username);
   const cols = Array.isArray(entry.grid) && entry.grid[0] ? String(entry.grid[0]).length : 5;
@@ -40,9 +42,11 @@ export function openReplayModal(entry, opener) {
     </div>
     ${renderStamp(entry.grid, entry.words, boardRows(cols))}
   </div>`;
+  let tapeStop = null; // set when tape mode starts; close() must halt its timers + voice
   const onKey = (e) => { if (e.key === "Escape") close(); };
   const close = ({ refocus = true } = {}) => {
     closeActive = null;
+    tapeStop?.();
     overlay.remove();
     document.removeEventListener("keydown", onKey);
     if (refocus) opener?.focus?.();
@@ -56,18 +60,48 @@ export function openReplayModal(entry, opener) {
   overlay.querySelector(".daily-lb-modal-close")?.focus(); // keyboard users land inside dialog
   const stamp = overlay.querySelector(".daily-stamp");
   if (stamp) playStampReplay(stamp); // auto-play on open; tap snaps to final (existing engine)
+  // Real-solve deep-dive: if this player filed a tape AND the viewer holds the day's
+  // finisher token, offer the full replay. Quick synthetic stays the default —
+  // skim fast, dive deep. No tape / no token → the affordance simply never exists.
+  if (opts.date && opts.token && entry.username) {
+    fetch(`/api/daily/${opts.date}/tape?u=${encodeURIComponent(entry.username)}&t=${encodeURIComponent(opts.token)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((tape) => {
+        if (!tape || !Array.isArray(tape.events) || !tape.events.length) return;
+        const card = overlay.querySelector(".daily-lb-modal-card");
+        if (!card || !card.isConnected) return; // modal already closed while fetching
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tape-mode-btn";
+        btn.textContent = "▶ watch the real solve";
+        card.appendChild(btn);
+        btn.addEventListener("click", () => {
+          btn.remove();
+          const stampEl = overlay.querySelector(".daily-stamp");
+          if (!stampEl) return;
+          const stage = document.createElement("div");
+          stampEl.replaceWith(stage);
+          tapeStop = playTapeReplay(stage, {
+            events: tape.events, grid: entry.grid, words: entry.words,
+            rows: boardRows(cols), cols, truncated: !!tape.truncated,
+          }).stop;
+        });
+      })
+      .catch(() => {}); // tape is a bonus — its absence never breaks the modal
+  }
   return overlay;
 }
 
 // Make every .daily-top-row under root tappable: tap/Enter/Space → that player's replay
 // modal (rows whose entry has no grid simply don't open). entries is a Map keyed by the
 // row's data-user (escaped username). Shared by the golden card AND the day Stats page.
-export function wireReplayRows(root, entries) {
+// opts rides through to openReplayModal; the Stats page passes none → synthetic-only there.
+export function wireReplayRows(root, entries, opts) {
   root.querySelectorAll(".daily-top-row").forEach((row) => {
     row.setAttribute("tabindex", "0");
     const open = () => {
       const hit = entries.get(row.getAttribute("data-user"));
-      if (hit && Array.isArray(hit.grid) && hit.grid.length) openReplayModal(hit, row);
+      if (hit && Array.isArray(hit.grid) && hit.grid.length) openReplayModal(hit, row, opts);
     };
     row.addEventListener("click", (e) => { if (!e.target.closest("a")) open(); });
     row.addEventListener("keydown", (e) => {
@@ -86,7 +120,8 @@ export function mountDailyLeaderboard({ mount, date, username, t = (_k, f) => f 
   const api = (extra) => `/api/daily/${date}/leaderboard?username=${encodeURIComponent(username)}${extra}${tq}`;
   // Row index by escaped username → entry, so a tap can open the right board.
   const entries = new Map();
-  const wireRows = (root) => wireReplayRows(root, entries);
+  const opts = token ? { date, token } : {}; // finisher token also unlocks the real-solve tape
+  const wireRows = (root) => wireReplayRows(root, entries, opts);
   fetch(api("&n=3"))
     .then((r) => (r.ok ? r.json() : null))
     .then((view) => {
