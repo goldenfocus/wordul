@@ -36,6 +36,17 @@ describe("tape replay driver", () => {
     expect(mount.querySelector(".tape-think").textContent).toContain("1m 12s");
     expect(mount.querySelector(".tape-timer").textContent).toBe(fmtClock(72000));
   });
+  it("commit paints the step's row even when the cursor sits elsewhere (truncated finish)", () => {
+    const stage = buildTapeStage(mount, { rows: 6, cols: 5, grid: ["ggggg", "gyxxg"], words: ["CRANE", "SLATE"] });
+    // cursor is at row 0 — a truncated finish() replays a commit for row 1
+    applyStep(stage, { kind: "commit", row: 1, trueT: 0 });
+    const rows = mount.querySelectorAll(".tape-row");
+    expect(rows[1].textContent).toBe("SLATE");
+    expect(rows[1].querySelectorAll(".tile")[0].classList.contains("hot")).toBe(true);  // g
+    expect(rows[1].querySelectorAll(".tile")[1].classList.contains("warm")).toBe(true); // y
+    expect(rows[0].textContent).toBe(""); // cursor row untouched
+    expect(stage.cursor).toEqual({ row: 2, col: 0 });
+  });
   it("clear empties the current row; reject shakes it", () => {
     const stage = buildTapeStage(mount, { rows: 6, cols: 5, grid: [], words: [] });
     applyStep(stage, { kind: "type", letter: "A", trueT: 0 });

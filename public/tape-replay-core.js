@@ -29,6 +29,7 @@ export function buildTapeSchedule(events) {
     playT += dt;
     // "s" (solved flag) is reserved/unused by the recorder — the validator accepts
     // it for forward-compat; this scheduler simply drops it (no matching branch).
+    const n = steps.length;
     if (kind === "k") steps.push({ dt, trueT: t, kind: "type", letter: data });
     else if (kind === "b") steps.push({ dt, trueT: t, kind: "back" });
     else if (kind === "c") steps.push({ dt, trueT: t, kind: "clear" });
@@ -39,6 +40,9 @@ export function buildTapeSchedule(events) {
       if (rejected(evs, i)) emitNoop(steps, dt, t);
       else steps.push({ dt, trueT: t, kind: "commit", row: row++ });
     }
+    // The step CARRYING the THINK_MS dt is the think beat — mark it fixed too, or
+    // the driver divides the beat at 2x/4x (the think step itself has dt 0).
+    if (gap > GAP_MS && steps.length > n) steps[n].fixed = true;
   }
   return { steps, totalMs: playT, trueMs: prevTrue };
 }
@@ -57,4 +61,45 @@ function rejected(evs, i) {
 // dt/trueT so playback timing stays aligned; the driver skips it visually.
 function emitNoop(steps, dt, t) {
   steps.push({ dt, trueT: t, kind: "noop" });
+}
+
+const V_KEYS = ["raw", "text", "answer", "revealVoice", "voice"];
+
+// Client-side mirror of the server's v-payload checks (src/tape-core.ts) — the tape
+// is another player's upload, so the descriptor is re-checked before it reaches
+// /voice.js (defense in depth). Returns a clean line or null (the driver skips).
+export function sanitizeVoiceLine(line) {
+  if (typeof line !== "object" || line === null || Array.isArray(line)) return null;
+  for (const k of Object.keys(line)) if (!V_KEYS.includes(k)) return null;
+  const { raw, text, answer, revealVoice, voice } = line;
+  if (typeof raw !== "string" || raw.length > 300) return null;
+  if (typeof text !== "string" || text.length > 300) return null;
+  if (answer !== undefined && !(typeof answer === "string" && answer.length <= 64)) return null;
+  if (revealVoice !== undefined && revealVoice !== "robot" && revealVoice !== "split") return null;
+  const v = sanitizeVoice(voice);
+  if (!v) return null;
+  return { raw, text, voice: v, revealVoice, answer };
+}
+
+// silent | ai (bounded prosody) | clips — clipBase must be a same-origin absolute
+// path: leading "/", never "//" (protocol-relative URL!), no "..".
+function sanitizeVoice(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+  const keys = Object.keys(v);
+  if (v.mode === "silent") return keys.length === 1 ? { mode: "silent" } : null;
+  if (v.mode === "ai") {
+    for (const k of keys) if (k !== "mode" && k !== "voiceName" && k !== "rate" && k !== "pitch") return null;
+    const { voiceName, rate, pitch } = v;
+    if (voiceName !== undefined && !(typeof voiceName === "string" && voiceName.length <= 64)) return null;
+    if (rate !== undefined && !(typeof rate === "number" && Number.isFinite(rate) && rate >= 0.1 && rate <= 4)) return null;
+    if (pitch !== undefined && !(typeof pitch === "number" && Number.isFinite(pitch) && pitch >= 0 && pitch <= 2)) return null;
+    return { mode: "ai", voiceName, rate, pitch };
+  }
+  if (v.mode === "clips") {
+    if (keys.length !== 2 || typeof v.clipBase !== "string") return null;
+    const b = v.clipBase;
+    if (b.length > 128 || !b.startsWith("/") || b.startsWith("//") || b.includes("..")) return null;
+    return { mode: "clips", clipBase: b };
+  }
+  return null;
 }

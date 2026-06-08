@@ -25,7 +25,38 @@ describe("validateTapeEvents", () => {
     expect(validateTapeEvents([[0, "k", 7]])).toBeNull();
   });
   it("rejects tapes over the byte cap", () => {
-    const fat = [[0, "v", { raw: "x".repeat(TAPE_BYTE_CAP) }]];
+    // per-event payloads are individually valid; only the serialized size trips
+    const fat = Array.from({ length: 4000 }, (_, i) => [i, "p", "x".repeat(60)]);
     expect(validateTapeEvents(fat)).toBeNull();
+  });
+});
+
+describe("validateTapeEvents — v/p payloads", () => {
+  const v = (data: unknown) => validateTapeEvents([[0, "v", data]]);
+  const line = (voice: unknown) => ({ raw: "oof", text: "oof", voice });
+  it("accepts silent, ai, and same-origin clips voice lines", () => {
+    expect(v(line({ mode: "silent" }))).not.toBeNull();
+    expect(v(line({ mode: "ai", voiceName: "Zira", rate: 1.1, pitch: 0.9 }))).not.toBeNull();
+    expect(v(line({ mode: "clips", clipBase: "/voice/yang/" }))).not.toBeNull();
+  });
+  it("rejects off-origin, protocol-relative, and traversal clipBase", () => {
+    expect(v(line({ mode: "clips", clipBase: "https://evil.example/" }))).toBeNull();
+    expect(v(line({ mode: "clips", clipBase: "//evil.example/" }))).toBeNull();
+    expect(v(line({ mode: "clips", clipBase: "/voice/../x/" }))).toBeNull();
+  });
+  it("rejects non-string raw, missing voice, and unknown modes", () => {
+    expect(v({ raw: 7, text: "oof", voice: { mode: "silent" } })).toBeNull();
+    expect(v({ raw: "oof", text: "oof" })).toBeNull();
+    expect(v(line({ mode: "loud" }))).toBeNull();
+  });
+  it("rejects extra keys on the v data and out-of-range ai prosody", () => {
+    expect(v({ ...line({ mode: "silent" }), lol: 1 })).toBeNull();
+    expect(v(line({ mode: "ai", rate: 99 }))).toBeNull();
+    expect(v(line({ mode: "ai", pitch: -1 }))).toBeNull();
+  });
+  it("rejects p events with non-string or oversized data", () => {
+    expect(validateTapeEvents([[0, "p", 7]])).toBeNull();
+    expect(validateTapeEvents([[0, "p", "x".repeat(65)]])).toBeNull();
+    expect(validateTapeEvents([[0, "p", "vowels"]])).not.toBeNull();
   });
 });

@@ -7,8 +7,8 @@
 // Security: tape data is untrusted (another player's recorded keystrokes) — every
 // tape-derived string (letters, power tags, voice lines) only ever reaches the DOM via
 // textContent, never innerHTML.
-import { buildTapeSchedule, THINK_MS } from "/tape-replay-core.js";
-import { playVoice } from "/voice.js";
+import { buildTapeSchedule, sanitizeVoiceLine, THINK_MS } from "/tape-replay-core.js";
+import { playVoice, stopSpeaking } from "/voice.js";
 
 const MUTE_LS = "wordul.muted";
 const SPEEDS = [1, 2, 4];
@@ -51,7 +51,7 @@ export function buildTapeStage(mount, { rows, cols, grid, words }) {
 export function applyStep(stage, step) {
   stage.timerEl.textContent = fmtClock(step.trueT ?? 0);
   const rowEl = stage.rowsEls[stage.cursor.row];
-  if (!rowEl && step.kind !== "voice") return;
+  if (!rowEl && step.kind !== "voice" && step.kind !== "commit") return;
   const tiles = rowEl ? rowEl.querySelectorAll(".tile") : [];
   if (step.kind === "type" && stage.cursor.col < stage.cols) {
     tiles[stage.cursor.col].textContent = step.letter;
@@ -68,12 +68,17 @@ export function applyStep(stage, step) {
     void rowEl.offsetWidth;
     rowEl.classList.add("shake");
   } else if (step.kind === "commit") {
-    const mask = String(stage.grid[step.row] ?? "");
-    const word = String(stage.words[step.row] ?? "");
-    tiles.forEach((t, i) => {
-      if (word[i]) t.textContent = word[i]; // server truth beats taped keys
-      t.classList.add(CELL[mask[i]] ?? "cold");
-    });
+    // Target the STEP's row, not the cursor row — the truncated finish() replays
+    // commits for rows 0..N while the cursor sits wherever playback stopped.
+    const commitEl = stage.rowsEls[step.row];
+    if (commitEl) {
+      const mask = String(stage.grid[step.row] ?? "");
+      const word = String(stage.words[step.row] ?? "");
+      commitEl.querySelectorAll(".tile").forEach((t, i) => {
+        if (word[i]) t.textContent = word[i]; // server truth beats taped keys
+        t.classList.add(CELL[mask[i]] ?? "cold");
+      });
+    }
     stage.cursor = { row: step.row + 1, col: 0 };
   } else if (step.kind === "think") {
     stage.thinkEl.hidden = false;
@@ -84,9 +89,9 @@ export function applyStep(stage, step) {
     stage.thinkEl.textContent = `⚡ ${step.what}`;
     setTimeout(() => { stage.thinkEl.hidden = true; }, 900);
   } else if (step.kind === "voice") {
-    const l = step.line ?? {};
-    if (localStorage.getItem(MUTE_LS) !== "1" && l.voice) {
-      playVoice(l.voice, l.raw ?? l.text ?? "", l.text ?? l.raw ?? "", { answer: l.answer }, l.revealVoice ?? "robot");
+    const l = sanitizeVoiceLine(step.line); // re-check the untrusted descriptor (see tape-replay-core)
+    if (l && localStorage.getItem(MUTE_LS) !== "1") {
+      playVoice(l.voice, l.raw, l.text, { answer: l.answer }, l.revealVoice);
     }
   }
 }
@@ -117,6 +122,7 @@ export function playTapeReplay(mount, { events, grid, words, rows, cols, truncat
   playBtn.addEventListener("click", () => {
     paused = !paused;
     playBtn.textContent = paused ? "▶" : "⏸";
+    playBtn.setAttribute("aria-label", paused ? "Play" : "Pause");
     if (!paused) next();
     else clearTimeout(timer);
   });
@@ -131,5 +137,5 @@ export function playTapeReplay(mount, { events, grid, words, rows, cols, truncat
     if (!paused) next();
   });
   next();
-  return { stop: () => { paused = true; clearTimeout(timer); } };
+  return { stop: () => { paused = true; clearTimeout(timer); stopSpeaking(); } }; // silence in-flight voice too
 }
