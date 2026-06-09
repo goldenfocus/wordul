@@ -2504,7 +2504,11 @@ function onServerMessage(msg) {
     // already-finished daily has goldAwarded on its first snapshot but no transition (no
     // replayed coin-rain), and a reconnect AFTER arming still cashes out on the re-join
     // snapshot if the confirmed one was lost to the dropped socket.
-    if (game.isDaily && game.pendingCashOut && dailyCashOutReady(me, game.cashedOut)) cashOutDaily(me);
+    if (game.isDaily && game.pendingCashOut && dailyCashOutReady(me, game.cashedOut)) {
+      // Pass the answer (room.word covers a LOSS too, so the lesson shows when you most need it).
+      const dailyAnswer = msg.room.word || (me.status === "won" ? me.guesses?.[me.guesses.length - 1]?.word : null);
+      cashOutDaily(me, dailyAnswer);
+    }
     // File the tape exactly once when MY daily game reaches a terminal status. Covers
     // win, loss, AND resign; also files a crash-mirror from an earlier tab (the server
     // accepts the first write only, so a duplicate send is harmless).
@@ -2804,14 +2808,20 @@ function maybeRunSettlement(msg) {
       if (balance == null) { refreshGold(); return; }
       const pre = Math.max(0, balance - Math.max(0, me.receipt.payout));
       setGold(pre); renderGoldHud();
+      // The answer word leads the lexicon celebration; its intel (gloss/example/ipa/pos)
+      // teaches the word. A win's last guess IS the word, covering snapshots where
+      // room.word isn't revealed yet. Intel ships only for words that have it (5-letter
+      // today) — other lengths gracefully show the word + gold tail with no meaning lines.
+      const answer = msg.room.word || (me.status === "won" ? me.guesses?.[me.guesses.length - 1]?.word : null);
+      const intel = answer ? (wordIntel(answer) || {}) : {};
       return renderSettlement(me.receipt, {
         reducedMotion: getSettings().reducedMotion,
         walletBefore: pre,
         onWalletTick: (v) => { setGold(v); renderGoldHud(); },
         playChime,
-        // The answer word fuels the supernova beat's randomized word reveal. A win's
-        // last guess IS the word, covering snapshots where room.word isn't revealed yet.
-        word: msg.room.word || (me.status === "won" ? me.guesses?.[me.guesses.length - 1]?.word : null),
+        word: answer,
+        outcome: me.status,
+        gloss: intel.gloss, example: intel.example, ipa: intel.ipa, pos: intel.pos, def: intel.def,
       });
     })
     .catch(() => refreshGold());
@@ -2832,7 +2842,7 @@ function maybeRunSettlement(msg) {
 // sum to the server total without re-deriving the wall-clock speed curve on the client.
 const DAILY_GOLD_BONUS = 100; // mirrors src/room.ts DAILY_GOLD_BONUS
 const DAILY_GOLD_RATE = 9;    // mirrors src/economy.ts DAILY_GOLD_RATE (daily mints at ÷9)
-function cashOutDaily(me) {
+function cashOutDaily(me, answer = null) {
   if (game.cashedOut) return;
   game.cashedOut = true;
   const mint = (me && typeof me.goldAwarded === "number") ? Math.max(0, me.goldAwarded) : 0;
@@ -2858,6 +2868,10 @@ function cashOutDaily(me) {
       const pre = Math.max(0, balance - mint);
       if (me.receipt) {
         setGold(pre); renderGoldHud();
+        // The daily answer (passed in — covers a loss) leads the lexicon celebration; its
+        // intel teaches the word. Falls back to a solved daily's last guess.
+        const word = answer || (me.status === "won" ? me.guesses?.[me.guesses.length - 1]?.word : null);
+        const intel = word ? (wordIntel(word) || {}) : {};
         renderSettlement(me.receipt, {
           reducedMotion, // supernova handles reduced motion with its static lines path
           walletBefore: pre,
@@ -2865,9 +2879,9 @@ function cashOutDaily(me) {
           playChime,
           lines: dailyReceiptLines(me.receipt, dailyBonus, t),
           bonusCaption: t("settle.caption.dailyBonus"),
-          // Daily word reveal: a solved daily's last guess IS the answer (the win beat
-          // only fires on payout > 0, which a daily only mints when solved).
-          word: me.status === "won" ? me.guesses?.[me.guesses.length - 1]?.word : null,
+          word,
+          outcome: me.status,
+          gloss: intel.gloss, example: intel.example, ipa: intel.ipa, pos: intel.pos, def: intel.def,
         }).then(() => replayMyDailyBoard(me)); // overlay's gone — now the board takes its bow
         return;
       }
