@@ -53,6 +53,9 @@ export default defineConfig({
       { find: /^\/drama\.js$/, replacement: new URL("./public/drama.js", import.meta.url).pathname },
       { find: /^\/lobby-view\.js$/, replacement: new URL("./public/lobby-view.js", import.meta.url).pathname },
       { find: /^\/voice-config\.js$/, replacement: new URL("./public/voice-config.js", import.meta.url).pathname },
+      { find: /^\/daily-stats\.js$/, replacement: new URL("./public/daily-stats.js", import.meta.url).pathname },
+      { find: /^\/daily-past\.js$/, replacement: new URL("./public/daily-past.js", import.meta.url).pathname },
+      { find: /^\/daily-carousel\.js$/, replacement: new URL("./public/daily-carousel.js", import.meta.url).pathname },
     ],
   },
 });

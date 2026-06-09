@@ -2655,10 +2655,34 @@ body.hub-home .topbar-stats { display: flex; }
     align-items: start;
   }
   .hub-panel.daily .daily-head   { grid-area: head; align-self: end; }
-  .hub-panel.daily .daily-card   { grid-area: card; margin-top: 14px; }
+  .hub-panel.daily #dailyCarSlot { grid-area: card; margin-top: 14px; }
   .hub-panel.daily .hub-modes    { grid-area: modes; margin-top: 0; align-self: end; }
   .hub-panel.daily .daily-recent { grid-area: recent; margin-top: 14px; }
 }
+
+/* Day carousel: arrows flank the date; the slot holds today's card or a past one. */
+.daily-head { display: flex; align-items: center; gap: 8px; }
+.daily-head-mid { flex: 1 1 auto; min-width: 0; }
+.daily-arrow {
+  flex: 0 0 auto; width: 36px; height: 36px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14); background: transparent;
+  color: var(--fg); font-size: 22px; line-height: 1; cursor: pointer;
+  display: grid; place-items: center; transition: opacity 0.15s, background 0.15s;
+}
+.daily-arrow:hover:not(:disabled) { background: rgba(255,255,255,0.08); }
+.daily-arrow:disabled { opacity: 0.25; cursor: default; }
+.daily-arrow[hidden] { display: none; }
+
+#dailyCarSlot { position: relative; margin-top: 16px; }
+#dailyToday > .daily-card, #dailyPast > .daily-card { margin-top: 0; } /* slot owns the gap */
+.daily-past { text-align: center; cursor: default; }
+.daily-past .past-answer { margin: 14px 0 4px; font-size: 18px; }
+.daily-past .past-answer-label { letter-spacing: 0.08em; text-transform: uppercase; font-size: 11px; opacity: 0.55; margin-right: 6px; }
+.daily-past .past-answer-word { font-family: var(--font-display); font-weight: 700; letter-spacing: 0.12em; color: var(--fg); text-decoration: none; }
+.daily-past .past-stats { margin: 4px 0 14px; }
+.daily-past .past-actions { display: flex; gap: 12px; justify-content: center; align-items: center; }
+.daily-stamp-hero .past-result { display: block; margin-top: 6px; font-weight: 600; }
+.daily-past .past-loading { text-align: center; padding: 28px 0; }
 
 /* The play card — tap, Enter/Space, or just start typing. Breathes softly. */
 .daily-card {

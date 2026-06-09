@@ -5,6 +5,8 @@ import { GLYPH } from "/hub-glyphs.js";
 import { dayTheme, renderDailyCard, wireDailyCard } from "/daily-card.js";
 import { featuredWorlds } from "/worlds.js";
 import { renderWorldCard } from "/world-card.js";
+import { t } from "/i18n.js";
+import { initDailyCarousel } from "/daily-carousel.js";
 
 // Re-exported for back-compat: app.js and tests import dayTheme from here.
 export { dayTheme };
@@ -53,13 +55,18 @@ function renderDaily() {
   const themeId = themeOfDay();
   const themeName = hubCallbacks.editionName ? hubCallbacks.editionName(themeId) : themeId;
   return `<section class="hub-panel daily" id="dailyPanel">
-    <header class="daily-head">
-      <span class="daily-kicker">Today's Wordul</span>
-      <h1 class="daily-date">${shortDate(new Date())}</h1>
-      <p class="daily-edition">${themeName} <span class="daily-edition-by">· from the Studio</span></p>
+    <header class="daily-head" id="dailyCarHead">
+      <button type="button" class="daily-arrow" id="dailyPrev" aria-label="${t("daily.prevDay")}">‹</button>
+      <div class="daily-head-mid">
+        <span class="daily-kicker">${themeName} <span class="daily-edition-by">· from the Studio</span></span>
+        <h1 class="daily-date" id="dailyCarDate">${shortDate(new Date())}</h1>
+      </div>
+      <button type="button" class="daily-arrow" id="dailyNext" aria-label="${t("daily.nextDay")}" hidden>›</button>
     </header>
-
-    ${renderDailyCard({ themeId, result: hubCallbacks.dailyResult ?? null })}
+    <div id="dailyCarSlot">
+      <div id="dailyToday">${renderDailyCard({ themeId, result: hubCallbacks.dailyResult ?? null })}</div>
+      <div id="dailyPast" hidden></div>
+    </div>
 
     <section class="hub-modes" aria-label="Other ways to play">
       <div class="mode-grid mode-grid-3">
@@ -146,6 +153,20 @@ function wireDaily() {
   if (recent && list && hubCallbacks.renderRecentRooms) {
     hubCallbacks.renderRecentRooms(list);
     if (list.children.length > 0) recent.hidden = false;
+  }
+
+  // Day carousel: swipe / arrow back through past dailies. Only meaningful once there's
+  // more than today on record; the dates list arrives async (app.js re-renders the hub).
+  const car = document.getElementById("dailyPanel");
+  if (car && Array.isArray(hubCallbacks.dailyDates) && hubCallbacks.dailyDates.length > 1) {
+    initDailyCarousel(car, {
+      dates: hubCallbacks.dailyDates,
+      shortDate: (d) => shortDate(new Date(`${d}T00:00:00Z`)),
+      editionName: (id) => (hubCallbacks.editionName ? hubCallbacks.editionName(id) : id),
+      pastRecord: (d) => hubCallbacks.pastRecord?.(d) ?? null,
+      navigate: (p) => hubCallbacks.navigate?.(p),
+      onPlayDate: (d) => hubCallbacks.onPlayDate?.(d),
+    });
   }
 }
 

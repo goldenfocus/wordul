@@ -303,6 +303,13 @@ function renderHomeIdentity() {
       // dailyResult is filled from the profile below: null until you've played today,
       // then { won, guesses } — flips the home card to its post-play recap.
       dailyResult: null,
+      // Day carousel: swipe back through past dailies. dailyDates arrives async (filled
+      // below, then the hub re-renders); pastRecord reads the loaded profile (cbs.profile,
+      // set in the fetch .then) so a past day shows your own stamp + replay.
+      dailyDates: [],
+      pastRecord: (date) => dailyResultFor(cbs.profile, date),
+      navigate: (p) => navigate(p),
+      onPlayDate: (date) => navigate(`/daily/${date}`),
       // Real "N played" for the day = the daily roster's ranked-finisher count — the SAME
       // number the stats page derives from (Jun 7 incident: science roundsStarted said
       // "8 played" while the stats roster listed 6; science counts rounds across ALL
@@ -319,8 +326,18 @@ function renderHomeIdentity() {
         homeRoomRows = buildRoomRows(profile, u);
         homeRoomVisible = HOME_ROOMS_PAGE;
         cbs.dailyResult = dailyResultFor(profile);
+        cbs.profile = profile;
         renderHub(profile, cbs);
         maybeOpenArena();
+        // The daily date list drives how far the home carousel can swipe back. Fetched
+        // once; if there's history beyond today, re-render so the carousel arms itself.
+        fetch("/api/daily/dates")
+          .then((r) => (r.ok ? r.json() : { dates: [] }))
+          .then(({ dates }) => {
+            cbs.dailyDates = Array.isArray(dates) ? dates : [];
+            if (cbs.dailyDates.length > 1 && document.getElementById("dailyPanel")) renderHub(profile, cbs);
+          })
+          .catch(() => {});
         // Cross-browser self-heal: the server says you finished today (dailyResult), but
         // this browser holds no local solve/finisher token — you solved elsewhere. Pull
         // both off the room's own WS contract once, then re-render the recap with your

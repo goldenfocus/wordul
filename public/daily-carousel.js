@@ -10,7 +10,7 @@ import { t } from "/i18n.js";
 
 const SWIPE_MIN = 40; // px of horizontal intent before a swipe counts
 
-// deps: { dates:string[], shortDate(date)->str, themeName(date)->str,
+// deps: { dates:string[], shortDate(date)->str, editionName(themeId)->str,
 //         pastRecord(date)->myRecord|null, navigate(path), onPlayDate(date) }
 export function initDailyCarousel(root, deps) {
   const slot = root.querySelector("#dailyCarSlot");
@@ -58,8 +58,10 @@ export function initDailyCarousel(root, deps) {
     pastEl.innerHTML = `<p class="muted small past-loading">${t("daily.loadingDay")}</p>`;
     fetchDay(date).then((day) => {
       if (dateAt(offset) !== date) return;            // swiped away mid-fetch
+      const themeName = day.themeId ? deps.editionName(day.themeId) : "";
+      if (label) label.textContent = themeName ? `${deps.shortDate(date)} · ${themeName}` : deps.shortDate(date);
       pastEl.innerHTML = renderPastDailyCard({
-        date, themeName: deps.themeName(date), word: day.word,
+        date, themeName, word: day.word,
         stats: day.stats, myRecord: deps.pastRecord(date),
       });
       wirePast(date);

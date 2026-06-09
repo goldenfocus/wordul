@@ -76,6 +76,9 @@ export const en = {
   "daily.storyKicker": "Why this word",
   "daily.keepPlaying": "Keep playing",
   "daily.browsePast": "Browse past days →",
+  "daily.prevDay": "Previous day",
+  "daily.nextDay": "Next day",
+  "daily.loadingDay": "Loading that day…",
   // The post-word bridge: one challenge CTA + the action rail under it
   "daily.dare": "◆ Dare ◆",
   "daily.actionWiki": "Wiki",
