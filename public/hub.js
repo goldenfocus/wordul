@@ -56,7 +56,7 @@ function renderDaily() {
   const themeName = hubCallbacks.editionName ? hubCallbacks.editionName(themeId) : themeId;
   return `<section class="hub-panel daily" id="dailyPanel">
     <header class="daily-head" id="dailyCarHead">
-      <button type="button" class="daily-arrow" id="dailyPrev" aria-label="${t("daily.prevDay")}">‹</button>
+      <button type="button" class="daily-arrow" id="dailyPrev" aria-label="${t("daily.prevDay")}" hidden>‹</button>
       <div class="daily-head-mid">
         <span class="daily-kicker">${themeName} <span class="daily-edition-by">· from the Studio</span></span>
         <h1 class="daily-date" id="dailyCarDate">${shortDate(new Date())}</h1>

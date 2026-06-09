@@ -44,7 +44,9 @@ export function initDailyCarousel(root, deps) {
     offset = clampOffset(offset, n);
     const date = dateAt(offset);
     if (label) label.textContent = deps.shortDate(date);
-    if (prevBtn) prevBtn.disabled = offset <= -(n - 1);
+    // Carousel is armed (n > 1, else initDailyCarousel isn't called) → reveal back-arrow;
+    // disable it only at the oldest day. Forward-arrow shows only off today.
+    if (prevBtn) { prevBtn.hidden = false; prevBtn.disabled = offset <= -(n - 1); }
     if (nextBtn) nextBtn.hidden = offset === 0;       // today is the right edge
 
     if (offset === 0) {
