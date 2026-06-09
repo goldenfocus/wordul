@@ -339,8 +339,7 @@ function renderHomeIdentity() {
 
 // Today's daily result from the profile (no extra request): the finished game whose
 // roomPath is daily/<today>. Drives the home's post-play recap. null = not played yet.
-function dailyResultFor(profile) {
-  const date = todayUTC();
+function dailyResultFor(profile, date = todayUTC()) {
   const g = (profile?.games || []).find((x) => x.roomPath === "daily/" + date);
   if (!g) return null;
   // Colors come from the server record (cross-device, no spoiler); the real LETTERS come
