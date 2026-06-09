@@ -118,6 +118,12 @@ async function supernova(receipt, opts = {}) {
   const answerWord = typeof opts.word === "string" && opts.word.trim()
     ? opts.word.trim().toUpperCase()
     : null;
+  const metaText = [opts.ipa, opts.pos].filter(Boolean).join(" · ");
+  const glossText = (typeof opts.gloss === "string" && opts.gloss.trim())
+    || (typeof opts.def === "string" && opts.def.trim())
+    || "";
+  const exampleText = typeof opts.example === "string" ? opts.example.trim() : "";
+  const isLoss = receipt.payout <= 0;
 
   return new Promise((resolve) => {
     // ── static fallback (reduced motion) ─────────────────────────────────────────────────
@@ -236,6 +242,39 @@ async function supernova(receipt, opts = {}) {
     payoutEl.appendChild(payN);
     payoutEl.appendChild(payS);
     overlay.appendChild(payoutEl);
+
+    // Act 1 — Aurora Lexicon hero: the word + its meaning, the lesson of the round.
+    const heroEl = document.createElement("div");
+    heroEl.style.cssText = `
+      position:absolute; left:0; right:0; top:50%; transform:translateY(-50%);
+      z-index:8; text-align:center; padding:0 24px; pointer-events:none;
+      transition:opacity .5s ease, transform .6s cubic-bezier(.4,0,.2,1);
+    `;
+    const heroKicker = document.createElement("div");
+    heroKicker.style.cssText = `font-size:13px; letter-spacing:.34em; text-transform:uppercase;
+      color:#8a8a8f; opacity:0; transform:translateY(8px); transition:.5s ease; margin-bottom:14px;`;
+    const heroWord = document.createElement("div");
+    heroWord.style.cssText = `font-family:'Fraunces',Georgia,serif; font-weight:900; line-height:.92;
+      font-size:clamp(56px,12vw,140px); color:#f0c14b; display:flex; justify-content:center; flex-wrap:wrap;
+      text-shadow:0 0 60px rgba(240,193,75,.45),0 0 14px rgba(240,193,75,.6);`;
+    const heroMeta = document.createElement("div");
+    heroMeta.style.cssText = `font-family:'Fraunces',Georgia,serif; font-style:italic;
+      font-size:clamp(15px,2.4vw,20px); color:#8a8a8f; margin-top:10px;
+      opacity:0; transform:translateY(8px); transition:.5s ease .1s;`;
+    const heroRule = document.createElement("div");
+    heroRule.style.cssText = `height:1px; width:0; margin:26px auto 22px;
+      background:linear-gradient(90deg,transparent,#a87a14,#f0c14b,#a87a14,transparent);
+      transition:width .8s cubic-bezier(.2,.8,.2,1);`;
+    const heroGloss = document.createElement("div");
+    heroGloss.style.cssText = `font-family:'Fraunces',Georgia,serif; font-weight:600;
+      font-size:clamp(20px,4vw,32px); color:#f4f2ec; line-height:1.25; max-width:18em; margin:0 auto;
+      opacity:0; transform:translateY(12px); transition:.6s ease;`;
+    const heroExample = document.createElement("div");
+    heroExample.style.cssText = `font-family:'Fraunces',Georgia,serif; font-style:italic;
+      font-size:clamp(16px,2.8vw,21px); color:#8a8a8f; margin:18px auto 0; max-width:22em; line-height:1.5;
+      opacity:0; transform:translateY(12px); transition:.6s ease .12s;`;
+    heroEl.append(heroKicker, heroWord, heroMeta, heroRule, heroGloss, heroExample);
+    overlay.appendChild(heroEl);
 
     document.body.appendChild(overlay);
 
@@ -486,6 +525,57 @@ async function supernova(receipt, opts = {}) {
         playChime?.([[988, 0], [1319, 0.07]]);
         capLine.style.animation = "settle-wr-pulse .45s cubic-bezier(.2,.9,.3,1.2)";
       }
+    }
+
+    // Bold the answer word (gold) inside its example sentence — safe DOM, no innerHTML.
+    function buildExample(el, word, sentence) {
+      while (el.firstChild) el.removeChild(el.firstChild);
+      const re = new RegExp(`\\b(${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})\\b`, "i");
+      const m = sentence.match(re);
+      if (!m) { el.textContent = sentence; return; }
+      el.appendChild(document.createTextNode(sentence.slice(0, m.index)));
+      const b = document.createElement("b");
+      b.style.cssText = "color:#f0c14b; font-weight:600;";
+      b.textContent = m[0];
+      el.appendChild(b);
+      el.appendChild(document.createTextNode(sentence.slice(m.index + m[0].length)));
+    }
+
+    // Act 1: the word assembles letter-by-letter, then meaning fades in beneath. Calm, editorial.
+    async function lexiconReveal() {
+      heroKicker.textContent = isLoss
+        ? tFn("settle.theWordWas", "the word was")
+        : tFn("settle.theWordIs", "the word is");
+      const stagger = 70, dur = 550;
+      [...answerWord].forEach((ch, i) => {
+        const s = document.createElement("span");
+        s.textContent = ch;
+        s.style.cssText = `display:inline-block; opacity:0; transform:translateY(38px) rotate(6deg);
+          transition:opacity ${dur}ms ease ${120 + i * stagger}ms,
+                      transform ${dur}ms cubic-bezier(.2,.9,.3,1.4) ${120 + i * stagger}ms;`;
+        heroWord.appendChild(s);
+      });
+      shake = 7; ringBurst("#f0c14b", 3);
+      playChime?.([[660, 0]]);
+      requestAnimationFrame(() => heroWord.querySelectorAll("span").forEach((s) => {
+        s.style.opacity = "1"; s.style.transform = "none";
+      }));
+      await Promise.race([sleep(120 + answerWord.length * stagger + 180), skipRace]);
+      // kicker + headword meta
+      heroKicker.style.opacity = "1"; heroKicker.style.transform = "none";
+      if (metaText) { heroMeta.textContent = metaText; heroMeta.style.opacity = "1"; heroMeta.style.transform = "none"; }
+      heroRule.style.width = "min(420px,70%)";
+      // meaning
+      if (glossText) {
+        heroGloss.textContent = glossText;
+        heroGloss.style.opacity = "1"; heroGloss.style.transform = "none";
+      }
+      if (exampleText) {
+        buildExample(heroExample, answerWord, exampleText);
+        heroExample.style.opacity = "1"; heroExample.style.transform = "none";
+      }
+      // hold the lesson
+      await Promise.race([sleep(glossText ? 2300 : 1400), skipRace]);
     }
 
     function countTo(from, to, ms) {
