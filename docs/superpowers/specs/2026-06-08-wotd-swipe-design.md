@@ -44,13 +44,16 @@ stats, and — if you played it — your solve stamp and a "watch replay".
 | Need | Source | New? |
 |------|--------|------|
 | How far back the carousel goes | `GET /api/daily/dates` → `{ dates: string[] }` | existing |
-| My result + my replay for a day | `profile.games` filtered by `roomPath === "daily/<date>"` (already in memory after login; `GameRecord` keeps `solveGrid`, `words`, `guessAts` for past games via `toPublicGame`) | existing |
-| That day's global stats (players, win%, distribution) | `GET /api/science/daily/<date>` (the same source the `/daily/<date>/stats` page already renders) | existing |
+| My result + my replay for a day | `profile.games` filtered by `roomPath === "daily/<date>"` (already in memory after login; `GameRecord` keeps `solveGrid`, `words`, `guessAts` for past games via `toPublicGame`). Letters come from `localStorage` `wr.dailySolve:<date>` when present — same as `dailyResultFor`. | existing |
+| That day's global stats (players, win%, distribution) | `GET /api/daily/<date>/leaderboard?full=1&username=<me>` → `computeDailyStatsFromRoster(full)` — **the exact source + reducer the `/daily/<date>/stats` page uses** (roster-driven, bots included, so the card matches the stats page tile-for-tile). | existing |
 | **The answer word + theme for a past day** | **`GET /api/daily/word?date=<d>` → `{ date, word, themeId }`** | **NEW** |
 
-The only new server surface is the past-word route. "Word + global stats" on the card is
-achieved by the new word route **plus** the existing science-stats route — not one fat new
-endpoint — so the card's numbers match the stats page exactly.
+The only new server surface is the past-word route. The card's stats line reuses the existing
+roster endpoint + `computeDailyStatsFromRoster`, so its numbers match the stats page exactly —
+**not** the science endpoint (which is anonymous-human-only and would disagree). The new word
+route exists because the leaderboard only echoes the answer to a holder of that day's finisher
+token; days you lost or never played need the answer from somewhere, and a past-only word route
+is the smallest safe source.
 
 ### New endpoint: `GET /api/daily/word?date=<YYYY-MM-DD>`
 
@@ -111,15 +114,14 @@ Pure function, mirrors the existing solve-stamp render (`app.js:330–340`,
 - **Answer** always shown.
 - Tap-throughs: `▸ stats` → `/daily/<date>/stats`; `▸ word wiki` → `/word/<word>`.
 
-### Watch replay
+### Watch replay (resolved — ships in v1)
 
-Reuses the existing finished-game replay machinery (`ghost-replay.js` + the solve-stamp /
-replay path shipped for finished games). The static solve stamp is already a solved-for render;
-the **animated** on-demand replay viewer is the one piece to confirm is callable from a past
-`GameRecord` (`solveGrid` + `words` + `guessAts`) during planning. If a clean on-demand launch
-hook does not already exist, the fallback for v1 is the static solve stamp (still shows the full
-solved board) with the animated replay wired in as a fast follow — **to be decided in the plan
-after reading the replay launch path**, not silently dropped.
+`renderStamp(grid, words, minRows)` (in `daily-card.js`) already emits the solve stamp as a
+`role="button"` element labelled "Play replay", and `stamp-replay.js` exports
+`playStampReplay(stampEl)` / `wireStampReplays(root)` to animate it. The past-day card renders
+the same stamp from `myRecord.solveGrid`/`solveWords` and calls `wireStampReplays(cardEl)`; the
+explicit **▶ Watch replay** button calls `playStampReplay` on that stamp. No room board, no new
+replay surface — full reuse of the shipped stamp-replay path.
 
 ## Files touched
 
@@ -145,5 +147,5 @@ after reading the replay launch path**, not silently dropped.
 
 - **Answer leak:** the new endpoint MUST hard-refuse `date >= today`. Covered by a unit test.
 - **Gesture conflict:** swipe scoped to the card so the Worlds-strip carousel still scrolls.
-- **Stats consistency:** card reuses `/api/science/daily/<date>`, so numbers match the stats page.
+- **Stats consistency:** card reuses `/api/daily/<date>/leaderboard` + `computeDailyStatsFromRoster`, so numbers match the stats page tile-for-tile (roster-driven, bots included — by design).
 - **Deploy:** ship via `dev/ship.sh` / `/push` only; CI deploys `origin/main`. No `wrangler deploy` by hand.
