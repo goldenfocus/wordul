@@ -5190,7 +5190,11 @@ async function prepareShareCard() {
   // If we arrived via a challenge link already, reuse that id (don't re-mint the same
   // word). A seeded arena room already published one WITH the ghost tape — prefer it.
   let challengeId = game.challengeId || snap.shareChallengeId || null;
-  if (!challengeId) {
+  // The daily is a shared, blind, leaderboard word — never a personal ghost duel. Skip
+  // the mint entirely: its live `word` is stripped server-side, so a mint would file a
+  // junk challenge whose ghost falls back to a seeded record. The card links to the day
+  // itself (below) — a brag, not a versus lobby.
+  if (!challengeId && !game.isDaily) {
     // My run, re-cut as a ghost tape (masks only) — so whoever takes the challenge
     // races my replay, not just a static score. Built OUTSIDE the mint try: a tape
     // bug must degrade to a ghost-less challenge, never cost us the mint itself.
@@ -5223,9 +5227,11 @@ async function prepareShareCard() {
       challengeId = (await res.json()).id;
     } catch { /* offline / mint failed — the card falls back to a plain link below */ }
   }
-  const cardUrl = challengeId
-    ? withMyVs(`${location.origin}/c/${challengeId}`)
-    : shareTargetUrl({ origin: location.origin, owner: game.owner, slug: game.slug });
+  const cardUrl = game.isDaily
+    ? `${location.origin}/daily/${game.dailyDate}`
+    : challengeId
+      ? withMyVs(`${location.origin}/c/${challengeId}`)
+      : shareTargetUrl({ origin: location.origin, owner: game.owner, slug: game.slug });
 
   // The card draws ONLY the color grid (no letters, no answer) — the model is the
   // no-spoiler guarantee, unit-tested in test/share-card.test.js.
@@ -5234,9 +5240,11 @@ async function prepareShareCard() {
     challengeUrl: cardUrl.replace(/^https?:\/\//, ""),
   });
   const canvas = renderShareCard(model, snap.wordLength ?? 5);
-  const text = won
-    ? `Solved Wordul in ${score} — beat me?`
-    : `Wordul got me. Your turn?`;
+  const text = game.isDaily
+    ? (won ? `Solved today's Wordul in ${score} — your turn?` : `Today's Wordul got me. Your turn?`)
+    : won
+      ? `Solved Wordul in ${score} — beat me?`
+      : `Wordul got me. Your turn?`;
   game.shareImage = { url: cardUrl, text, canvas };
   // The share row may have rendered before the mint resolved — backfill its URL field
   // and reveal "Save card" now that a canvas exists to save.

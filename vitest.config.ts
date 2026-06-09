@@ -36,6 +36,7 @@ export default defineConfig({
       { find: /^\/owner-tape\.js$/, replacement: new URL("./public/owner-tape.js", import.meta.url).pathname },
       { find: /^\/hub-glyphs\.js$/, replacement: new URL("./public/hub-glyphs.js", import.meta.url).pathname },
       { find: /^\/daily-card\.js$/, replacement: new URL("./public/daily-card.js", import.meta.url).pathname },
+      { find: /^\/daily-share-core\.js$/, replacement: new URL("./public/daily-share-core.js", import.meta.url).pathname },
       { find: /^\/daily-lb\.js$/, replacement: new URL("./public/daily-lb.js", import.meta.url).pathname },
       { find: /^\/stamp-replay-core\.js$/, replacement: new URL("./public/stamp-replay-core.js", import.meta.url).pathname },
       { find: /^\/stamp-replay\.js$/, replacement: new URL("./public/stamp-replay.js", import.meta.url).pathname },
