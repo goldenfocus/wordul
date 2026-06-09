@@ -41,10 +41,6 @@ html, body {
   font-family: var(--font-body, -apple-system, system-ui, "Helvetica Neue", Arial, sans-serif);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
-  /* No horizontal scroll, ever: decorative auras/orbs (.home-aura, .orb) bleed past the
-     viewport edges by design. `clip` contains that bleed without creating a scroll
-     container (so position:sticky and vertical scrolling are unaffected). */
-  overflow-x: clip;
   /* Disable iOS Safari's 300ms double-tap-zoom on the whole app. Pinch-zoom still works. */
   touch-action: manipulation;
 }
@@ -59,6 +55,10 @@ body {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  /* No overflow clip on <body>: it would make Chromium promote body's overflow-y to
+     `auto`, turning <body> into the scroll-context for the sticky .topbar while the
+     viewport actually scrolls — the bar would ride away instead of pinning. The aura
+     bleed is contained on #app instead (below). */
 }
 /* The game shell is a game, not a document. iOS long-press "smart selection" snaps to
    the NEAREST selectable text even when the touched element is user-select:none — so
@@ -80,15 +80,24 @@ input, textarea, .chat-log {
 
 /* Topbar */
 .topbar {
-  height: 50px;
+  /* Persistent across scroll — the identity bar never leaves. */
+  position: sticky;
+  top: 0;
+  z-index: 35; /* above scrolling content (≤30), below the floating UI band (toasts/menus/sheets ≥40) */
+  min-height: 50px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  /* Honour the notch on installed/PWA so the bar isn't clipped on iPhone. */
+  padding: env(safe-area-inset-top, 0px) 16px 0;
   flex-shrink: 0;
+  /* Frosted glass: content reads softly behind a bar that stays put. */
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
 }
-.topbar-actions { display: flex; align-items: center; gap: 4px; }
+.topbar-actions { display: flex; align-items: center; gap: 10px; }
 .topbar-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand {
   font-family: var(--font-display, inherit);
@@ -151,18 +160,20 @@ input, textarea, .chat-log {
   font-size: 15px;
   white-space: nowrap;
 }
-/* Premium stacked gold (iter3 §3): a small ◆ riding ABOVE the amount — a column,
-   "suddenly premium". Shared by the home #hubGold and the in-room #goldHud; the
-   count-up tween writes only .gold-stack-num (gold.js goldCountTarget). */
+/* Gold lockup: a small ◆ leading the amount on ONE baseline — "◆ 837". Shares the
+   topbar's single optical centre-line with the avatar + name, so the right cluster
+   reads as one aligned row, not stacked columns of mismatched height. Shared by the
+   home #hubGold and the in-room #goldHud; the count-up tween writes only
+   .gold-stack-num (gold.js goldCountTarget). */
 .gold-stack {
   display: inline-flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 1px;
+  gap: 4px;
   line-height: 1;
 }
-.gold-stack-glyph { font-size: 9px; line-height: 1; }
+.gold-stack-glyph { font-size: 11px; line-height: 1; opacity: 0.9; }
 .gold-stack-num { font-variant-numeric: tabular-nums; line-height: 1; }
 .gold-hud.gold-bump { animation: gold-bump 0.5s ease; }
 @keyframes gold-bump {
@@ -455,36 +466,36 @@ body.reduced-motion .tile.ghost-cursor {
 .icon-btn:hover { background: rgba(255,255,255,0.06); }
 
 /* Immersive in-game header (C5): the avatar IS the hub — one tap opens the
-   consolidated menu. Premium identity (iter3 §3): FRAMELESS — just the glyph,
-   "like a picture without a frame". Bare at rest; hover lights the glyph itself,
-   not a border. The 44×44 box keeps the touch target ≥44px. */
+   consolidated menu. Premium identity: a small rounded tile that anchors the
+   right corner and gives the avatar enough weight to sit level with the gold and
+   the @name on a single baseline (a bare floating glyph read as unmoored). */
 .avatar-btn {
-  width: 44px; height: 44px; flex-shrink: 0;
-  border: 0;
-  background: transparent;
+  width: 36px; height: 36px; flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--fg);
-  font-weight: 800; font-size: 18px; line-height: 1;
+  font-weight: 800; font-size: 16px; line-height: 1;
   cursor: pointer; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   text-transform: uppercase;
-  transition: color 0.15s, text-shadow 0.18s, transform 0.05s;
+  box-shadow: 0 0 20px -12px color-mix(in srgb, var(--accent) 90%, transparent);
+  transition: border-color 0.15s, box-shadow 0.18s, transform 0.05s;
 }
-.avatar-btn:hover { color: var(--accent); text-shadow: 0 0 16px color-mix(in srgb, var(--accent) 80%, transparent); }
+.avatar-btn:hover { border-color: var(--accent); box-shadow: 0 0 24px -8px color-mix(in srgb, var(--accent) 95%, transparent); }
 .avatar-btn:active { transform: scale(0.93); }
 
-/* The immersive header lives between the brand and the avatar: gold only — the
-   username rides under the avatar (.avatar-stack), not inline. */
+/* Identity cluster: @name and avatar ride side-by-side on the topbar's centre-line
+   (row-reverse keeps the avatar at the far-right corner where the menu anchors).
+   No more negative-margin tuck — the row is simply vertically centred. */
 .room-header { display: inline-flex; align-items: center; gap: 8px; }
 .avatar-stack {
-  display: inline-flex; flex-direction: column; align-items: center;
-  justify-content: center; flex-shrink: 0;
+  display: inline-flex; flex-direction: row-reverse; align-items: center;
+  gap: 8px; flex-shrink: 0;
 }
 .avatar-name {
-  font-size: 9.5px; line-height: 1.2; font-weight: 700; color: var(--muted);
-  white-space: nowrap; max-width: 72px; overflow: hidden; text-overflow: ellipsis;
-  /* The frameless 44px hit box centers an 18px glyph, leaving dead space below —
-     tuck the caption into it so avatar + @name still fit the 50px topbar. */
-  margin-top: -8px;
+  font-size: 13px; line-height: 1; font-weight: 700; color: var(--muted);
+  white-space: nowrap; max-width: 96px; overflow: hidden; text-overflow: ellipsis;
 }
 .avatar-name[hidden] { display: none; }
 
@@ -515,6 +526,12 @@ body.reduced-motion .tile.ghost-cursor {
   flex: 1;
   display: flex;
   flex-direction: column;
+  /* No horizontal scroll, ever: decorative auras/orbs (.home-aura, .orb) bleed past the
+     viewport edges by design. Clip that bleed here on the content wrapper (not <body>, which
+     would break the sticky topbar — see body{} above). #app spans the viewport width, so
+     clipping here is visually identical to clipping at the screen edge, and #app stays
+     overflow-y:visible so the document (not #app) scrolls and the topbar pins. */
+  overflow-x: clip;
 }
 
 .screen {

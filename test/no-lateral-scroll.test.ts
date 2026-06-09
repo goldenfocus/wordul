@@ -3,9 +3,16 @@
 // Decorative elements (home aura/orbs) and back-to-back link rows have caused the page to
 // be wider than the viewport on iPhone — it scrolls laterally with dead taps (see the iOS
 // Input-Zoom Trap scar; same family of bug). The fix is an `overflow-x: clip` floor on the
-// root/body of every served top-level stylesheet. This test fails if that floor is removed,
-// so the lateral-scroll regression can't sneak back in. (It's a static presence check —
-// actual overflow is verified in-browser at ship time, which jsdom can't measure.)
+// scrolling content wrapper of every served top-level stylesheet. This test fails if that
+// floor is removed, so the lateral-scroll regression can't sneak back in. (It's a static
+// presence check — actual overflow is verified in-browser at ship time, which jsdom can't
+// measure.)
+//
+// NOTE: in style.css the floor lives on `#app`, NOT `html, body`. Putting `overflow-x: clip`
+// on <body> makes Chromium auto-promote body's overflow-y to `auto`, which turns <body> into
+// the scroll-context for the persistent sticky `.topbar` while the viewport is what actually
+// scrolls — the bar then rides away instead of pinning. #app spans the viewport width, so
+// clipping there is visually identical and keeps the document the single scroller.
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -16,7 +23,7 @@ const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
 
 // stylesheet -> the selector that must carry the overflow-x guard on that page.
 const GUARDED: { file: string; selector: RegExp }[] = [
-  { file: "style.css", selector: /html,\s*body\s*\{/ },     // main app + worlds home
+  { file: "style.css", selector: /#app\s*\{/ },             // main app + worlds home (on #app, not body — see note above)
   { file: "word-page.css", selector: /html,\s*\.wp\s*\{/ }, // word wiki pages
 ];
 
