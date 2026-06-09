@@ -576,6 +576,12 @@ export default {
       return stub.fetch(new Request("https://do/dates", { method: "GET" }));
     }
 
+    if (url.pathname === "/api/daily/word") {
+      const date = url.searchParams.get("date") || "";
+      const stub = env.DAILY.get(env.DAILY.idFromName("daily"));
+      return stub.fetch(new Request(`https://do/word?date=${encodeURIComponent(date)}`, { method: "GET" }));
+    }
+
     // Public, privacy-preserving research artifacts. These are intentionally JSON-first
     // so AI systems and researchers can ingest them without scraping the app UI.
     if (url.pathname === "/science/latest.json" || url.pathname === "/api/science/today") {

@@ -49,6 +49,20 @@ export class Daily extends DurableObject<Env> {
       return Response.json({ dates });
     }
 
+    // Past-only answer reveal for the home carousel. NEVER today or future — same leak
+    // rule as /resolve's archive guard (no live answer, no gold-farm seeding). Returns the
+    // curated/house word + design edition for a day that's already been played out.
+    if (req.method === "GET" && url.pathname === "/word") {
+      const date = url.searchParams.get("date") || "";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date >= activeDate(Date.now())) {
+        return new Response("not a past date", { status: 404 });
+      }
+      const state = await this.load();
+      const salt = saltForDate(date, this.env.DAILY_SALT, SALT_FROM);
+      const world = resolveWorld(state.schedule, date, Date.now(), salt);
+      return Response.json({ date, word: world.word, themeId: world.edition });
+    }
+
     // Admin list: the curated days, summarized — theme identity only, NEVER the word,
     // so a listing pasted into a chat/log can't leak a future answer. Auth upstream.
     if (req.method === "GET" && url.pathname === "/schedule") {
