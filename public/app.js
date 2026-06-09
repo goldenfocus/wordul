@@ -3551,11 +3551,9 @@ function syncModePicker(snap) {
 function syncModeChip(snap) {
   const chip = $("#modeChip");
   if (!chip) return;
-  if (game.isDaily) { chip.hidden = true; return; } // daily has its own title; no mode chip
-  chip.textContent = t(`mode.${snap.mode}.label`);
-  // Read-only chip shows whenever the interactive picker is hidden (playing /
-  // finished) — late-joiners mid-play still see the mode.
-  chip.hidden = snap.phase === "lobby";
+  // The mode pill ("Live Race") read as noise on top of the board (Jun 8) — the room name
+  // + the board itself carry the context. Kept in the DOM (id-wired) but never shown.
+  chip.hidden = true;
 }
 
 // Word-length picker — now mounted in the Settings "Room" section (out of the lobby).
@@ -3753,25 +3751,20 @@ function renderQueue(snap) {
   const strip = $("#queueStrip");
   if (!strip) return;
   const queue = Array.isArray(snap.queue) ? snap.queue : [];
-  if (!snap.isDuel || (queue.length === 0 && !snap.throne)) {
+  // The throne's "👑 X · N in a row" line was removed (read as noise, Jun 8) — the crown
+  // badge on the board already carries the streak. The strip now shows only the waiting
+  // challenger queue, so it hides whenever nobody's waiting (incl. solo / duel with no line).
+  if (!snap.isDuel || queue.length === 0) {
     strip.hidden = true; strip.textContent = ""; return;
   }
   strip.hidden = false;
   strip.textContent = "";
-  if (snap.throne) {
-    const king = document.createElement("span");
-    king.className = "queue-king";
-    king.textContent = `👑 ${snap.throne.username} · ${snap.throne.streak} in a row`;
-    strip.appendChild(king);
-  }
-  if (queue.length) {
-    const label = document.createElement("span");
-    label.className = "queue-next muted small";
-    const meName = getUsername();
-    const names = queue.map((u, i) => (u === meName ? `you (#${i + 1})` : u));
-    label.textContent = `Next up: ${names.join(" → ")}`;
-    strip.appendChild(label);
-  }
+  const label = document.createElement("span");
+  label.className = "queue-next muted small";
+  const meName = getUsername();
+  const names = queue.map((u, i) => (u === meName ? `you (#${i + 1})` : u));
+  label.textContent = `Next up: ${names.join(" → ")}`;
+  strip.appendChild(label);
 }
 
 function renderBoards(snap, me) {
@@ -3817,12 +3810,12 @@ function renderBoards(snap, me) {
     board.dataset.player = p.username;
     const name = document.createElement("div");
     name.className = "player-name";
-    // Daily is always YOUR solo board — labeling it "will (you)" is noise (identity
-    // already rides under the avatar). Races keep the label: it says whose board is whose.
-    if (!game.isDaily) {
-      const nameSpan = userLink(p.username, { suffix: p.username === getUsername() ? " (you)" : "" });
-      if (p.username === getUsername()) nameSpan.classList.add("me");
-      name.appendChild(nameSpan);
+    const isMe = p.username === getUsername();
+    // Your OWN board needs no name label — your identity already rides under the topbar
+    // avatar, so "(you)" on top of the board read as noise (Jun 8). Daily is always solo
+    // (no label either way). Races/duels keep OPPONENT names: they say whose board is whose.
+    if (!isMe && !game.isDaily) {
+      name.appendChild(userLink(p.username, {}));
     }
 
     if (p.status === "won") {
@@ -3832,7 +3825,9 @@ function renderBoards(snap, me) {
     } else if (!p.connected) {
       const b = document.createElement("span"); b.className = "badge off"; b.textContent = "AWAY"; name.appendChild(b);
     }
-    if (snap.throne && p.username === snap.throne.username) {
+    // Throne streak badge: opponents only. On your OWN board the "👑 ×N" chip was the
+    // streak noise flagged Jun 8 — your run is yours to know; the badge is for reading rivals.
+    if (snap.throne && p.username === snap.throne.username && !isMe) {
       const crown = document.createElement("span");
       crown.className = "badge throne";
       crown.textContent = `👑 ×${snap.throne.streak}`;
@@ -3857,7 +3852,6 @@ function renderBoards(snap, me) {
     board.style.setProperty("--cols", String(cols));
     board.style.setProperty("--rows", String(rowsToDraw));
     grid.style.setProperty("--rows", String(rowsToDraw));
-    const isMe = p.username === getUsername();
     const pending = (isMe && snap.phase === "playing" && p.status === "playing") ? game.pending : "";
     const prevCount = game.lastGuessCounts.get(p.username) ?? 0;
     const freshRowIdx = p.guesses.length > prevCount ? p.guesses.length - 1 : -1;

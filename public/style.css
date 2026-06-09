@@ -88,7 +88,7 @@ input, textarea, .chat-log {
   padding: 0 16px;
   flex-shrink: 0;
 }
-.topbar-actions { display: flex; gap: 4px; }
+.topbar-actions { display: flex; align-items: center; gap: 4px; }
 .topbar-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand {
   font-family: var(--font-display, inherit);
@@ -1512,21 +1512,8 @@ html[data-edition="default"] .key.pressed {
   box-shadow: 0 0 0 #050506, 0 1px 4px rgba(0,0,0,.5);
 }
 
-/* ✨ Power-ups: one subtle magic icon, hidden until you can afford the cheapest
-   power-up. Tapping opens a popover of currently-affordable power-ups — icons only,
-   no price (you learn the cost by watching the balance dip). */
-.magic-bar { position: relative; display: flex; justify-content: center; gap: 10px; width: 100%; max-width: 520px; margin: 0 auto; padding: 0 8px 6px; }
-.magic-icon {
-  width: 44px; height: 44px; border-radius: 8px;
-  border: 1px solid var(--border); background: var(--bg-card, var(--key-bg));
-  font-size: 20px; line-height: 1; cursor: pointer; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  transition: border-color 0.15s, transform 0.08s, box-shadow 0.15s;
-}
-.magic-icon:hover { border-color: var(--accent); }
-.magic-icon:active { transform: scale(0.92); }
-/* 💀 give-up: surfaces only when stuck (idle / too many errors). Tap = give up =
-   the same lose explosion in any mode. Reuses the magic-icon footprint; red tint. */
+/* 💀 give-up: surfaces only when stuck (idle / too many errors), in the play cluster's
+   action row beside the power-ups. Tap = give up = the same lose explosion in any mode. */
 .give-up-icon {
   width: 44px; height: 44px;
   border: none; background: none;
@@ -1547,19 +1534,46 @@ html[data-edition="default"] .key.pressed {
   width: 100%; max-width: 520px; margin: 0 auto;
   min-height: 44px;
 }
+/* Play cluster — pinned to the bottom-LEFT of the gap (the hacklog float stays centered
+   in the gap's empty middle). A column: power-ups (direct-hit) + 💀 give-up ride ABOVE,
+   the 🔊 speaker + round score share the row below. Absolutely positioned like the old
+   mute, so it never pushes layout between the board and the keyboard. pointer-events are
+   re-enabled per child so the centered hacklog float can be tapped through the gaps. */
+.play-hud {
+  position: absolute; left: 0; bottom: 0;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  pointer-events: none;
+}
+.play-hud > * { pointer-events: auto; }
+.play-hud-actions { display: flex; align-items: center; gap: 8px; }
+.play-hud-base { display: flex; align-items: center; gap: 8px; }
+/* Direct-hit power-up buttons (icon only, no price — the balance dip teaches the cost). */
+.power-rail { display: flex; gap: 8px; }
+.power-rail[hidden] { display: none; }
+.power-hit {
+  width: 44px; height: 44px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg-card, var(--key-bg)); color: var(--fg);
+  font-size: 20px; line-height: 1; cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s, transform 0.06s, box-shadow 0.15s;
+}
+.power-hit:hover { border-color: var(--accent); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 35%, transparent); }
+.power-hit:active { transform: scale(0.92); }
 /* 🔊 mute: always-visible in-game sound toggle. Dimmed at rest; full-strength when
-   muted so the off state is impossible to miss. */
+   muted so the off state is impossible to miss. Now a static cluster item (was absolute). */
 .mute-icon {
-  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
-  width: 44px; height: 44px;
+  width: 40px; height: 44px;
   border: none; background: none;
   font-size: 19px; line-height: 1; cursor: pointer; padding: 0; opacity: 0.45;
   display: inline-flex; align-items: center; justify-content: center;
   transition: transform 0.08s, opacity 0.15s;
 }
 .mute-icon:hover { opacity: 1; }
-.mute-icon:active { transform: translateY(-50%) scale(0.92); }
+.mute-icon:active { transform: scale(0.92); }
 .mute-icon.is-muted { opacity: 0.9; }
+/* The round score rides on the speaker's row — left-aligned, no bottom margin (it's no
+   longer a centered chip above the board). The gold ink + glow carry over from .round-score. */
+.play-hud-base .round-score { margin: 0; text-align: left; font-size: 16px; }
 /* The lobby is quiet chrome — no floating speaker there ("looks off" feedback, Jun 7).
    Sound still toggles in the avatar hub; the icon returns for play, where audio lives. */
 body.lobby .mute-icon { display: none; }
@@ -1571,22 +1585,6 @@ body.lobby .board-gap { display: none; }
    control moves into Setup (Settings already owns length + rows selects). */
 body.lobby .player-name { display: none; }
 body.lobby #dimWrap { display: none; }
-.magic-popover {
-  /* The magic-bar now sits ABOVE the board, so the popover opens DOWNWARD. */
-  position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
-  display: flex; gap: 8px; padding: 8px;
-  background: var(--bg-card, var(--key-bg)); border: 1px solid var(--border);
-  border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 30;
-}
-.magic-option {
-  width: 48px; height: 48px; border-radius: 10px;
-  border: 1px solid var(--border); background: var(--bg, var(--key-bg)); color: var(--fg);
-  font-size: 22px; line-height: 1; cursor: pointer; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  transition: border-color 0.15s, transform 0.05s;
-}
-.magic-option:hover { border-color: var(--accent); }
-.magic-option:active { transform: scale(0.94); }
 .power-hints {
   width: 100%; max-width: 520px; margin: 2px auto; text-align: center;
   color: var(--accent); font-size: 13px; font-weight: 600;
@@ -3391,6 +3389,41 @@ body.lobby #chatPanel { position: relative; z-index: 1; }
 }
 body.reduced-motion .lobby-aura .lobby-aura-a,
 body.reduced-motion .lobby-aura .lobby-aura-b { animation: none !important; }
+
+/* Play-phase aurora — the home/hub's drifting purple·gold·teal orbs, ported behind the
+   board so a live game shares that polish (the lobby keeps its own conic aura above).
+   Fixed + z-index:0 like the lobby aura; the play content is lifted to z-index:1 below.
+   Reuses the hub-orb-a/b/c drift keyframes. Fades in only while body.playing. */
+.room-aura {
+  position: fixed; inset: 0; z-index: 0;
+  pointer-events: none; overflow: hidden;
+  opacity: 0; transition: opacity 0.6s ease;
+}
+body.playing .room-aura { opacity: 1; }
+.room-orb { position: absolute; border-radius: 50%; filter: blur(80px); will-change: transform; }
+.room-orb-uv {
+  width: 420px; height: 420px; top: -90px; left: -70px;
+  background: radial-gradient(circle, #7c3aed 0%, #4f1ccc 40%, transparent 70%);
+  opacity: 0.26; animation: hub-orb-a 18s ease-in-out infinite;
+}
+.room-orb-gold {
+  width: 300px; height: 300px; top: 38%; right: -70px;
+  background: radial-gradient(circle, #f0c14b 0%, #c8860a 45%, transparent 70%);
+  opacity: 0.15; animation: hub-orb-b 24s ease-in-out infinite;
+}
+.room-orb-teal {
+  width: 260px; height: 260px; bottom: 12%; left: 8%;
+  background: radial-gradient(circle, #0ed2f7 0%, #0a7fa0 50%, transparent 70%);
+  opacity: 0.12; animation: hub-orb-c 21s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) { .room-orb { animation: none !important; } }
+body.reduced-motion .room-orb { animation: none !important; }
+/* Lift the live play column above the aura, and collapse the now-empty lobby bar during
+   play: its room name is already hidden mid-game (immersive) and the mode pill is gone,
+   so the bar would otherwise read as an empty bordered box on top of the board. It
+   returns at the finish screen (room name + Play again) — only body.playing hides it. */
+body.playing #tabPlay { position: relative; z-index: 1; }
+body.playing .lobby-bar { display: none; }
 
 /* 1 ── Two-zone layout, gated to the lobby phase ────────────────────────────
    Default (NOT lobby): the wrappers vanish from the box tree so #boards and the

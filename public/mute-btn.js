@@ -1,4 +1,4 @@
-// The visible in-game mute toggle (#muteBtn in the magic-bar, above the board).
+// The visible in-game mute toggle (#muteBtn in the play cluster, below the board).
 // Single source of truth is localStorage["wordul.muted"] — the same key voice.js,
 // drama.js, and app.js's playChime/playNoise already honor — so this button, the
 // avatar-hub "Sound on/off" row, and every audio consumer stay in agreement.
@@ -30,8 +30,8 @@ export function syncMuteBtn() {
   btn.classList.toggle("is-muted", muted);
 }
 
-// Wire the tap once + sync. Per-node guard (see #magicBtn note in powerups.js):
-// the button is re-cloned on each room mount, so the flag rides the node itself.
+// Wire the tap once + sync. Per-node guard: the button is re-cloned on each room mount
+// (mount() does innerHTML="" + cloneNode), so the wired flag rides the node itself.
 export function wireMuteBtn(opts = {}) {
   const btn = document.getElementById("muteBtn");
   if (!btn) return;

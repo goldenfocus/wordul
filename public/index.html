@@ -156,6 +156,14 @@
 <template id="tpl-room">
   <section class="screen room">
     <div class="lobby-aura" aria-hidden="true"><span class="lobby-aura-a"></span><span class="lobby-aura-b"></span></div>
+    <!-- Play-phase aurora: the same drifting purple/gold/teal orbs that give the home its
+         polish, ported behind the board so a live game shares that glow (the lobby keeps its
+         own conic aura). Pure decoration, reduced-motion safe; fades in on body.playing. -->
+    <div class="room-aura" aria-hidden="true">
+      <span class="room-orb room-orb-uv"></span>
+      <span class="room-orb room-orb-gold"></span>
+      <span class="room-orb room-orb-teal"></span>
+    </div>
     <div class="lobby-bar">
       <!-- The name IS the share: tap it to copy the room link. Rename + invite still
            live in the avatar hub; length + theme in the gear. Three things only. -->
@@ -183,22 +191,12 @@
     </nav>
 
     <div id="tabPlay" class="room-tab-panel">
-      <!-- Top cluster: the ✨/💀 affordances, kept ABOVE the board. The hacker-log lives
-           BELOW the board as a zero-height float anchor (see #hacklog next to #boards) so
-           nothing ever PUSHES layout between the board and the keyboard — on mobile that
-           gap gets eaten by the on-screen keyboard / forces a scroll. -->
-      <div class="magic-bar">
-        <button id="magicBtn" class="magic-icon" type="button" title="Power-ups" aria-label="Power-ups" aria-haspopup="true" hidden>✨</button>
-        <button id="giveUpBtn" class="give-up-icon" type="button" title="Give up" aria-label="Give up" hidden><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 11a6 6 0 0 1 12 0c0 2.2-1 3.6-2.2 4.4v2.2a1.4 1.4 0 0 1-1.4 1.4H9.6a1.4 1.4 0 0 1-1.4-1.4v-2.2C7 14.6 6 13.2 6 11Z"/><circle cx="9.5" cy="11" r="1.6"/><circle cx="14.5" cy="11" r="1.6"/><path d="M12 13.4l-.9 1.5h1.8z"/><path d="M10.5 19v-1.3M12 19v-1.3M13.5 19v-1.3"/></svg></button>
-        <div id="magicPopover" class="magic-popover" role="menu" aria-label="Power-ups" hidden></div>
-      </div>
+      <!-- Power-ups + give-up moved BELOW the board into the play cluster (see .board-gap):
+           direct-hit buttons over the 🔊 speaker, with the round score on the speaker's row.
+           Only the persistent learned-hints line + duel queue stay above the board. -->
       <p id="powerHints" class="power-hints" hidden></p>
 
       <div id="queueStrip" class="queue-strip" hidden></div>
-      <!-- Daily only: an ephemeral ROUND SCORE that the discovery payout drives instead of the
-           sacred ◆ gold wallet (which never moves from daily play; the mint is cashed out once
-           at the end). Hidden in race rooms, where #goldHud takes the live ticks. -->
-      <div id="roundScore" class="round-score" hidden aria-live="polite"></div>
       <!-- Lobby two-zone scaffold. NOT hidden — it permanently wraps #boards, which must stay
            visible in every phase. The two-zone GRID layout is gated to the lobby phase by CSS
            (Task 7: `.lobby-grid`/`.lobby-left`/`.lobby-right` default to `display:contents` so
@@ -218,7 +216,19 @@
                of it without pushing layout; the scrollback overlays UPWARD over the board. -->
           <div class="board-gap">
             <div id="hacklog" class="hacklog" hidden></div>
-            <button id="muteBtn" class="mute-icon" type="button" title="Mute" aria-label="Mute" aria-pressed="false">🔊</button>
+            <!-- Play cluster (left, bottom of the gap): power-ups are DIRECT-HIT buttons
+                 stacked ABOVE the 🔊 speaker; the round score rides on the speaker's row.
+                 Absolutely positioned like the old mute so it never pushes the keyboard. -->
+            <div class="play-hud">
+              <div class="play-hud-actions">
+                <div id="powerRail" class="power-rail" role="group" aria-label="Power-ups" hidden></div>
+                <button id="giveUpBtn" class="give-up-icon" type="button" title="Give up" aria-label="Give up" hidden><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 11a6 6 0 0 1 12 0c0 2.2-1 3.6-2.2 4.4v2.2a1.4 1.4 0 0 1-1.4 1.4H9.6a1.4 1.4 0 0 1-1.4-1.4v-2.2C7 14.6 6 13.2 6 11Z"/><circle cx="9.5" cy="11" r="1.6"/><circle cx="14.5" cy="11" r="1.6"/><path d="M12 13.4l-.9 1.5h1.8z"/><path d="M10.5 19v-1.3M12 19v-1.3M13.5 19v-1.3"/></svg></button>
+              </div>
+              <div class="play-hud-base">
+                <button id="muteBtn" class="mute-icon" type="button" title="Mute" aria-label="Mute" aria-pressed="false">🔊</button>
+                <div id="roundScore" class="round-score" hidden aria-live="polite"></div>
+              </div>
+            </div>
           </div>
           <!-- Dimension control: letters × rows. Tap the 5 × 6 to open a popover with two
                steppers (Letters → set_length, Rows → set_rows). Lobby-only; hidden elsewhere. -->

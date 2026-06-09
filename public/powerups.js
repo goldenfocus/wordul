@@ -1,11 +1,11 @@
 // Wordul — power-ups module.
-// Owns the reveal-a-letter / count-the-vowels power-ups, the ✨ magic icon that
-// surfaces them, and the 💀 give-up / bankruptcy affordance (C4). The two server
-// messages (`reveal_letter` / `vowel_count`) are UNCHANGED — this module is purely the
-// client gateway. EZ mode is retired: the power-ups are always available, but the ✨
-// icon stays HIDDEN until you can afford the cheapest still-buyable one, and the
-// popover lists ONLY currently-affordable power-ups as icons (no price — you learn the
-// cost by watching the balance dip).
+// Owns the reveal-a-letter / count-the-vowels power-ups, the DIRECT-HIT rail that
+// surfaces them (#powerRail, over the 🔊 speaker), and the 💀 give-up / bankruptcy
+// affordance (C4). The two server messages (`reveal_letter` / `vowel_count`) are
+// UNCHANGED — this module is purely the client gateway. EZ mode is retired: the
+// power-ups are always available, but a power-up button only appears once you can afford
+// it (no price shown — you learn the cost by watching the balance dip), and tapping it
+// buys immediately (no ✨ launcher, no popover — "direct hit", Jun 8).
 //
 // C4 — gold can go NEGATIVE: power-up spends + penalties route through edition.js
 // drainGold (no zero-clamp). In HARD MODE, sinking past BANKRUPTCY_THRESHOLD ends the
@@ -154,57 +154,37 @@ function buyPowerup(ctx, id) {
   }
 }
 
-function closeMagicPopover() {
-  const pop = document.getElementById("magicPopover");
-  if (pop) pop.hidden = true;
-  document.removeEventListener("click", onDocClickToClose, true);
-}
-function onDocClickToClose(e) {
-  const pop = document.getElementById("magicPopover");
-  const btn = document.getElementById("magicBtn");
-  if (pop && !pop.contains(e.target) && e.target !== btn) closeMagicPopover();
-}
-
-// Build the popover body from the currently-affordable power-ups (icons only, no
-// price) and reveal it. Each tap buys via the existing server message, then closes.
-function openMagicPopover(ctx) {
-  const { game, getGold } = ctx;
-  const pop = document.getElementById("magicPopover");
-  if (!pop) return;
-  pop.textContent = "";
-  const affordable = affordablePowerups(getGold(), game, game.snapshot);
-  for (const p of affordable) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "magic-option";
-    b.dataset.action = p.id;
-    b.textContent = p.icon;
-    b.title = p.label;
-    b.setAttribute("aria-label", p.label);
-    b.addEventListener("click", (e) => {
-      e.stopPropagation();
-      buyPowerup(ctx, p.id);
-      closeMagicPopover();
-    });
-    pop.appendChild(b);
-  }
-  pop.hidden = false;
-  // Defer the outside-click listener so this opening click doesn't immediately close it.
-  setTimeout(() => document.addEventListener("click", onDocClickToClose, true), 0);
-}
-
-// Render the ✨ icon: shown only when affordable; tap toggles the affordable-only
-// popover. Also keeps the persistent hints text in sync. Mirrors the old
-// renderPowerups contract (called from app.js render()).
+// Render the power-up rail: the currently-affordable power-ups as DIRECT-HIT buttons
+// over the 🔊 speaker (no ✨ launcher, no popover — "direct hit", Jun 8). Each tap buys
+// immediately via the existing server message. The rail is rebuilt every render (mount
+// re-clones the node, and the affordable set shifts as gold moves), so listeners are
+// attached fresh each pass — no per-node wiring guard needed. Also keeps the persistent
+// learned-hints text + the 💀 give-up affordance in sync. Mirrors the old contract
+// (called from app.js render()).
 export function renderPowerups(ctx, snap, me) {
   const { game, renderGoldHud, getGold } = ctx;
-  const btn = document.getElementById("magicBtn");
-  const pop = document.getElementById("magicPopover");
-  if (!btn) return;
+  const rail = document.getElementById("powerRail");
+  if (!rail) return;
 
   const show = shouldShowMagic(getGold(), game, snap, me);
-  btn.hidden = !show;
-  if (!show && pop) closeMagicPopover();
+  rail.textContent = "";
+  rail.hidden = !show;
+  if (show) {
+    for (const p of affordablePowerups(getGold(), game, game.snapshot)) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "power-hit";
+      b.dataset.action = p.id;
+      b.textContent = p.icon;
+      b.title = p.label;
+      b.setAttribute("aria-label", p.label);
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        buyPowerup(ctx, p.id);
+      });
+      rail.appendChild(b);
+    }
+  }
 
   const canPlay = snap.phase === "playing" && me && me.status === "playing";
   if (canPlay) {
@@ -213,20 +193,6 @@ export function renderPowerups(ctx, snap, me) {
   } else {
     const h = document.getElementById("powerHints");
     if (h) h.hidden = true;
-    if (pop) closeMagicPopover();
-  }
-
-  // Per-node guard (NOT a module flag): #magicBtn is re-cloned on every room mount
-  // (mount() does innerHTML="" + cloneNode), so a module-level boolean would leave the
-  // fresh button unwired on the 2nd+ room — the dataset flag rides the node itself.
-  if (btn.dataset.wired !== "1") {
-    btn.dataset.wired = "1";
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const p = document.getElementById("magicPopover");
-      if (p && !p.hidden) { closeMagicPopover(); return; }
-      openMagicPopover(ctx);
-    });
   }
 
   // Keep the 💀 give-up affordance in sync on every render too.
@@ -269,7 +235,9 @@ function renderGiveUp(ctx, snap, me) {
   if (!btn) return;
   const myTurn = !!(snap && snap.phase === "playing" && me && me.status === "playing");
   btn.hidden = !(myTurn && isStuck(game));
-  // Per-node guard (see #magicBtn note): the 💀 button is re-cloned on each room mount.
+  // Per-node guard: #giveUpBtn is re-cloned on each room mount (mount() does
+  // innerHTML="" + cloneNode), so a module-level boolean would leave the fresh button
+  // unwired on the 2nd+ room — the dataset flag rides the node itself.
   if (btn.dataset.wired !== "1") {
     btn.dataset.wired = "1";
     btn.addEventListener("click", (e) => {
