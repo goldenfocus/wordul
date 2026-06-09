@@ -134,6 +134,20 @@ async function supernova(receipt, opts = {}) {
         position:absolute; inset:0; display:flex; flex-direction:column;
         align-items:center; justify-content:center; gap:14px; padding:32px;
       `;
+      if (answerWord) {
+        const wEl = document.createElement("div");
+        wEl.style.cssText = `font-family:'Fraunces',Georgia,serif; font-weight:900;
+          font-size:clamp(40px,10vw,96px); color:#f0c14b; line-height:1; margin-bottom:6px;`;
+        wEl.textContent = answerWord;
+        inner.appendChild(wEl);
+        if (glossText) {
+          const gEl = document.createElement("div");
+          gEl.style.cssText = `font-family:'Fraunces',Georgia,serif; font-weight:600;
+            font-size:clamp(17px,3.5vw,24px); color:#f4f2ec; max-width:18em; margin:0 auto 18px;`;
+          gEl.textContent = glossText;
+          inner.appendChild(gEl);
+        }
+      }
       for (const ln of lines) {
         const el = document.createElement("div");
         el.style.cssText = `
@@ -227,13 +241,13 @@ async function supernova(receipt, opts = {}) {
     // Payout figure
     const payoutEl = document.createElement("div");
     payoutEl.style.cssText = `
-      position:absolute; left:50%; top:40%; z-index:7;
+      position:absolute; left:50%; top:62%; z-index:7;
       transform:translate(-50%,-50%); text-align:center; opacity:0; pointer-events:none;
     `;
     const payN = document.createElement("div");
     payN.style.cssText = `
       font-family:'Fraunces',Georgia,serif; font-weight:900;
-      font-size:clamp(64px,13vw,150px); color:#f0c14b;
+      font-size:clamp(40px,8vw,84px); color:#f0c14b;
       font-variant-numeric:tabular-nums;
       text-shadow:0 0 80px rgba(240,193,75,.55),0 0 20px rgba(240,193,75,.8);
     `;
@@ -630,13 +644,23 @@ async function supernova(receipt, opts = {}) {
     (async () => {
       const c = orbitCenter();
 
+      // ── Act 1: the word + its meaning (the lesson). Shows on win AND loss. ──
+      if (answerWord && !skipFired) {
+        await lexiconReveal();
+        // Lift + fade the hero, freeing center stage for the demoted gold tail.
+        heroEl.style.opacity = "0";
+        heroEl.style.transform = "translateY(-58%) scale(.96)";
+        await Promise.race([sleep(420), skipRace]);
+        heroEl.style.display = "none";
+      }
+
       // Beat 1: mint — coins emerge, one per minted gold
       await caption([
         { text: `${receipt.points.toLocaleString("en-US")} pts`, color: "#9d8bff" },
         { text: ` → ` },
         { text: `◆ ${receipt.minted}`, color: "#f0c14b" },
       ]);
-      const mintCount = Math.min(receipt.minted, 60); // cap visual coins for perf
+      const mintCount = Math.min(receipt.minted, 28); // thin particle field — gold reads as a tail, not the headline
       for (let i = 0; i < mintCount; i++) {
         if (!running) break;
         mkCoin(c.x, c.y, 1);
@@ -731,17 +755,13 @@ async function supernova(receipt, opts = {}) {
       const payLabel = tFn("settle.toWallet", "to your wallet");
       const bustLabel = tFn("settle.bust", "buy-in was your max loss");
 
-      if (!skipFired) {
-        if (isWin && answerWord) {
-          // The actual word IS the supernova — randomized entrance every time.
-          await wordReveal(answerWord);
-        } else {
-          await caption(
-            isWin
-              ? [{ text: tFn("settle.caption.supernova", "supernova"), color: "#f0c14b" }]
-              : [{ text: `${tFn("settle.caption.tableKeepsIt", "the table keeps it")} — ` }, { text: bustLabel, color: "#e0796b" }],
-          );
-        }
+      // The word already led in Act 1; only the no-word / loss caption remains here.
+      if (!skipFired && !answerWord) {
+        await caption(
+          isWin
+            ? [{ text: tFn("settle.caption.supernova", "supernova"), color: "#f0c14b" }]
+            : [{ text: `${tFn("settle.caption.tableKeepsIt", "the table keeps it")} — ` }, { text: bustLabel, color: "#e0796b" }],
+        );
       }
 
       payN.textContent = `◆ ${receipt.payout}`;
