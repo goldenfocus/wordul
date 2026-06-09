@@ -109,6 +109,43 @@ describe("board replay driver", () => {
     expect(colored()).toBe(10);
   });
 
+  // The Dare pill listens for these to fade (armed) while the board replays and
+  // re-light when it lands. board-replay is the single source for both edges.
+  it("dispatches start when a replay begins and done when it lands", () => {
+    const seen = [];
+    const onStart = () => seen.push("start");
+    const onDone = () => seen.push("done");
+    document.addEventListener("daily-board-replay-start", onStart);
+    document.addEventListener("daily-board-replay-done", onDone);
+    playBoardReplay(grid, GUESSES);
+    expect(seen).toEqual(["start"]);
+    vi.runAllTimers();
+    expect(seen).toEqual(["start", "done"]);
+    document.removeEventListener("daily-board-replay-start", onStart);
+    document.removeEventListener("daily-board-replay-done", onDone);
+  });
+
+  it("dispatches done once when a tap snaps the replay to final", () => {
+    const done = vi.fn();
+    document.addEventListener("daily-board-replay-done", done);
+    playBoardReplay(grid, GUESSES);
+    vi.advanceTimersByTime(TIMING.TYPE_MS);
+    click(grid);
+    expect(done).toHaveBeenCalledTimes(1);
+    document.removeEventListener("daily-board-replay-done", done);
+  });
+
+  it("reduced motion dispatches neither edge — no replay ran, so the pill stays lit", () => {
+    reduced = true;
+    const ev = vi.fn();
+    document.addEventListener("daily-board-replay-start", ev);
+    document.addEventListener("daily-board-replay-done", ev);
+    playBoardReplay(grid, GUESSES);
+    expect(ev).not.toHaveBeenCalled();
+    document.removeEventListener("daily-board-replay-start", ev);
+    document.removeEventListener("daily-board-replay-done", ev);
+  });
+
   // Keep last: autoPlayBoardOnce flips a module-level once-per-page-load flag, so
   // any later test calling it would see a no-op.
   it("auto-play fires exactly once per page load", () => {

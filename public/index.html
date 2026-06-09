@@ -283,11 +283,16 @@
         <div id="lobbyRailYou" class="lobby-rail-you"></div>
         <div id="lobbyRailList" class="lobby-rail-list"></div>
       </aside>
+      <!-- ◆ Dare ◆ — lifted OUT of the card into the board↔card gap (spec 2026-06-09).
+           Faded (drained gold outline) while the board replays, then fills + glows the
+           instant the last row lands — armed/lit toggled by dare-pill.js off the
+           board-replay events. Ships `is-lit` so a no-replay finish never sits faded.
+           Filled + wired (text, subline, share click) by renderDailyUnlock. -->
+      <div id="dailyDareWrap" class="daily-dare-wrap" hidden>
+        <button type="button" class="daily-dare is-lit" id="dailyShareBtn" aria-label="Dare — challenge a friend on this word"></button>
+        <p class="daily-dare-sub" id="dailyDareSub" hidden></p>
+      </div>
       <section id="dailyUnlock" class="daily-unlock" hidden>
-        <!-- ◆ Dare ◆ — the one-word bridge between your board and the golden card:
-             a spoiler-free share of THIS day's link (+ masked-board gift unfurl).
-             Filled + wired by renderDailyUnlock; aria-label carries the full verb. -->
-        <button type="button" class="daily-dare" id="dailyShareBtn" aria-label="Dare — challenge a friend on this word"></button>
         <!-- The Broadsheet reveal (design ritual winner, Jun 5 2026): kicker → the word as
              a front-page serif headline → dictionary entry → minted credit. The word, the
              entry, and the credit link ALL lead into the word's wiki page (/word/<word>).
@@ -310,8 +315,8 @@
         <div class="daily-lb" id="dailyLeaderboard" hidden></div>
         <article class="daily-story" id="dailyStory"></article>
         <div class="daily-bridge">
-          <!-- One CTA ("Challenge a friend" — spoiler-free share of THIS day's link) +
-               a quiet action rail: Wiki · Recap · Past days · Home. Wired by renderDailyUnlock. -->
+          <!-- A quiet action rail: Wiki · Recap · Past days · Home. Wired by renderDailyUnlock.
+               (The share CTA is the ◆ Dare ◆ pill, lifted into the board↔card gap above.) -->
           <nav class="daily-bridge-actions" aria-label="After the word">
             <a class="btn ghost small" id="dailyWikiLink" hidden></a>
             <a class="btn ghost small" id="dailyRecapLink" hidden></a>

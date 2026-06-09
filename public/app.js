@@ -39,6 +39,7 @@ import { renderSettlement, dailyReceiptLines } from "/settle.js";
 import { lossKind, duelVerdict } from "/race-copy.js";
 import { wireStampReplays } from "/stamp-replay.js";
 import { autoPlayBoardOnce, playBoardReplay, boardReplayActive } from "/board-replay.js";
+import { initDarePillActivation } from "/dare-pill.js";
 import { seatModel, ghostSeatModel, railPillLabel, railTitleCount, emptySeatActions, yourTableRowProps, shouldChimeOnJoin, shouldShowRoundScore } from "/lobby-view.js";
 import { createChatPill, chatHasUserText, routeChatEntry, formatChatTime } from "/chat-pill.js";
 import { encodeLocalSolve, needsDailyRecovery, recoverDailyArtifacts } from "/daily-recover.js";
@@ -2650,6 +2651,12 @@ function renderDailyUnlock(snap, me) {
   if (!box) return;
   const done = me && me.status !== "playing";
   box.hidden = !done;
+  // The ◆ Dare ◆ pill now lives in its own wrap, lifted into the board↔card gap (it used
+  // to be the card's first child). Reveal it with the card; its faded→lit activation is
+  // wired once here, ahead of the board replay that renderBoards kicks off below.
+  const dareWrap = $("#dailyDareWrap");
+  if (dareWrap) dareWrap.hidden = !done;
+  initDarePillActivation();
   // The ritual stage: once you're done, non-ritual chrome (mute, hacklog, header
   // chat/link) bows out via CSS — see body.daily-ritual in style.css. Toggled (not
   // added) so a not-yet-done render never leaves a stale stage class behind.
@@ -2662,7 +2669,7 @@ function renderDailyUnlock(snap, me) {
     h.className = "daily-vibe-title";
     h.id = "dailyVibeTitle";
     h.textContent = snap.vibeTitle;
-    box.insertBefore(h, $("#dailyReveal")); // crown the card — the dare button stays first
+    box.insertBefore(h, $("#dailyReveal")); // crown the card, above the Broadsheet reveal
     box.dataset.vibeTitled = "1";
   }
   const won = me.status === "won";
@@ -2723,6 +2730,13 @@ function renderDailyUnlock(snap, me) {
     // game.dailyDate: a past-day page must challenge friends to THAT day, not today's.
     share.addEventListener("click", () => shareDailyResult({ won, guesses: me.guesses.length, masks: me.guesses.map((g) => g.mask) }, game.dailyDate));
     share.dataset.wired = "1";
+  }
+  // The share/invite subline under the lifted pill (no gold promised — sharing mints none).
+  const dareSub = $("#dailyDareSub");
+  if (dareSub && !dareSub.dataset.wired) {
+    dareSub.textContent = t("daily.dareSub");
+    dareSub.hidden = false;
+    dareSub.dataset.wired = "1";
   }
   // The action rail under the CTA: Wiki · Recap · Past days · Home.
   const wikiL = $("#dailyWikiLink");

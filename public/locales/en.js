@@ -81,6 +81,7 @@ export const en = {
   "daily.loadingDay": "Loading that day…",
   // The post-word bridge: one challenge CTA + the action rail under it
   "daily.dare": "◆ Dare ◆",
+  "daily.dareSub": "Invite a friend to today's word",
   "daily.actionWiki": "Wiki",
   "daily.actionRecap": "Recap",
   "daily.actionPast": "Past days",

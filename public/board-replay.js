@@ -18,6 +18,16 @@ let run = null; // { timers, gridEl, guesses } — at most one own-board replay 
 
 export function boardReplayActive() { return !!run; }
 
+// The ◆ Dare ◆ pill fades while the board replays and re-lights when it lands
+// (dare-pill.js). board-replay is the single place that knows both edges — a replay
+// only starts after the reduced-motion/empty guards, and finishBoardReplay is the one
+// completion point (natural end AND tap-to-snap). Guarded for non-DOM imports/tests.
+function emit(name) {
+  if (typeof document !== "undefined" && typeof CustomEvent === "function") {
+    document.dispatchEvent(new CustomEvent(name));
+  }
+}
+
 function eachGuessTile(gridEl, guesses, fn) {
   const rows = gridEl.querySelectorAll(".grid-row");
   guesses.forEach((guess, r) => {
@@ -39,6 +49,7 @@ export function finishBoardReplay() {
     tile.classList.add(guess.mask[c]);
     tile.textContent = guess.word[c];
   });
+  emit("daily-board-replay-done"); // → re-light the Dare pill
 }
 
 export function playBoardReplay(gridEl, guesses) {
@@ -47,6 +58,7 @@ export function playBoardReplay(gridEl, guesses) {
   // (typeof guard: jsdom has no matchMedia — tests stub it, but don't require it.)
   if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   if (!gridEl || !guesses?.length) return;
+  emit("daily-board-replay-start"); // → fade the Dare pill while the board replays
   // The scheduler only needs cols-per-row for timing; colors come straight off guesses.
   const { steps, total } = buildReplaySteps(guesses.map((g) => "x".repeat(g.word.length)), true, TIMING);
   // Veil: strip color + letter so the board starts blank, exactly like live play did.

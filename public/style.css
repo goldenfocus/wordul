@@ -2921,14 +2921,31 @@ body.daily-ritual #roomLinkBtn {
   transition: opacity 0.4s ease;
 }
 
-/* ◆ Dare ◆ — the one-word golden bridge between the board and the card. Shapeless: no
-   pill, no border — just gradient-gold serif lit from within, with a faded light-bar
-   underline. One drop-shadow glow wraps the word AND the rule, so the underline reads as
-   part of the same light, not a divider beneath a button. Speaks the hot tile's gold. */
+/* ◆ Dare ◆ — lifted OUT of the card into the board↔card gap (spec 2026-06-09). The wrap
+   owns the generous spacing above (board) and below (card), so the Dare reads as its own
+   moment on the dark page, not a card header. Rises in like the card's children. */
+.daily-dare-wrap {
+  text-align: center;
+  max-width: 520px;
+  margin: 24px auto 18px;
+  animation: daily-dare-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes daily-dare-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Shapeless: no pill, no border — gradient-gold serif lit from within, with a faded
+   light-bar underline. One drop-shadow glow haloes the word AND the ::after rule together,
+   so the underline reads as part of the same light (the prod-838 look). Two activation
+   states layer on top: `is-armed` (dimmed, halo nearly out — while the board replays) and
+   `is-lit` (ignites to full halo + a calm breathe — the instant the last row lands). Ships
+   `is-lit` so a no-replay finish never sits dim. dare-pill.js toggles them off board-replay
+   events. The glow IS the activation here — the shapeless vocabulary has no fill to sweep. */
 .daily-dare {
   display: block;
   width: fit-content;
-  margin: 2px auto 22px;
+  margin: 0 auto;
   padding: 0;
   border: none;
   background: none;
@@ -2943,7 +2960,7 @@ body.daily-ritual #roomLinkBtn {
   cursor: pointer;
   /* the glow lives on the element, so it haloes the text and the ::after rule together */
   filter: drop-shadow(0 0 9px rgba(240,193,75,0.5)) drop-shadow(0 0 20px rgba(233,178,61,0.32));
-  transition: filter 0.35s ease;
+  transition: filter 0.35s ease, opacity 0.35s ease;
 }
 /* the integrated underline — a thread of gold light that fades out at both ends */
 .daily-dare::after {
@@ -2957,7 +2974,50 @@ body.daily-ritual #roomLinkBtn {
 .daily-dare:hover {
   filter: drop-shadow(0 0 13px rgba(240,193,75,0.75)) drop-shadow(0 0 30px rgba(233,178,61,0.5));
 }
-.daily-unlock > .daily-dare { animation-delay: 0.02s; }
+/* Armed: the word sleeps — dimmed, its halo nearly out — while the board replays. The
+   shared opacity dims the text AND its underline together (the "same light" intact). */
+.daily-dare.is-armed {
+  opacity: 0.5;
+  filter: drop-shadow(0 0 3px rgba(240,193,75,0.22));
+}
+/* Lit: the word ignites — halo blooms to full, then a calm breathe. */
+.daily-dare.is-lit {
+  animation: daily-dare-ignite 0.6s ease both, daily-dare-haloglow 3.2s ease-in-out 1s infinite;
+}
+@keyframes daily-dare-ignite {
+  from { opacity: 0.5; filter: drop-shadow(0 0 3px rgba(240,193,75,0.22)); }
+  to   { opacity: 1; filter: drop-shadow(0 0 11px rgba(240,193,75,0.6)) drop-shadow(0 0 24px rgba(233,178,61,0.4)); }
+}
+@keyframes daily-dare-haloglow {
+  0%, 100% { filter: drop-shadow(0 0 9px rgba(240,193,75,0.5)) drop-shadow(0 0 20px rgba(233,178,61,0.32)); }
+  50%      { filter: drop-shadow(0 0 14px rgba(240,193,75,0.7)) drop-shadow(0 0 30px rgba(233,178,61,0.5)); }
+}
+
+/* The share/invite subline, just under the Dare — rises in once it's lit. */
+.daily-dare-sub {
+  margin: 12px auto 0;
+  font-family: var(--font-body, -apple-system, system-ui, sans-serif);
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  color: var(--muted, #8a8a8f);
+  opacity: 0;
+  transition: opacity 0.5s ease 0.25s;
+}
+.daily-dare.is-lit + .daily-dare-sub { opacity: 1; }
+
+/* On the home recap card the Dare is a touch smaller and tighter to the mini board. */
+.daily-card-dare { margin: 16px auto 6px; }
+.daily-card-dare .daily-dare { font-size: 16px; }
+.daily-card-dare .daily-dare-sub { font-size: 12px; margin-top: 9px; }
+
+/* Reduced motion: no ignite, no breathe, no rise — a static lit gold word. */
+body.reduced-motion .daily-dare-wrap { animation: none; }
+body.reduced-motion .daily-dare.is-lit {
+  animation: none;
+  filter: drop-shadow(0 0 9px rgba(240,193,75,0.5)) drop-shadow(0 0 20px rgba(233,178,61,0.32));
+}
+body.reduced-motion .daily-dare-sub { transition: none; }
+body.reduced-motion .daily-dare.is-lit + .daily-dare-sub { opacity: 1; }
 
 .daily-reveal { text-align: center; margin: 0 0 20px; }
 .daily-reveal-kicker {

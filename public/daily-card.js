@@ -235,6 +235,12 @@ export function renderDailyCard({ themeId, result }) {
       </div>`;
     return `<article class="daily-card daily-done" data-theme="${themeId}">
       <div class="daily-featured" id="dailyFeatured">${heroInner}</div>
+      <!-- ◆ Dare ◆ follows you home (spec 2026-06-09): the same spoiler-free invite/share
+           as the finish screen. No board replay here, so it arrives already lit. -->
+      <div class="daily-dare-wrap daily-card-dare">
+        <button id="dailyCardDare" class="daily-dare is-lit" type="button" aria-label="Dare — invite a friend to today's word">◆ Dare ◆</button>
+        <p class="daily-dare-sub">Invite a friend to today's word</p>
+      </div>
       <section class="daily-top" id="dailyTop" hidden aria-label="Today's top players"></section>
       <div class="daily-next">
         <span class="daily-next-label">Next Wordul in</span>
@@ -265,11 +271,15 @@ export function wireDailyCard({ themeId, result, username, onPlay, onStats, onSh
   const stats = document.getElementById("dailyStats");
   if (stats && onStats) stats.addEventListener("click", (e) => { e.stopPropagation(); onStats(); });
 
-  // Post-play: result + gold + your stamp + Today's Top + countdown + "see everyone".
-  // No Share here — we don't hand people a one-tap way to broadcast the answer.
+  // Post-play: result + gold + your stamp + ◆ Dare ◆ + Today's Top + countdown + "see all".
+  // The only share is the spoiler-free Dare (masked board, never the answer word).
   if (result) {
     const seeAll = document.getElementById("dailySeeAll");
     if (seeAll && onStats) seeAll.addEventListener("click", () => onStats());
+    // ◆ Dare ◆ — spoiler-free invite/share of today's word, same as the finish screen
+    // (onShareDaily → shareDailyResult). The masked-board gift never reveals the answer.
+    const dare = document.getElementById("dailyCardDare");
+    if (dare && onShareDaily) dare.addEventListener("click", (e) => { e.stopPropagation(); onShareDaily(); });
     startCountdown();
 
     // Discovery: auto-play the recap stamp once per visit — most people never find
