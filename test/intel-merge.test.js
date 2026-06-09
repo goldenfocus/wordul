@@ -40,6 +40,26 @@ describe("intel-merge", () => {
     expect(mod.WORD_INTEL.OCEAN.poem).toBeUndefined(); // rich field NOT in the slim game file
   });
 
+  it("writeSlim includes gloss/example/ipa/pos when the card has senses", async () => {
+    const rich = card("FOCAL", {
+      ipa: "/ˈfoʊ.kəl/", pos: "adjective",
+      senses: [{ pos: "adjective", gloss: "the center of attention", example: "All eyes found the focal point." }],
+    });
+    writeSlim(slim, { FOCAL: rich });
+    const mod = await import(pathToFileURL(slim).href);
+    expect(mod.WORD_INTEL.FOCAL).toEqual({
+      def: "FOCAL def",
+      gloss: "the center of attention",
+      example: "All eyes found the focal point.",
+      ipa: "/ˈfoʊ.kəl/",
+      pos: "adjective",
+      fact: "FOCAL fact",
+      quote: "FOCAL quote",
+      author: "Someone",
+    });
+    expect(mod.WORD_INTEL.FOCAL.senses).toBeUndefined(); // rich-only field stays out of the slim file
+  });
+
   it("writeRich keeps the full rich card", async () => {
     writeRich(rich, { OCEAN: card("OCEAN") });
     const mod = await import(pathToFileURL(rich).href);
