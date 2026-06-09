@@ -20,10 +20,11 @@ describe("renderPastDailyCard", () => {
     expect(html).toContain("71%");
   });
 
-  it("shows a Play-it affordance when I did not play that day", () => {
+  it("is read-only when I did not play that day — no play button, no replay", () => {
     const html = renderPastDailyCard({ ...base, myRecord: null });
-    expect(html).toContain("data-past-play");
+    expect(html).not.toContain("data-past-play");   // past dailies aren't replayable for gold
     expect(html).not.toContain("data-past-replay");
+    expect(html).toContain("CRANE");                // still reveals the answer + stats
   });
 
   it("shows my stamp + replay button when I played that day", () => {

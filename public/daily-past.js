@@ -32,9 +32,12 @@ export function renderPastDailyCard({ date, themeName, word, stats, myRecord }) 
   const safeWord = esc(word);
   const wikiSlug = encodeURIComponent(String(word).toLowerCase());
 
+  // Read-only recap: a past day's answer is already revealed above, and replaying a past
+  // daily mints no gold (server-gated), so there's nothing to "play". Only the replay of
+  // your OWN solve is offered, when you played it.
   const action = myRecord
     ? `<button type="button" class="btn ghost small" data-past-replay>▶ Watch replay</button>`
-    : `<button type="button" class="btn primary small" data-past-play data-date="${esc(date)}">Play it →</button>`;
+    : "";
 
   const played = stats?.played ?? 0;
   const winRate = stats?.winRate;

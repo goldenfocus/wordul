@@ -2100,6 +2100,15 @@ export class Room extends DurableObject<Env> {
       player.goldAwarded = 0;
       return;
     }
+    // Past dailies are PRACTICE only: the record + leaderboard above still save (so the
+    // day's board reflects the play), but NO gold mints. A past day's answer is public —
+    // the home carousel reveals it — so minting would make every past date a guaranteed-win
+    // gold farm. Only TODAY's daily pays out. Mirrors the isWordulRoom() no-mint guard above.
+    if (dailyDateOf(this.state.path) !== activeDate(Date.now())) {
+      player.scored = true;
+      player.goldAwarded = 0;
+      return;
+    }
     // Gold goody must be HONEST: only mark scored + record goldAwarded once the ledger
     // write is confirmed (res.ok). A failed/thrown mint leaves scored=false so a later
     // reconnect retries — the player never sees "here's your gold" on a 0-gold mint.

@@ -11,7 +11,7 @@ import { t } from "/i18n.js";
 const SWIPE_MIN = 40; // px of horizontal intent before a swipe counts
 
 // deps: { dates:string[], shortDate(date)->str, editionName(themeId)->str,
-//         pastRecord(date)->myRecord|null, navigate(path), onPlayDate(date) }
+//         pastRecord(date)->myRecord|null, navigate(path) }
 export function initDailyCarousel(root, deps) {
   const slot = root.querySelector("#dailyCarSlot");
   const todayEl = root.querySelector("#dailyToday");
@@ -76,7 +76,6 @@ export function initDailyCarousel(root, deps) {
       const stamp = pastEl.querySelector(".daily-stamp");
       if (stamp) playStampReplay(stamp);
     });
-    pastEl.querySelector("[data-past-play]")?.addEventListener("click", () => deps.onPlayDate(date));
     pastEl.querySelector("[data-past-stats]")?.addEventListener("click", () => deps.navigate(`/daily/${date}/stats`));
     pastEl.querySelector("[data-past-wiki]")?.addEventListener("click", (e) => {
       e.preventDefault();

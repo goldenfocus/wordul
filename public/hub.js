@@ -165,7 +165,6 @@ function wireDaily() {
       editionName: (id) => (hubCallbacks.editionName ? hubCallbacks.editionName(id) : id),
       pastRecord: (d) => hubCallbacks.pastRecord?.(d) ?? null,
       navigate: (p) => hubCallbacks.navigate?.(p),
-      onPlayDate: (d) => hubCallbacks.onPlayDate?.(d),
     });
   }
 }

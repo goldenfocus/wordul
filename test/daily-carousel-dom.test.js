@@ -69,7 +69,7 @@ describe("daily carousel (DOM integration)", () => {
     expect(past.hidden).toBe(false);
     expect(document.getElementById("dailyToday").hidden).toBe(true);
     expect(past.innerHTML).toContain("CRANE");           // revealed answer
-    expect(past.innerHTML).toContain("data-past-play");  // didn't play → Play it
+    expect(past.innerHTML).not.toContain("data-past-play"); // read-only — no replay-for-gold
     expect(document.getElementById("dailyNext").hidden).toBe(false); // forward now offered
     expect(document.getElementById("dailyCarDate").textContent).toContain("Aurora"); // date · theme
 

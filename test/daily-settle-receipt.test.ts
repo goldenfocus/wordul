@@ -19,7 +19,11 @@ const grays = ["cold", "cold", "cold", "cold", "cold"];
 
 type AnyPlayer = Record<string, unknown>;
 
-function makeRoom(player: AnyPlayer, { mintOk = true } = {}) {
+// Daily gold mints ONLY for TODAY's date — past dailies are practice (no mint). These
+// mint-contract tests therefore run on today's date; the past-date case is asserted below.
+const TODAY = new Date().toISOString().slice(0, 10);
+
+function makeRoom(player: AnyPlayer, { mintOk = true, date = TODAY } = {}) {
   const store = new Map<string, unknown>();
   const ledgerBodies: Array<Record<string, unknown>> = [];
   const userFetch = vi.fn(async (url: string, init?: RequestInit) => {
@@ -44,7 +48,7 @@ function makeRoom(player: AnyPlayer, { mintOk = true } = {}) {
     scorePlayer: (p: AnyPlayer) => Promise<void>;
   };
   room.state = {
-    path: "daily/2026-06-06", owner: "daily", slug: "2026-06-06", name: "daily",
+    path: `daily/${date}`, owner: "daily", slug: date, name: "daily",
     phase: "playing", word: "PENNE", winner: null, startedAt: 1, finishedAt: null,
     round: 1, chat: [], wordLength: 5, maxGuesses: 6, mode: "daily", scoreboard: [],
     history: [], edition: "default", isDaily: true, story: null, challengeId: null,
@@ -115,5 +119,18 @@ describe("daily settlement receipt (÷9, honest-mint contract)", () => {
     const receipt = p.receipt as { minted: number };
     expect(receipt.minted).toBe(50); // 450/9
     expect(p.goldAwarded).toBeGreaterThan(0);
+  });
+
+  // Anti gold-farm: a PAST daily reveals its answer (home carousel + archive), so a win is
+  // free — it must mint NOTHING. The player is still marked scored (no retry storm) and the
+  // record/leaderboard above still save; only the gold ledger write is skipped.
+  it("past daily → 0 gold, no receipt, no ledger write (practice only)", async () => {
+    const p = solver();
+    const { room, ledgerBodies } = makeRoom(p, { date: "2020-01-01" });
+    await room.scorePlayer(p);
+    expect(p.goldAwarded).toBe(0);
+    expect(p.receipt).toBeUndefined();
+    expect(p.scored).toBe(true);
+    expect(ledgerBodies.length).toBe(0);
   });
 });

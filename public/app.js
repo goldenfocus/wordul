@@ -309,7 +309,6 @@ function renderHomeIdentity() {
       dailyDates: [],
       pastRecord: (date) => dailyResultFor(cbs.profile, date),
       navigate: (p) => navigate(p),
-      onPlayDate: (date) => navigate(`/daily/${date}`),
       // Real "N played" for the day = the daily roster's ranked-finisher count — the SAME
       // number the stats page derives from (Jun 7 incident: science roundsStarted said
       // "8 played" while the stats roster listed 6; science counts rounds across ALL
