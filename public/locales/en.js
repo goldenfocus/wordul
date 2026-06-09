@@ -97,6 +97,8 @@ export const en = {
   "settle.net": "net",
   "settle.bust": "buy-in was your max loss",
   "settle.skip": "Tap to continue",
+  "settle.theWordIs": "the word is",
+  "settle.theWordWas": "the word was",
   // Animation beat captions
   "settle.caption.eachCoinSplits": "every coin splits",
   "settle.caption.powerUps": "power-ups",
