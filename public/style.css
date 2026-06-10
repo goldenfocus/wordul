@@ -2917,25 +2917,41 @@ body.daily-ritual #roomLinkBtn {
   transition: opacity 0.4s ease;
 }
 
-/* ◆ Dare ◆ — the one-word golden bridge between the board and the card. Speaks the
-   precious-gold vocabulary of the hot tile; rises first in the unlock's child-rise. */
+/* ◆ Dare ◆ — the one-word golden bridge between the board and the card. Shapeless: no
+   pill, no border — just gradient-gold serif lit from within, with a faded light-bar
+   underline. One drop-shadow glow wraps the word AND the rule, so the underline reads as
+   part of the same light, not a divider beneath a button. Speaks the hot tile's gold. */
 .daily-dare {
   display: block;
+  width: fit-content;
   margin: 2px auto 22px;
-  padding: 13px 44px;
-  background: linear-gradient(135deg, #ffe7a3, #e9b23d 55%, #a87a1f);
-  color: #2a1d05;
+  padding: 0;
   border: none;
-  border-radius: 999px;
+  background: none;
+  background-image: linear-gradient(135deg, #ffe7a3, #f0c14b 55%, #ffd676);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
   font-family: ui-serif, Georgia, serif;
   font-weight: 800;
-  font-size: 18px;
-  letter-spacing: 0.14em;
+  font-size: 19px;
+  letter-spacing: 0.16em;
   cursor: pointer;
-  box-shadow: 0 0 0 1px rgba(255,231,163,.5), 0 0 18px rgba(233,178,61,.35);
+  /* the glow lives on the element, so it haloes the text and the ::after rule together */
+  filter: drop-shadow(0 0 9px rgba(240,193,75,0.5)) drop-shadow(0 0 20px rgba(233,178,61,0.32));
+  transition: filter 0.35s ease;
+}
+/* the integrated underline — a thread of gold light that fades out at both ends */
+.daily-dare::after {
+  content: "";
+  display: block;
+  height: 2px;
+  margin-top: 8px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, #f0c14b 22%, #ffe7a3 50%, #f0c14b 78%, transparent);
 }
 .daily-dare:hover {
-  box-shadow: 0 0 0 1px rgba(255,231,163,.7), 0 0 26px rgba(233,178,61,.55);
+  filter: drop-shadow(0 0 13px rgba(240,193,75,0.75)) drop-shadow(0 0 30px rgba(233,178,61,0.5));
 }
 .daily-unlock > .daily-dare { animation-delay: 0.02s; }
 
