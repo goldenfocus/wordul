@@ -1433,24 +1433,19 @@ async function copyRoomLink() {
 }
 
 // The immersive in-game header (C5): gold beside the avatar, username as a tiny
-// caption UNDER the avatar (#avatarName, static in index.html) — one identity block,
-// less header clutter. Only shown in a room (cleared via clearHeaderIdentity).
+// The username trigger (@handle) is self-maintaining via syncAvatar() on
+// load + every setUsername; just refresh it when a room view (re)renders so a
+// name picked at join time shows immediately.
 function renderHeaderIdentity() {
-  const nameEl = $("#avatarName");
-  if (!nameEl) return;
-  const u = getUsername();
-  nameEl.textContent = "";
-  if (u) nameEl.appendChild(userLink(u, { at: true }));
-  nameEl.hidden = !u;
+  syncAvatar();
 }
 
-// Strip the in-room identity (username + gold) from the topbar header when we leave
-// a room, so home/profile show just the avatar.
+// Strip the in-room gold from the topbar header when we leave a room. The @handle
+// trigger persists everywhere (home + room), so only #roomHeader (the gold host)
+// needs clearing here.
 function clearHeaderIdentity() {
   const header = $("#roomHeader");
   if (header) header.textContent = "";
-  const nameEl = $("#avatarName");
-  if (nameEl) { nameEl.textContent = ""; nameEl.hidden = true; }
 }
 
 // Rename the current room. Shared (anyone present can rename) and reachable from
@@ -5314,13 +5309,19 @@ document.addEventListener("DOMContentLoaded", () => {
   loadVoiceConfig(); // hydrate the effective voice registry (code defaults + admin overrides); fire-and-forget, never throws
 });
 
-// Paint the avatar glyph from the username's first letter (a generic ◆ before the
-// player picks a name). Called on load + whenever the username changes.
+// Paint the hub trigger from the username: @handle is the tappable menu opener (the ▾
+// chevron is a CSS ::after). A generic ◆ stands in before the player picks a name.
+// Called on load + whenever the username changes (setUsername/clearUsername).
 function syncAvatar() {
   const avatarBtn = $("#avatarBtn");
   if (!avatarBtn) return;
   const u = getUsername();
-  avatarBtn.textContent = u ? u[0].toUpperCase() : "◆";
+  avatarBtn.textContent = "";
+  const label = document.createElement("span");
+  label.className = "avatar-handle";
+  label.textContent = u ? `@${u}` : "◆";
+  avatarBtn.appendChild(label);
+  avatarBtn.setAttribute("aria-label", u ? `Open menu — @${u}` : "Menu");
 }
 
 // Open the settings modal, wiring the orchestrator-owned bits (live re-render,
@@ -5369,6 +5370,9 @@ function showHub(anchor) {
     isVoiceOn: isVoiceEnabled(),
     onSettings: showSettings,
     onTheme: showSettings, // theme lives inside Settings (Appearance section)
+    // The @handle trigger replaced the tap-name-to-profile link, so surface the
+    // player's public profile here (only when they actually have a name).
+    onProfile: getUsername() ? () => navigate(`/@${getUsername()}`) : null,
     onStats: () => openStats(),
     onMute: toggleMute,
     onVoice: toggleVoice,

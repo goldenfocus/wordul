@@ -465,39 +465,43 @@ body.reduced-motion .tile.ghost-cursor {
 }
 .icon-btn:hover { background: rgba(255,255,255,0.06); }
 
-/* Immersive in-game header (C5): the avatar IS the hub — one tap opens the
-   consolidated menu. Premium identity: a small rounded tile that anchors the
-   right corner and gives the avatar enough weight to sit level with the gold and
-   the @name on a single baseline (a bare floating glyph read as unmoored). */
+/* The username IS the hub trigger (no avatar until users can upload one): @handle + a
+   ▾ chevron, tapped to open the consolidated menu. Text-forward to match the header's
+   gold/brand aesthetic — no chip/tile — with a faint hover wash for tappability. The
+   chevron flips when the menu is open (aria-expanded). */
 .avatar-btn {
-  width: 36px; height: 36px; flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  flex-shrink: 0;
+  max-width: 40vw;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--fg);
-  font-weight: 800; font-size: 16px; line-height: 1;
-  cursor: pointer; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  text-transform: uppercase;
-  box-shadow: 0 0 20px -12px color-mix(in srgb, var(--accent) 90%, transparent);
-  transition: border-color 0.15s, box-shadow 0.18s, transform 0.05s;
+  font-weight: 700; font-size: 13px; line-height: 1;
+  cursor: pointer; padding: 8px 8px 8px 10px;
+  display: inline-flex; align-items: center; gap: 5px;
+  white-space: nowrap; overflow: hidden;
+  transition: background-color 0.15s, color 0.15s, transform 0.05s;
 }
-.avatar-btn:hover { border-color: var(--accent); box-shadow: 0 0 24px -8px color-mix(in srgb, var(--accent) 95%, transparent); }
-.avatar-btn:active { transform: scale(0.93); }
+/* @handle label — ellipsised so long names never blow out the bar. */
+.avatar-btn .avatar-handle {
+  overflow: hidden; text-overflow: ellipsis;
+}
+/* Chevron affordance: a small caret that signals "this opens a menu" and rotates on open. */
+.avatar-btn::after {
+  content: "";
+  flex-shrink: 0;
+  width: 7px; height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-1px) rotate(45deg);
+  opacity: 0.55;
+  transition: transform 0.18s ease;
+}
+.avatar-btn[aria-expanded="true"]::after { transform: translateY(2px) rotate(-135deg); }
+.avatar-btn:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.avatar-btn:active { transform: scale(0.96); }
 
-/* Identity cluster: @name and avatar ride side-by-side on the topbar's centre-line
-   (row-reverse keeps the avatar at the far-right corner where the menu anchors).
-   No more negative-margin tuck — the row is simply vertically centred. */
 .room-header { display: inline-flex; align-items: center; gap: 8px; }
-.avatar-stack {
-  display: inline-flex; flex-direction: row-reverse; align-items: center;
-  gap: 8px; flex-shrink: 0;
-}
-.avatar-name {
-  font-size: 13px; line-height: 1; font-weight: 700; color: var(--muted);
-  white-space: nowrap; max-width: 96px; overflow: hidden; text-overflow: ellipsis;
-}
-.avatar-name[hidden] { display: none; }
 
 /* The avatar hub popover — one menu consolidating settings / theme / mute / stats
    (+ share / rename / scoreboard in a room). Replaces the scattered topbar icons. */

@@ -217,9 +217,11 @@ function closeSettings() {
 //    user-gesture (we close the hub AFTER invoking, never before).
 let hubEl = null;
 let hubOutsideHandler = null;
+let hubAnchor = null; // the trigger (@handle button) — tracked so we can flip its ▾ chevron
 
 function closeHub() {
   if (hubEl) { hubEl.remove(); hubEl = null; }
+  if (hubAnchor) { hubAnchor.setAttribute("aria-expanded", "false"); hubAnchor = null; }
   if (hubOutsideHandler) {
     document.removeEventListener("click", hubOutsideHandler, true);
     hubOutsideHandler = null;
@@ -260,6 +262,7 @@ export function openHub(opts = {}) {
   };
 
   // Always available.
+  addItem("👤", "Profile", opts.onProfile);
   addItem("⚙", "Settings", opts.onSettings);
   addItem("🎨", "Theme", opts.onTheme);
   addItem(isMuted ? "🔇" : "🔊", isMuted ? "Sound off" : "Sound on", opts.onMute, { keepOpen: false });
@@ -284,6 +287,8 @@ export function openHub(opts = {}) {
   }
 
   hubEl = menu;
+  hubAnchor = anchor || null;
+  if (hubAnchor) hubAnchor.setAttribute("aria-expanded", "true"); // flips the ▾ chevron open
   document.body.appendChild(menu);
   positionHub(menu, anchor);
 

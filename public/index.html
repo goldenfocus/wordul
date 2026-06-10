@@ -87,12 +87,9 @@
       <span class="hub-stat-glyph gold-stack" id="hubGold" role="img" title="Gold" aria-label="0 gold"><span class="gold-stack-glyph" aria-hidden="true">◆</span><span class="gold-stack-num" id="hubGoldVal">0</span></span>
       <span class="hub-stat-glyph" id="hubStreak" title="Streak" hidden>🔥 <span id="hubStreakVal">0</span></span>
     </div>
-    <!-- In a room the username rides BELOW the avatar as a tiny caption (less header
-         clutter than the old inline @name next to the gold). Filled by renderHeaderIdentity. -->
-    <div class="avatar-stack">
-      <button id="avatarBtn" class="avatar-btn" type="button" title="Menu" aria-label="Menu" aria-haspopup="true">◆</button>
-      <span id="avatarName" class="avatar-name" hidden></span>
-    </div>
+    <!-- The username IS the menu trigger (no avatar until users can upload one): tapping
+         @handle opens the hub. syncAvatar() fills the text; the ▾ chevron is a ::after. -->
+    <button id="avatarBtn" class="avatar-btn" type="button" title="Menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false">◆</button>
   </div>
 </header>
 
