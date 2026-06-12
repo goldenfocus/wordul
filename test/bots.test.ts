@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { PERSONAS, pickPersona, pickPersonas, projectPlayerForClient, wotdPlayTime, dueWotdPersonas } from "../src/bots.ts";
+import { PERSONAS, pickPersona, pickPersonas, projectPlayerForClient, wotdPlayTime, dueWotdPersonas, botStyleFor } from "../src/bots.ts";
 import type { PlayerState } from "../src/types.ts";
 
 const KNOWN_EDITIONS = ["default", "yang", "jackpot", "arcade", "editorial", "tactile", "robot"];
@@ -23,6 +23,36 @@ describe("PERSONAS roster", () => {
 
   it("every persona.edition is a known edition id", () => {
     for (const p of PERSONAS) expect(KNOWN_EDITIONS).toContain(p.edition);
+  });
+});
+
+describe("botStyleFor — no two personas share a line", () => {
+  it("assigns every persona a DISTINCT style within one room", () => {
+    // The clone tell: Nova and Juno traced identical daily boards. Distinct styles
+    // per room make that structurally impossible, on every path, every day.
+    for (const path of ["daily/2026-06-10", "daily/2026-06-11", "arena/maya-room-7", "x/y"]) {
+      const styles = PERSONAS.map((p) => botStyleFor(p.id, path));
+      expect(new Set(styles).size).toBe(PERSONAS.length);
+      for (const s of styles) {
+        expect(s).toBeGreaterThanOrEqual(0);
+        expect(s).toBeLessThan(PERSONAS.length);
+      }
+    }
+  });
+
+  it("is deterministic — same persona + path, same style", () => {
+    expect(botStyleFor("nova", "daily/2026-06-10")).toBe(botStyleFor("nova", "daily/2026-06-10"));
+  });
+
+  it("rotates across rooms — a persona is not stuck with one line forever", () => {
+    const novaStyles = new Set(
+      Array.from({ length: 20 }, (_, i) => botStyleFor("nova", `daily/2026-06-${String(i + 1).padStart(2, "0")}`)),
+    );
+    expect(novaStyles.size).toBeGreaterThan(1);
+  });
+
+  it("unknown ids (the labeled /robots clanker) get style 0 — the original brain", () => {
+    expect(botStyleFor("clanker", "robots/robots")).toBe(0);
   });
 });
 

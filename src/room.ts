@@ -4,7 +4,7 @@ import { scoreGuess, countVowels, revealUngreened, type Color } from "./color.ts
 import { computeNextGuess } from "./solver.ts";
 import { noobGuess, mistakeRateFor } from "./noob.ts";
 import { planKeystrokes, NOOB_HAND, SHARP_HAND, type KeyStep } from "./rhythm.ts";
-import { projectPlayerForClient, dueWotdPersonas } from "./bots.ts";
+import { projectPlayerForClient, dueWotdPersonas, botStyleFor } from "./bots.ts";
 import { bumpScoreboard } from "./scoreboard.ts";
 import { everyoneReady, COUNTDOWN_MS } from "./duel.ts";
 import { nextSeatRole, applyKothRotation, MAX_DUELISTS } from "./rotation.ts";
@@ -1548,7 +1548,7 @@ export class Room extends DurableObject<Env> {
     const opponents = this.state.players.length - 1;
     const view = { wordLength: this.state.wordLength, ownGuesses: b.guesses };
     const word = seeded
-      ? noobGuess(view, { mistakeRate: mistakeRateFor(this.state.wordLength, this.state.seed ? opponents : 1) }, Math.random())
+      ? noobGuess(view, { mistakeRate: mistakeRateFor(this.state.wordLength, this.state.seed ? opponents : 1) }, Math.random(), botStyleFor(b.username, this.state.path))
       : computeNextGuess(view);
     if (!word) { b.nextGuessAt = Date.now() + botDelay(false, seeded, Math.random()); return; }
     await this.typeOutBot(b.username, planKeystrokes(word, seeded ? NOOB_HAND : SHARP_HAND, Math.random));

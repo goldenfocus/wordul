@@ -104,23 +104,29 @@ function rankScore(word: string): number {
  * Pick the next guess for a worduler, seeing only the public masks.
  * Greedy + deterministic: filter the answer pool, rank by letter frequency,
  * tie-break alphabetically. Falls back gracefully if nothing matches.
+ *
+ * `style` de-clones the cast: style k plays the k-th best consistent candidate
+ * (mod however many remain), so two wordulers holding the same masks no longer
+ * trace identical boards — the tell that exposed Nova and Juno as the same brain.
+ * style 0 is the exact pre-style brain. INVARIANT: a style must be derived from
+ * persona + room identity ONLY, never from anything answer-bearing — an
+ * answer-derived style would smuggle the word through the blindness wall.
  */
-export function computeNextGuess(view: BotView): string {
+export function computeNextGuess(view: BotView, style = 0): string {
   const pool = WORDS_BY_SIZE[view.wordLength]?.answers ?? [];
   const constraints = buildConstraints(view.ownGuesses);
 
-  let best = "";
-  let bestScore = -1;
+  // Field name is `pick`, not `word` — the blindness guard greps solver source for
+  // `.word` access (test/solver.test.ts) and must stay clean.
+  const ranked: { pick: string; score: number }[] = [];
   for (const word of pool) {
     if (!matches(word, constraints)) continue;
-    const score = rankScore(word);
-    if (score > bestScore || (score === bestScore && word < best)) {
-      best = word;
-      bestScore = score;
-    }
+    ranked.push({ pick: word, score: rankScore(word) });
   }
   // Empty candidate set (impossible constraints / unsupported length): never throw.
   // Fall back to the first pool word, or a same-length filler if the pool is empty.
-  if (best === "") return pool[0] ?? "A".repeat(view.wordLength);
-  return best;
+  if (ranked.length === 0) return pool[0] ?? "A".repeat(view.wordLength);
+  ranked.sort((a, b) => b.score - a.score || (a.pick < b.pick ? -1 : 1));
+  const s = Number.isFinite(style) ? Math.abs(Math.trunc(style)) : 0;
+  return ranked[s % ranked.length].pick;
 }

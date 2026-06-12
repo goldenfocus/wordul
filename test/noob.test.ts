@@ -35,6 +35,13 @@ describe("noobGuess", () => {
     expect(slip).not.toBe(sharp); // a believable slip, not the optimal play
   });
 
+  it("passes the persona style through to the sharp brain", () => {
+    const view: BotView = { wordLength: 5, ownGuesses: [] };
+    expect(noobGuess(view, NOOB, 0.99, 3)).toBe(computeNextGuess(view, 3));
+    // Two personas, two openers — the de-cloning property end to end.
+    expect(noobGuess(view, NOOB, 0.99, 1)).not.toBe(noobGuess(view, NOOB, 0.99, 4));
+  });
+
   it("imports nothing answer-bearing (src-reading blindness guard)", () => {
     // Mirrors solver.test.ts:65-77 — inspect CODE not prose. This guard lives HERE,
     // not in module-graph.test.ts (which only scans public/ and cannot see src/).

@@ -78,6 +78,22 @@ export function projectPlayerForClient(p: PlayerState): Omit<PlayerState, "isBot
 }
 
 /**
+ * Which alternate solver line this persona plays in this room. Guaranteed DISTINCT
+ * across the whole roster within one room: distinct roster indices + a shared
+ * per-room rotation stay distinct mod roster length — so no two personas on the same
+ * board can ever trace the same sharp line (the "Nova and Juno are clones" tell).
+ * The fnv1a(path) rotation re-deals the styles per room/day, so no persona is
+ * permanently stuck with the weakest line. Blindness-safe: derived from persona +
+ * path only, never the answer. Unknown ids (the labeled /robots clanker) get
+ * style 0 — the original sharp brain.
+ */
+export function botStyleFor(personaId: string, roomPath: string): number {
+  const i = PERSONAS.findIndex((p) => p.id === personaId);
+  if (i < 0) return 0;
+  return (i + fnv1a(`style:${roomPath}`)) % PERSONAS.length;
+}
+
+/**
  * "Their hour": when this persona plays the word of the day. Deterministic per
  * (persona, date) — no Math.random (hibernation/replay-safe) — but different every
  * day, so the cast reads as people with routines, not cron jobs. UTC, matching

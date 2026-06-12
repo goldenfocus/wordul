@@ -43,9 +43,12 @@ function honorsGreens(word: string, greens: Map<number, string>): boolean {
 /**
  * roll in [0,1): tests pass fixed values; the DO passes Math.random(). Never computed here.
  * roll >= mistakeRate → the sharp guess (note >=, so roll===mistakeRate plays sharp).
+ * `style` (per-persona, see bots.botStyleFor) passes through to the solver so each
+ * persona's sharp line differs — without it every persona shares one brain and plays
+ * clone boards. Must never be derived from anything answer-bearing.
  */
-export function noobGuess(view: BotView, profile: NoobProfile, roll: number): string {
-  const sharp = computeNextGuess(view);
+export function noobGuess(view: BotView, profile: NoobProfile, roll: number, style = 0): string {
+  const sharp = computeNextGuess(view, style);
   if (roll >= profile.mistakeRate) return sharp;
 
   const answers = WORDS_BY_SIZE[view.wordLength]?.answers ?? [];
